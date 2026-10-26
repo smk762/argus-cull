@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { attributeLine } from "@/lib/attributes";
 import { imageUrl, thumbUrl } from "@/lib/api";
-import { DEFAULT_BLUR, isMinorExposed, minorAwaitingNude, shouldBlur, type BlurPolicy } from "@/lib/chunks";
+import { DEFAULT_BLUR, isMinorExposed, shouldBlur, type BlurPolicy } from "@/lib/chunks";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { nudeNetLabel } from "@/lib/moderation";
 import { NUDENET_LABELS, slugLabel, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
@@ -140,7 +140,8 @@ export function PhotoDialog({
     .map((face) => slugLabel(face.attributes?.race ?? ""));
   const worn = (image.garments ?? []).map((garment) => `${slugLabel(garment.label)} ${garment.conf.toFixed(2)}`);
   const blocked = isMinorExposed(image);
-  const holdReveal = blocked || minorAwaitingNude(image, pending);
+  // No reveal until NudeNet has reported: MiVOLO may still read a face as under 18.
+  const holdReveal = blocked || (pending.includes("nsfw") && image.nsfw == null);
   const obscured = shouldBlur(image, pending, blur);
   const blurred = blocked || (obscured && !shown);
 

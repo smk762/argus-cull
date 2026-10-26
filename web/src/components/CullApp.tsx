@@ -186,12 +186,12 @@ export function CullApp() {
     };
   }, [hydrated, scanning, view.scan, summary?.scan_id]);
 
+  const activeScanId = scanList?.active?.scan_id ?? null;
   useEffect(() => {
-    const active = scanList?.active;
-    if (!active || scanning || view.scan !== active.scan_id) return;
+    if (!activeScanId || scanning || view.scan !== activeScanId) return;
     let cancel = false;
     const refresh = () => {
-      getScan(active.scan_id)
+      getScan(activeScanId)
         .then((body) => {
           if (!cancel) setSummary(body);
         })
@@ -205,7 +205,7 @@ export function CullApp() {
       cancel = true;
       window.clearInterval(timer);
     };
-  }, [scanList?.active, scanning, view.scan]);
+  }, [activeScanId, scanning, view.scan]);
 
   const gates = useMemo(() => availability(detectors, summary), [detectors, summary]);
 
@@ -291,7 +291,8 @@ export function CullApp() {
           setSummary((current) => mergeChunk(current, chunk));
           if (!announced) {
             announced = true;
-            replaceView({ ...view, scan: chunk.scan_id, page: 1, photo: null });
+            // Filters may have changed since the click, so read the view back from the URL.
+            replaceView({ ...viewFromSearch(currentSearch()), scan: chunk.scan_id, page: 1, photo: null });
             void getScans().then((body) => {
               if (body) setScanList(body);
             });
@@ -300,7 +301,9 @@ export function CullApp() {
       );
       setSummary(next);
       setPendingChecks([]);
-      replaceView({ ...view, scan: next.scan_id, page: 1, photo: null });
+      // Keep the page the user reached while batches were streaming in.
+      const current = viewFromSearch(currentSearch());
+      replaceView({ ...current, scan: next.scan_id, page: announced ? current.page : 1, photo: announced ? current.photo : null });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Scan failed.");
     } finally {
