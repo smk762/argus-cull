@@ -1,5 +1,18 @@
 export const CURATOR_URL = process.env.NEXT_PUBLIC_CURATOR_URL || "http://localhost:8101";
 
+/** Curator origin for the page the browser actually opened.
+
+The port and scheme come from CURATOR_URL. The host follows the page, so
+http://192.168.30.39:3000 calls http://192.168.30.39:8101 and a localhost page
+keeps calling localhost. */
+export function curatorUrl(pageHost?: string): string {
+  const host = pageHost ?? (typeof window === "undefined" ? "" : window.location.hostname);
+  if (!host) return CURATOR_URL;
+  const url = new URL(CURATOR_URL);
+  url.hostname = host;
+  return url.origin;
+}
+
 export const PAGE_SIZE = 48;
 
 export const POSES = ["frontal", "three_quarter", "profile"] as const;
@@ -56,14 +69,37 @@ export const GARMENTS = [
 ] as const;
 export type GarmentLabel = (typeof GARMENTS)[number];
 
-/** Classes the exposed score is taken over. Matches argus-cortex DEFAULT_EXPOSED_LABELS. */
+/** NudeNet's 18 detector classes, in the detector's own order. */
+export const NUDENET_LABELS = [
+  "FEMALE_GENITALIA_COVERED",
+  "FACE_FEMALE",
+  "BUTTOCKS_EXPOSED",
+  "FEMALE_BREAST_EXPOSED",
+  "FEMALE_GENITALIA_EXPOSED",
+  "MALE_BREAST_EXPOSED",
+  "ANUS_EXPOSED",
+  "FEET_EXPOSED",
+  "BELLY_COVERED",
+  "FEET_COVERED",
+  "ARMPITS_COVERED",
+  "ARMPITS_EXPOSED",
+  "FACE_MALE",
+  "BELLY_EXPOSED",
+  "MALE_GENITALIA_EXPOSED",
+  "ANUS_COVERED",
+  "FEMALE_BREAST_COVERED",
+  "BUTTOCKS_COVERED",
+] as const;
+export type NudeNetLabel = (typeof NUDENET_LABELS)[number];
+
+/** Classes the exposed score starts from. Matches argus-cortex DEFAULT_EXPOSED_LABELS. */
 export const EXPOSED_LABELS = [
   "BUTTOCKS_EXPOSED",
   "FEMALE_BREAST_EXPOSED",
   "FEMALE_GENITALIA_EXPOSED",
   "MALE_GENITALIA_EXPOSED",
   "ANUS_EXPOSED",
-] as const;
+] as const satisfies readonly NudeNetLabel[];
 export type ExposedLabel = (typeof EXPOSED_LABELS)[number];
 
 /** SingGuard's default policy, addressed by letter the way `--guard-rules` accepts. */
@@ -177,6 +213,11 @@ export interface GarmentDetection {
   color: string;
 }
 
+export interface FaceDetection {
+  primary?: boolean;
+  attributes: FaceAttributes | null;
+}
+
 export interface ImageResult {
   rel_path: string;
   abs_path: string;
@@ -190,9 +231,13 @@ export interface ImageResult {
   duplicate_of: string | null;
   keep_reason: string;
   sharpness: number;
+  artifact_score?: number;
+  /** Weighted parts of `score`: sharpness, resolution, artifact, target_bonus, face_penalty. */
+  score_breakdown?: Record<string, number>;
   width: number;
   height: number;
   face_count: number;
+  faces?: FaceDetection[];
   primary_face_cluster: string | null;
   primary_face_pose: FacePose | null;
   primary_face_attributes: FaceAttributes | null;
@@ -225,9 +270,16 @@ export interface GarmentConfig {
   min_conf: number;
 }
 
+export interface TargetProfile {
+  target_style?: string;
+  target_backend?: string | null;
+  target_category?: "identity" | "wardrobe" | "pose_composition" | "setting";
+}
+
 export interface ScanSummary {
   scan_id: string;
   folder: string;
+  target_profile?: TargetProfile;
   faces_config: FaceConfig;
   scenes_config: SceneConfig;
   garments_config: GarmentConfig;
@@ -246,6 +298,39 @@ export interface Progress {
   phase: string;
   done: number;
   total: number;
+}
+
+/** One batch of images from a scan that is still running. */
+export interface ScanChunk {
+  scan_id: string;
+  folder: string;
+  phase: string;
+  done: number;
+  total: number;
+  pending_checks: string[];
+  results: ImageResult[];
+  face_clusters?: FaceCluster[];
+}
+
+export interface ActiveScan {
+  scan_id: string;
+  folder: string;
+  phase: string;
+  done: number;
+  total: number;
+  pending_checks: string[];
+}
+
+export interface ScanListItem {
+  scan_id: string;
+  folder: string;
+  total: number;
+  updated_at: string;
+}
+
+export interface ScanList {
+  active: ActiveScan | null;
+  scans: ScanListItem[];
 }
 
 export interface FilterState {
@@ -269,7 +354,7 @@ export interface FilterState {
   garmentsUncropped: boolean;
   /** Null leaves the exposed score unused. Inclusive, and never below 0.2. */
   nsfwThreshold: number | null;
-  nsfwExposedLabels: ExposedLabel[];
+  nsfwExposedLabels: NudeNetLabel[];
   guardUnsafe: boolean;
   guardRules: string[];
 }
@@ -306,7 +391,7 @@ export interface SelectRequest {
   nsfw_threshold: number | null;
   nsfw_label_thresholds: Record<string, number> | null;
   /** Omitted when the selection is the server's default exposed set. */
-  nsfw_exposed_labels?: ExposedLabel[];
+  nsfw_exposed_labels?: NudeNetLabel[];
   guard_unsafe: boolean;
   guard_rules: string[] | null;
 }

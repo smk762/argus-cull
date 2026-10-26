@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import type { ExportMode, ExportResult, Progress } from "@/lib/types";
 
+import { ProgressBar } from "./ProgressBar";
+
 const MODES: { id: ExportMode; label: string; detail: string }[] = [
   { id: "copy", label: "Copy", detail: "Copy the kept files into the export root and write a manifest. The source folder stays as it is." },
   { id: "symlink", label: "Symlink", detail: "Symlink the kept files into the export root and write a manifest. The source files stay put." },
@@ -87,11 +89,7 @@ export function ExportDialog({
         <p className={mode === "move" ? "text-small text-warning" : "text-small text-text-secondary"}>{chosen.detail}</p>
         {problem ? <p className="text-caption text-error">{problem}</p> : null}
         {error ? <p className="text-caption text-error">{error}</p> : null}
-        {progress ? (
-          <p className="text-caption text-text-secondary">
-            {progress.phase} {progress.done}/{progress.total}
-          </p>
-        ) : null}
+        {progress ? <ProgressBar progress={progress} /> : null}
         {result ? (
           <p className="text-small text-success">
             {result.mode} wrote {result.copied} files ({result.skipped} skipped).

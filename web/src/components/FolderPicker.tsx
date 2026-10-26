@@ -7,6 +7,7 @@ export function FolderPicker({
   error,
   scanning,
   canScan,
+  scanLabel,
   onOpen,
   onScan,
 }: {
@@ -14,6 +15,7 @@ export function FolderPicker({
   error: string | null;
   scanning: boolean;
   canScan: boolean;
+  scanLabel: string;
   onOpen: (path: string) => void;
   onScan: () => void;
 }) {
@@ -39,7 +41,7 @@ export function FolderPicker({
               disabled={!canScan || scanning}
               onClick={onScan}
             >
-              {scanning ? "Scanning…" : "Scan"}
+              {scanLabel}
             </button>
           </div>
           <ul className="space-y-1">
