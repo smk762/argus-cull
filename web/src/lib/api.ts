@@ -83,13 +83,6 @@ async function postSse<T>(
   return result;
 }
 
-/** Delete cached scans from the previous folder. A missing route is ignored. */
-export async function purgeScans(): Promise<void> {
-  const response = await fetch("/api/purge", { method: "POST" });
-  if (response.status === 404) return;
-  if (!response.ok) throw new ApiError(await readError(response));
-}
-
 export function scanFolder(
   folder: string,
   detectors: Detectors,
