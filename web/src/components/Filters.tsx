@@ -8,7 +8,7 @@ import { recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
   AGE_BRACKETS,
   ENVIRONMENTS,
-  EXPOSED_LABELS,
+  NUDENET_LABELS,
   GARMENTS,
   GENDERS,
   GUARD_RULES,
@@ -100,12 +100,16 @@ export function Filters({
   summary,
   gates,
   onChange,
+  unblurNsfw,
+  onUnblurNsfw,
 }: {
   filter: FilterState;
   detectors: Detectors | null;
   summary: ScanSummary | null;
   gates: FilterAvailability;
   onChange: (patch: Partial<FilterState>) => void;
+  unblurNsfw: boolean;
+  onUnblurNsfw: (unblurNsfw: boolean) => void;
 }) {
   const groups = detectors ? detectorGroups(detectors) : [];
   const missing = (id: (typeof groups)[number]["id"]) => groups.find((group) => group.id === id);
@@ -133,15 +137,23 @@ export function Filters({
   return (
     <section className="space-y-3">
       <h2 className="font-display text-small font-semibold">Filters</h2>
-      <RangeField label="Score floor" value={filter.minScore} min={0} max={1} step={0.05} onChange={(minScore) => onChange({ minScore })} />
+      <RangeField label="Quality score" value={filter.minScore} min={0} max={1} step={0.05} onChange={(minScore) => onChange({ minScore })} />
+      <p className="text-caption text-text-muted">Curator quality score, from sharpness, resolution, and artifacts. NudeNet score is separate and does not move this slider.</p>
+      <label className="flex items-center gap-2 text-small">
+        <input type="checkbox" checked={unblurNsfw} onChange={(event) => onUnblurNsfw(event.target.checked)} />
+        Unblur NSFW
+      </label>
+      <p className="text-caption text-text-muted">Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred.</p>
       <label className="flex items-center gap-2 text-small">
         <input type="checkbox" checked={filter.includeRejected} onChange={(event) => onChange({ includeRejected: event.target.checked })} />
-        Include rejects
+        Keep hard rejects
       </label>
+      <p className="text-caption text-text-muted">Adds images that failed blur, size, or aspect to the keep set when they pass the other filters. Show, on the grid, hides kept or left-out frames without changing this.</p>
       <label className="flex items-center gap-2 text-small">
         <input type="checkbox" checked={filter.keepSimilar} onChange={(event) => onChange({ keepSimilar: event.target.checked })} />
         Keep near-duplicates
       </label>
+      <p className="text-caption text-text-muted">Adds near-duplicate frames to the keep set. It does not hide them in the grid.</p>
 
       <Group title="People" hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface")}>
         <p className="text-caption text-text-muted">Face cluster</p>
@@ -279,7 +291,7 @@ export function Filters({
           }
         >
           <p className="text-caption text-text-secondary">
-            Drops an image when its exposed score is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too.
+            Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too. The first five are the usual exposed set; the rest are faces, covered parts, and other exposed areas.
           </p>
           <label className="flex items-center gap-2 text-small">
             <input
@@ -292,16 +304,16 @@ export function Filters({
           {filter.nsfwThreshold != null ? (
             <>
               <RangeField
-                label="Exposed score"
+                label="NudeNet score"
                 value={filter.nsfwThreshold}
                 min={0.2}
                 max={1}
                 step={0.05}
                 onChange={(nsfwThreshold) => onChange({ nsfwThreshold })}
               />
-              <p className="text-caption text-text-muted">Classes in the exposed score</p>
+              <p className="text-caption text-text-muted">Classes in the score</p>
               <CheckList
-                options={EXPOSED_LABELS}
+                options={NUDENET_LABELS}
                 selected={filter.nsfwExposedLabels}
                 label={nudeNetLabel}
                 onToggle={(label) => {

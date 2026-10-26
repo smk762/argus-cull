@@ -1,0 +1,6 @@
+transformers>=4.57,<5
+accelerate>=1.0
+bitsandbytes>=0.45
+pillow>=10
+fastapi>=0.115
+uvicorn>=0.32

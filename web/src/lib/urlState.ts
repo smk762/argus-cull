@@ -5,6 +5,7 @@ import {
   DEFAULT_VIEW,
   ENVIRONMENTS,
   EXPOSED_LABELS,
+  NUDENET_LABELS,
   GARMENTS,
   GENDERS,
   POSES,
@@ -98,7 +99,7 @@ export function parseView(params: URLSearchParams): ViewState {
     if (garment && !filter.garments.includes(garment)) filter.garments.push(garment);
     const excluded = group === FACET_GROUPS.exclude ? take(term, GARMENTS) : null;
     if (excluded && !filter.excludeGarments.includes(excluded)) filter.excludeGarments.push(excluded);
-    const exposed = group === FACET_GROUPS.exposed ? take(term, EXPOSED_LABELS) : null;
+    const exposed = group === FACET_GROUPS.exposed ? take(term, NUDENET_LABELS) : null;
     if (exposed) {
       if (!exposedCustom) {
         filter.nsfwExposedLabels = [];

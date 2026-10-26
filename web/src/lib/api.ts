@@ -1,4 +1,4 @@
-import { CURATOR_URL, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
+import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
 import { exportBody } from "./paths";
 import { scanBody } from "./select";
 import { parseSseFrames } from "./sse";
@@ -17,17 +17,17 @@ export async function readError(response: Response): Promise<string> {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${CURATOR_URL}${path}`);
+  const response = await fetch(`${curatorUrl()}${path}`);
   if (!response.ok) throw new ApiError(await readError(response));
   return (await response.json()) as T;
 }
 
 export function thumbUrl(scanId: string, relPath: string): string {
-  return `${CURATOR_URL}/thumb?${new URLSearchParams({ path: relPath, scan_id: scanId })}`;
+  return `${curatorUrl()}/thumb?${new URLSearchParams({ path: relPath, scan_id: scanId })}`;
 }
 
 export function imageUrl(scanId: string, relPath: string): string {
-  return `${CURATOR_URL}/image?${new URLSearchParams({ path: relPath, scan_id: scanId })}`;
+  return `${curatorUrl()}/image?${new URLSearchParams({ path: relPath, scan_id: scanId })}`;
 }
 
 export const getHealth = (): Promise<Health> => getJson("/health");
@@ -35,6 +35,13 @@ export const getDetectors = (): Promise<Detectors> => getJson("/detectors");
 export const getFolders = (path: string): Promise<FolderListing> =>
   getJson(`/folders?${new URLSearchParams({ path })}`);
 export const getScan = (scanId: string): Promise<ScanSummary> => getJson(`/scan/${encodeURIComponent(scanId)}`);
+
+export async function getScans(): Promise<ScanList | null> {
+  const response = await fetch(`${curatorUrl()}/scans`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as ScanList;
+}
 
 export async function readSse(response: Response, onEvent: (event: string, data: unknown) => void): Promise<void> {
   if (!response.body) throw new ApiError("The curator response had no body.");
@@ -51,8 +58,13 @@ export async function readSse(response: Response, onEvent: (event: string, data:
   }
 }
 
-async function postSse<T>(path: string, body: unknown, onProgress: (progress: Progress) => void): Promise<T> {
-  const response = await fetch(`${CURATOR_URL}${path}`, {
+async function postSse<T>(
+  path: string,
+  body: unknown,
+  onProgress: (progress: Progress) => void,
+  onChunk?: (chunk: ScanChunk) => void,
+): Promise<T> {
+  const response = await fetch(`${curatorUrl()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -62,6 +74,7 @@ async function postSse<T>(path: string, body: unknown, onProgress: (progress: Pr
   let failure: string | null = null;
   await readSse(response, (event, data) => {
     if (event === "progress") onProgress(data as Progress);
+    else if (event === "chunk") onChunk?.(data as ScanChunk);
     else if (event === "complete") result = data as T;
     else if (event === "error") failure = (data as { detail?: string }).detail || "The curator reported an error.";
   });
@@ -70,16 +83,37 @@ async function postSse<T>(path: string, body: unknown, onProgress: (progress: Pr
   return result;
 }
 
+/** Delete cached scans from the previous folder. A missing route is ignored. */
+export async function purgeScans(): Promise<void> {
+  const response = await fetch("/api/purge", { method: "POST" });
+  if (response.status === 404) return;
+  if (!response.ok) throw new ApiError(await readError(response));
+}
+
 export function scanFolder(
   folder: string,
   detectors: Detectors,
   onProgress: (progress: Progress) => void,
+  onChunk: (chunk: ScanChunk) => void,
 ): Promise<ScanSummary> {
-  return postSse("/scan/folder/stream", scanBody(folder, detectors), onProgress);
+  return postSse("/scan/folder/stream", scanBody(folder, detectors), onProgress, onChunk);
+}
+
+export async function deleteImage(scanId: string, relPath: string): Promise<void> {
+  await deleteImages(scanId, [relPath]);
+}
+
+export async function deleteImages(scanId: string, relPaths: string[]): Promise<void> {
+  const response = await fetch(`${curatorUrl()}/scan/${encodeURIComponent(scanId)}/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(relPaths.length === 1 ? { rel_path: relPaths[0] } : { rel_paths: relPaths }),
+  });
+  if (!response.ok) throw new ApiError(await readError(response));
 }
 
 export async function selectScan(scanId: string, body: SelectRequest): Promise<SelectResult> {
-  const response = await fetch(`${CURATOR_URL}/scan/${encodeURIComponent(scanId)}/select`, {
+  const response = await fetch(`${curatorUrl()}/scan/${encodeURIComponent(scanId)}/select`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

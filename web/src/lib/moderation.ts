@@ -1,4 +1,4 @@
-import { EXPOSED_LABELS, type ExposedLabel, type FilterState, type ImageResult, type ScanSummary } from "./types";
+import { EXPOSED_LABELS, type FilterState, type ImageResult, type NudeNetLabel, type ScanSummary } from "./types";
 
 export function sameMembers(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false;
@@ -17,7 +17,7 @@ export function nudeNetLabel(label: string): string {
 }
 
 /** Send a custom exposed set only when a threshold is live and the set is not the default. */
-export function exposedLabelsForRequest(filter: FilterState, active: boolean): ExposedLabel[] | undefined {
+export function exposedLabelsForRequest(filter: FilterState, active: boolean): NudeNetLabel[] | undefined {
   if (!active || filter.nsfwThreshold == null || filter.nsfwExposedLabels.length === 0) return undefined;
   if (sameMembers(filter.nsfwExposedLabels, EXPOSED_LABELS)) return undefined;
   return [...filter.nsfwExposedLabels];

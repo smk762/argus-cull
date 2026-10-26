@@ -1,11 +1,21 @@
+import { mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { exposedLabelsForRequest, isSensitive, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
+import { blurFromEnv, filterByAge, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages } from "./chunks";
+import { evaluateSubset } from "./subset";
+import { splitGuardExplanation } from "./guardText";
+import { phaseLabel, progressRatio } from "./progress";
+import { withoutScan } from "./purge";
+import { purgeScanCache } from "./scanCache";
 import { availability, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
-import { DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ScanSummary } from "./types";
+import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
 import { parseView, serializeView } from "./urlState";
 
 const DETECTORS: Detectors = {
@@ -106,6 +116,12 @@ describe("url state", () => {
     expect(once.filter.nsfwThreshold).toBe(0.5);
     expect(once.filter.nsfwExposedLabels).toEqual(["ANUS_EXPOSED"]);
     expect(once.filter.guardRules).toEqual(["A"]);
+  });
+
+  it("keeps every NudeNet class in the exposed set", () => {
+    const view = parseView(new URLSearchParams("nsfw=0.5&f=exposed:BELLY_EXPOSED&f=exposed:FACE_FEMALE"));
+    expect(view.filter.nsfwExposedLabels).toEqual(["BELLY_EXPOSED", "FACE_FEMALE"]);
+    expect(serializeView(view)).toContain("f=exposed%3ABELLY_EXPOSED");
   });
 
   it("ignores an exposed threshold NudeNet cannot report", () => {
@@ -236,6 +252,239 @@ describe("moderation", () => {
     const scan = summary({ guard: true });
     scan.results[0].guard = { safe: false, rules: ["A. Sexual Content Risk", "house style"] };
     expect(recordedGuardRules(scan, ["A", "B"])).toEqual(["house style"]);
+  });
+});
+
+describe("curator url", () => {
+  it("follows the host the page was opened as and keeps the curator port", () => {
+    expect(curatorUrl("192.168.30.39")).toBe("http://192.168.30.39:8101");
+    expect(curatorUrl("localhost")).toBe("http://localhost:8101");
+    expect(curatorUrl("")).toBe("http://localhost:8101");
+  });
+});
+
+describe("progress", () => {
+  it("names each scan phase and keeps an unknown one readable", () => {
+    expect(phaseLabel("scoring")).toBe("Scoring images");
+    expect(phaseLabel("guard")).toBe("Checking policy");
+    expect(phaseLabel("transferring")).toBe("Writing the export");
+    expect(phaseLabel("near_dup")).toBe("near dup");
+  });
+
+  it("reports a fraction only once the phase has a total", () => {
+    expect(progressRatio({ phase: "collecting", done: 0, total: 0 })).toBeNull();
+    expect(progressRatio({ phase: "scoring", done: 1, total: 4 })).toBe(0.25);
+    expect(progressRatio({ phase: "scoring", done: 9, total: 4 })).toBe(1);
+  });
+});
+
+describe("scan chunks", () => {
+  it("appends a batch and replaces an image when a later check lands", () => {
+    const first = mergeChunk(null, {
+      scan_id: "s",
+      folder: "/data/images/set",
+      phase: "scoring",
+      done: 1,
+      total: 2,
+      pending_checks: ["nsfw", "guard"],
+      results: [{ rel_path: "a.jpg", abs_path: "/a", score: 0.5, passed: true, reject_reason: null, similar_group: 0, group_size: 1, is_representative: true, is_duplicate: false, duplicate_of: null, keep_reason: "", sharpness: 1, width: 10, height: 10, face_count: 0, primary_face_cluster: null, primary_face_pose: null, primary_face_attributes: null, scene: null, garments: null }],
+    });
+    const next = mergeChunk(first, {
+      scan_id: "s",
+      folder: "/data/images/set",
+      phase: "nsfw",
+      done: 1,
+      total: 2,
+      pending_checks: ["nsfw", "guard"],
+      results: [
+        { rel_path: "b.jpg", abs_path: "/b", score: 0.9, passed: true, reject_reason: null, similar_group: 0, group_size: 1, is_representative: true, is_duplicate: false, duplicate_of: null, keep_reason: "", sharpness: 1, width: 10, height: 10, face_count: 0, primary_face_cluster: null, primary_face_pose: null, primary_face_attributes: null, scene: null, garments: null },
+        { ...first.results[0], nsfw: { detections: [], labels: {}, exposed_score: 0.4 } },
+      ],
+    });
+    expect(next.results.map((image) => image.rel_path)).toEqual(["a.jpg", "b.jpg"]);
+    expect(next.results[0].nsfw?.exposed_score).toBe(0.4);
+    expect(next.total).toBe(2);
+  });
+
+  it("lifts the blur under the NudeNet line and puts it back when policy flags the image", () => {
+    const low = { nsfw: { detections: [], labels: {}, exposed_score: 0.2 } };
+    expect(shouldBlur({}, ["nsfw"])).toBe(true);
+    expect(shouldBlur(low, ["guard"])).toBe(false);
+    expect(shouldBlur({ nsfw: { detections: [], labels: {}, exposed_score: 0.25 } }, ["guard"])).toBe(true);
+    expect(shouldBlur({ ...low, guard: { safe: false, rules: ["A"] } }, [])).toBe(true);
+    expect(shouldBlur({ ...low, guard: { safe: false, rules: ["A"] } }, [], { exposedScore: 0.25, policyBlur: false })).toBe(false);
+    const shown = { exposedScore: 0.25, policyBlur: true, unblurNsfw: true };
+    const years = (age: number) => ({ age_years: age, age_source: "mivolo" as const });
+    expect(shouldBlur({ nsfw: { detections: [], labels: {}, exposed_score: 0.9 } }, [], shown)).toBe(false);
+    expect(shouldBlur({ ...low, guard: { safe: false, rules: ["A"] } }, [], shown)).toBe(false);
+    expect(shouldBlur({}, ["nsfw"], shown)).toBe(false);
+    expect(shouldBlur({}, ["faces", "nsfw"], shown)).toBe(true);
+    expect(shouldBlur({ primary_face_attributes: years(16) }, ["nsfw"], shown)).toBe(true);
+    expect(
+      shouldBlur(
+        { nsfw: { detections: [], labels: {}, exposed_score: 0 }, guard: { safe: false, rules: ["A"] }, primary_face_attributes: years(16) },
+        [],
+        shown,
+      ),
+    ).toBe(true);
+    expect(blurFromEnv({})).toEqual({ exposedScore: 0.25, policyBlur: true });
+    expect(blurFromEnv({ ARGUS_CULL_BLUR_EXPOSED_SCORE: "0.4", ARGUS_CULL_POLICY_BLUR: "0" })).toEqual({
+      exposedScore: 0.4,
+      policyBlur: false,
+    });
+  });
+
+  it("keeps blur on an under-18 face once an exposed class scores 0.2", () => {
+    const face = (years: number) => ({ age_years: years, age_source: "mivolo" as const });
+    const exposed = (score: number) => ({ detections: [], labels: { BUTTOCKS_EXPOSED: score }, exposed_score: score });
+    const minor = { nsfw: exposed(0.2), primary_face_attributes: face(17.4) };
+    expect(isMinorExposed(minor)).toBe(true);
+    expect(shouldBlur(minor, [])).toBe(true);
+    expect(shouldBlur(minor, [], { exposedScore: 0.25, policyBlur: true, unblurNsfw: true })).toBe(true);
+    expect(isMinorExposed({ nsfw: exposed(0.9), primary_face_attributes: face(18) })).toBe(false);
+    expect(
+      isMinorExposed({
+        nsfw: { detections: [], labels: { BELLY_EXPOSED: 0.9 }, exposed_score: 0 },
+        primary_face_attributes: face(10),
+      }),
+    ).toBe(false);
+    expect(
+      isMinorExposed({
+        nsfw: exposed(0.2),
+        primary_face_attributes: face(30),
+        faces: [{ attributes: face(15) }],
+      }),
+    ).toBe(true);
+  });
+
+  it("sorts scored images above ones still waiting", () => {
+    const waiting = { rel_path: "wait.jpg" } as unknown as ImageResult;
+    const low = { rel_path: "low.jpg", nsfw: { detections: [], labels: {}, exposed_score: 0.1 } } as unknown as ImageResult;
+    const high = { rel_path: "high.jpg", nsfw: { detections: [], labels: {}, exposed_score: 0.8 } } as unknown as ImageResult;
+    const issue = { rel_path: "issue.jpg", guard: { safe: false, rules: ["A"] } } as unknown as ImageResult;
+    const safe = { rel_path: "safe.jpg", guard: { safe: true, rules: [] } } as unknown as ImageResult;
+    expect(sortImages([waiting, low, high], "nsfw").map((image) => image.rel_path)).toEqual(["high.jpg", "low.jpg", "wait.jpg"]);
+    expect(sortImages([waiting, low, high], "nsfw", "asc").map((image) => image.rel_path)).toEqual(["low.jpg", "high.jpg", "wait.jpg"]);
+    expect(sortImages([waiting, safe, issue], "policy").map((image) => image.rel_path)).toEqual(["issue.jpg", "safe.jpg", "wait.jpg"]);
+    expect(sortImages([waiting, safe, issue], "policy", "asc").map((image) => image.rel_path)).toEqual(["safe.jpg", "issue.jpg", "wait.jpg"]);
+    const older = { rel_path: "older.jpg", primary_face_attributes: { age_years: 40, age_source: "mivolo" } } as unknown as ImageResult;
+    const younger = { rel_path: "younger.jpg", faces: [{ attributes: { age_years: 15, age_source: "mivolo" } }] } as unknown as ImageResult;
+    expect(sortImages([waiting, older, younger], "age").map((image) => image.rel_path)).toEqual(["older.jpg", "younger.jpg", "wait.jpg"]);
+    expect(sortImages([waiting, older, younger], "age", "asc").map((image) => image.rel_path)).toEqual(["younger.jpg", "older.jpg", "wait.jpg"]);
+    expect(sortImages([older, younger], "scanned", "asc").map((image) => image.rel_path)).toEqual(["younger.jpg", "older.jpg"]);
+    expect(filterByAge([older, younger, waiting], 16, 20).map((image) => image.rel_path)).toEqual([]);
+    expect(filterByAge([older, younger, waiting], null, 18).map((image) => image.rel_path)).toEqual(["younger.jpg"]);
+    expect(filterByAge([older, younger], null, null)).toHaveLength(2);
+    const white = { rel_path: "white.jpg", primary_face_attributes: { race: "white" } } as unknown as ImageResult;
+    const indian = { rel_path: "indian.jpg", primary_face_attributes: { race: "indian" } } as unknown as ImageResult;
+    expect(sortImages([waiting, white, indian], "race").map((image) => image.rel_path)).toEqual(["indian.jpg", "white.jpg", "wait.jpg"]);
+    expect(sortImages([waiting, white, indian], "race", "asc").map((image) => image.rel_path)).toEqual(["white.jpg", "indian.jpg", "wait.jpg"]);
+    expect(filterByRace([white, indian, waiting], "white").map((image) => image.rel_path)).toEqual(["white.jpg"]);
+    expect(filterByRace([white, indian], null)).toHaveLength(2);
+    const reasons = new Map([
+      ["white.jpg", ""],
+      ["indian.jpg", "below-score"],
+    ]);
+    expect(filterByKeep([white, indian, waiting], reasons, "kept").map((image) => image.rel_path)).toEqual(["white.jpg"]);
+    expect(filterByKeep([white, indian, waiting], reasons, "left-out").map((image) => image.rel_path)).toEqual(["indian.jpg", "wait.jpg"]);
+    expect(filterByKeep([white, indian], null, "kept")).toHaveLength(2);
+  });
+
+  it("scores the keep set from the signals the scan stored", () => {
+    const keep = {
+      rel_path: "keep.jpg",
+      score: 0.8,
+      passed: true,
+      is_duplicate: false,
+      sharpness: 400,
+      width: 1024,
+      height: 1536,
+      face_count: 1,
+      primary_face_cluster: "face_1",
+      primary_face_pose: "frontal",
+      primary_face_attributes: { age_years: 30, age_source: "mivolo" },
+      nsfw: { exposed_score: 0.1 },
+      guard: { safe: true },
+    } as unknown as ImageResult;
+    const drop = { ...keep, rel_path: "drop.jpg", score: 0.2, is_duplicate: true, face_count: 0, primary_face_cluster: null } as unknown as ImageResult;
+    const summary = {
+      results: [keep, drop],
+      faces_config: { enabled: true, fairface: false, mivolo: true },
+      scenes_config: { enabled: false },
+      garments_config: { enabled: false },
+      nsfw_config: { enabled: true },
+      guard_config: { enabled: true },
+      target_profile: { target_category: "identity" },
+    } as unknown as ScanSummary;
+    const report = evaluateSubset(summary, new Map([["keep.jpg", ""], ["drop.jpg", "below-score"]]), 0.6);
+    expect(report.kept).toBe(1);
+    expect(report.title).toBe("Keep set, for identity training");
+    expect(report.stats.find((stat) => stat.label === "Mean quality")?.value).toBe("0.80");
+    expect(report.notes.some((note) => note.includes("near-duplicate"))).toBe(false);
+    const empty = evaluateSubset({ ...summary, results: [drop] }, new Map([["drop.jpg", "below-score"]]), 0.6);
+    expect(empty.notes[0]).toMatch(/Nothing is kept/);
+  });
+
+  it("labels a scan by the folder under the source root", () => {
+    expect(folderLabel("/data/images/set/day", "/data/images")).toEqual({ rel: "set/day", label: "day" });
+    expect(folderLabel("/data/images", "/data/images")).toEqual({ rel: "", label: "source root" });
+  });
+});
+
+describe("SingGuard explanation", () => {
+  it("splits steps and marks the fired rule", () => {
+    const text = [
+      "[Step 1] Content Summary",
+      "A person is seated indoors.",
+      "",
+      "[Step 2] Check Risk Categories",
+      "- A. Sexual Content Risk: the pose and setting match.",
+      "- B. Real-World Crimes & Public Safety: none.",
+      "",
+      "[Step 3] Final Judgment",
+      "This falls under A.",
+    ].join("\n");
+    const steps = splitGuardExplanation(text, ["A. Sexual Content Risk"]);
+    expect(steps.map((step) => step.title)).toEqual(["Content Summary", "Check Risk Categories", "Final Judgment"]);
+    expect(steps[1].rules.map((rule) => [rule.letter, rule.fired])).toEqual([
+      ["A", true],
+      ["B", false],
+    ]);
+    expect(steps[0].paragraphs).toEqual(["A person is seated indoors."]);
+  });
+});
+
+describe("folder change", () => {
+  it("drops the previous scan and keeps the score floor", () => {
+    const next = withoutScan(
+      {
+        ...DEFAULT_VIEW,
+        folder: "faces",
+        scan: "old",
+        page: 3,
+        photo: "a.png",
+        cluster: "p1",
+        filter: { ...DEFAULT_FILTER, minScore: 0.8, faceClusters: ["p1"], scenes: ["beach"] },
+      },
+      "scenes",
+    );
+    expect(next.folder).toBe("scenes");
+    expect(next.scan).toBeNull();
+    expect(next.page).toBe(1);
+    expect(next.photo).toBeNull();
+    expect(next.cluster).toBeNull();
+    expect(next.filter.faceClusters).toEqual([]);
+    expect(next.filter.scenes).toEqual([]);
+    expect(next.filter.minScore).toBe(0.8);
+  });
+
+  it("deletes cached scan files and leaves anything else", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "cull-scans-"));
+    await writeFile(path.join(dir, "abc.json"), "{}");
+    await writeFile(path.join(dir, "notes.txt"), "keep");
+    expect(await purgeScanCache(dir)).toBe(1);
+    expect(await readdir(dir)).toEqual(["notes.txt"]);
+    expect(await purgeScanCache(path.join(dir, "missing"))).toBe(0);
   });
 });
 

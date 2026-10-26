@@ -9,7 +9,7 @@ Issues that scoped this out of the lens demo: [argus-curator#17](https://github.
 The engine and the HTTP server are the product. The demo is a client.
 
 - Server on **:8101**: `argus-curator serve --cors --port 8101 --source-root … --export-root …`
-- `POST /scan/folder` and `POST /scan/folder/stream` score a folder. `GET /scan/{id}` pages the cached summary.
+- `POST /scan/folder` and `POST /scan/folder/stream` score a folder. The stream emits `progress` and `chunk` events, then `complete`. `GET /scans` lists cached scans and the one running; a second scan is HTTP 409 until it finishes. `GET /scan/{id}` pages the cached summary.
 - `GET /folders` and `GET /thumb` browse and show the mount.
 - `POST /export` and `POST /export/stream` copy, symlink, or move a selection and write a JSONL manifest (`manifest_version` 2.1). `exported_abs_path` is the path a follow-up script must use.
 - Detectors already on the scan and the export filter: quality score, near-duplicates, InsightFace clusters and head pose, FairFace, MiVOLO, Places365, Fashionpedia garments. `GET /detectors` says which weights are loaded.
@@ -23,7 +23,7 @@ The garment model in the server is **Fashionpedia** (YOLOS, 27 garment types), n
 
 One question: which files would make the training set, and which paths should a script delete, move, or leave.
 
-1. **Folder.** Pick a directory under the source root. Start a scan. A progress line comes from the SSE stream (`phase`, `done`, `total`).
+1. **Folder.** Pick a directory under the source root. Start a scan. Progress comes from the SSE stream (`phase`, `done`, `total`) and draws a bar that updates as each phase reports. Image batches from that stream fill the grid before the scan finishes. A scan list shows what is running and what is already cached, and a second scan is refused while one is in progress. Export uses the same bar.
 2. **Grid.** Thumbnails only, one page at a time. The full image opens in a dialog. Rejected images stay visible and say their `keep_reason`.
 3. **Filters.** Every control maps to a field the export body already accepts. The grid counts update as the selection changes. No second scoring pass.
    - Score floor, include or drop rejects, keep or drop near-duplicates.
@@ -31,7 +31,7 @@ One question: which files would make the training set, and which paths should a 
    - Attributes on the primary face: race, gender, FairFace age bracket, MiVOLO year range, confidence floor. Show `gender_source` and `age_source`. These are appearance guesses; the UI says so.
    - Scene: Places365 labels among the recorded top-k, indoor or outdoor, confidence floor.
    - Wardrobe: garment present, garment excluded, uncropped only.
-   - NudeNet: `nsfw_threshold` on the exposed score (0.2–1, inclusive) and which of the five exposed classes that score covers. SingGuard: `guard_unsafe`, or `guard_rules` by letter. Flagged frames stay blurred until click-to-reveal. A threshold or rule change updates the count before anyone exports. Unchecked images are excluded once a filter is on.
+   - NudeNet: `nsfw_threshold` on the exposed score (0.2–1, inclusive) and which of NudeNet’s 18 classes that score covers (the five exposed classes start checked). SingGuard: `guard_unsafe`, or `guard_rules` by letter. Frames stay blurred until the NudeNet exposed score is under the display line, then again if policy marks them unsafe, unless that re-blur is opted out. A blurred frame stays hidden until click-to-reveal. A MiVOLO age under 18 with an exposed score of at least 0.2 (NudeNet’s reporting floor, on the five exposed classes) stays blurred, is never kept, and the detail view offers delete instead of reveal. A threshold or rule change updates the count before anyone exports. Unchecked images are excluded once a filter is on.
 4. **People.** A cluster list: name, count, representative thumb, grid of that cluster. Merge, split, and rename can wait; showing the clusters curator already computed cannot.
 5. **Path list.** The thing lightbox cannot do, because the gallery stores filenames only. Two outputs, both from the current filter:
    - **List only.** `GET` or `POST` a text body, one `rel_path` per line, plus a sibling JSONL of `{rel_path, abs_path, keep_reason}`. Nothing is copied. This is the input for a follow-up script that deletes, moves, or processes.
@@ -57,7 +57,7 @@ folder on disk ──▶ argus-curator :8101 ──▶ demo UI :3000
 
 The UI is a Next.js app, same generation as lightbox (App Router, static where it can be, Tailwind tokens if the suite palette is reused). It cannot be a pure static export: scans and exports are live. Pages call the curator server directly. `NEXT_PUBLIC_CURATOR_URL` defaults to `http://localhost:8101`.
 
-Compose runs two services: the published curator image (GPU optional, as today’s `docker-compose.yaml`) and the demo UI. The photo mount is the source root. A second mount is the export root. Model caches stay in the volumes curator already uses (`argus_curator`, Hugging Face, InsightFace).
+Compose runs the published curator image, the demo UI, a NudeNet server, and a SingGuard server (`inclusionAI/Sing-Guard-4b` on `:9150`, NVIDIA GPU). The photo mount is the source root. A second mount is the export root. Model caches stay in the volumes curator already uses (`argus_curator`, Hugging Face, InsightFace). SingGuard weights live in the `singguard_hf` volume.
 
 `GET /health` must answer before the UI offers Scan. If `/detectors` reports a model missing, that filter group is disabled and says which convert command produces the ONNX file (`fairface-convert`, `mivolo-convert`, `places365-convert`, `garments-convert`).
 
