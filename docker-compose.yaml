@@ -1,0 +1,46 @@
+services:
+  argus-curator:
+    image: ghcr.io/smk762/argus-curator:latest
+    ports:
+      - "${CURATOR_PORT:-8101}:8101"
+    environment:
+      - CURATOR_SOURCE_PATH=/data/images
+      - CURATOR_EXPORT_PATH=/data/out
+      - CURATOR_CACHE_DIR=/root/.cache/argus_curator/scans
+      - HF_HOME=/root/.cache/huggingface
+      - ARGUS_CURATOR_FAIRFACE_MODEL=/root/.cache/argus_curator/models/fairface_res34_race7.onnx
+      - ARGUS_CURATOR_MIVOLO_MODEL=/root/.cache/argus_curator/models/mivolo_v2_d1_384.onnx
+      - ARGUS_CURATOR_PLACES365_MODEL=/root/.cache/argus_curator/models/places365_resnet18.onnx
+      - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
+      # NudeNet is on unless .env sets this empty. SingGuard stays off until a URL is set.
+      - ARGUS_CURATOR_NUDENET_URL=${ARGUS_CURATOR_NUDENET_URL-http://nudenet:8080}
+      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-}
+      - ARGUS_CURATOR_SINGGUARD_THINKING=${ARGUS_CURATOR_SINGGUARD_THINKING-fast}
+      # - CURATOR_ALLOW_MOVE=1
+    volumes:
+      - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images
+      - ${CURATOR_OUTPUT_PATH:-./out}:/data/out
+      - ~/.cache/argus_curator:/root/.cache/argus_curator
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ~/.insightface:/root/.insightface
+    restart: unless-stopped
+
+  # NudeNet detector server (AGPL-3.0). Curator only talks to it over HTTP.
+  # Pinned by digest because upstream publishes only `latest`. No host port.
+  nudenet:
+    image: ghcr.io/notai-tech/nudenet@sha256:5d8fb3a20980680b73b7776745ee5b1983851c201a706cbdf3dd827c143783e9
+    ulimits:
+      nofile: 1000000
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CURATOR_URL: ${NEXT_PUBLIC_CURATOR_URL:-http://localhost:8101}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - argus-curator
+    restart: unless-stopped

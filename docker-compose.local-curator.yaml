@@ -1,0 +1,8 @@
+# Build the sibling argus-curator checkout instead of the published image.
+# Use this while working on curator changes that are not on GHCR yet.
+services:
+  argus-curator:
+    image: argus-curator:local
+    build:
+      context: ../argus-curator
+      dockerfile: Dockerfile
