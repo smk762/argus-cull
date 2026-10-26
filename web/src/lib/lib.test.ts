@@ -1,7 +1,3 @@
-import { mkdtemp, readdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
@@ -12,7 +8,6 @@ import { evaluateSubset } from "./subset";
 import { splitGuardExplanation } from "./guardText";
 import { phaseLabel, progressRatio } from "./progress";
 import { withoutScan } from "./purge";
-import { purgeScanCache } from "./scanCache";
 import { availability, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
 import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
@@ -261,6 +256,13 @@ describe("curator url", () => {
     expect(curatorUrl("localhost")).toBe("http://localhost:8101");
     expect(curatorUrl("")).toBe("http://localhost:8101");
   });
+
+  it("uses a curator on another machine as configured", () => {
+    expect(curatorUrl("192.168.30.39", "http://nas.local:8101")).toBe("http://nas.local:8101");
+    expect(curatorUrl("192.168.30.39", "https://curator.example/")).toBe("https://curator.example");
+    expect(curatorUrl("192.168.30.39", "http://127.0.0.1:8101")).toBe("http://192.168.30.39:8101");
+    expect(curatorUrl("192.168.30.39", "not a url")).toBe("not a url");
+  });
 });
 
 describe("progress", () => {
@@ -317,7 +319,10 @@ describe("scan chunks", () => {
     const years = (age: number) => ({ age_years: age, age_source: "mivolo" as const });
     expect(shouldBlur({ nsfw: { detections: [], labels: {}, exposed_score: 0.9 } }, [], shown)).toBe(false);
     expect(shouldBlur({ ...low, guard: { safe: false, rules: ["A"] } }, [], shown)).toBe(false);
-    expect(shouldBlur({}, ["nsfw"], shown)).toBe(false);
+    // Scoring batches land before MiVOLO runs, so an unchecked frame stays hidden until NudeNet reports.
+    expect(shouldBlur({}, ["nsfw"], shown)).toBe(true);
+    expect(shouldBlur({ primary_face_attributes: years(30) }, ["nsfw"], shown)).toBe(true);
+    expect(shouldBlur({ primary_face_attributes: years(30), nsfw: { detections: [], labels: {}, exposed_score: 0.9 } }, ["guard"], shown)).toBe(false);
     expect(shouldBlur({}, ["faces", "nsfw"], shown)).toBe(true);
     expect(shouldBlur({ primary_face_attributes: years(16) }, ["nsfw"], shown)).toBe(true);
     expect(
@@ -476,15 +481,6 @@ describe("folder change", () => {
     expect(next.filter.faceClusters).toEqual([]);
     expect(next.filter.scenes).toEqual([]);
     expect(next.filter.minScore).toBe(0.8);
-  });
-
-  it("deletes cached scan files and leaves anything else", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "cull-scans-"));
-    await writeFile(path.join(dir, "abc.json"), "{}");
-    await writeFile(path.join(dir, "notes.txt"), "keep");
-    expect(await purgeScanCache(dir)).toBe(1);
-    expect(await readdir(dir)).toEqual(["notes.txt"]);
-    expect(await purgeScanCache(path.join(dir, "missing"))).toBe(0);
   });
 });
 

@@ -28,6 +28,9 @@ log = logging.getLogger("singguard")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 _MODEL_NAME = os.environ.get("SINGGUARD_MODEL", "inclusionAI/Sing-Guard-4b")
+# A commit sha or tag. trust_remote_code runs code from the Hub, so pinning
+# this fixes what gets executed as well as which weights load.
+_MODEL_REVISION = os.environ.get("SINGGUARD_REVISION", "").strip() or None
 _THINKING = ("fast", "fast-slow")
 _MAX_NEW = {"fast": 256, "fast-slow": 1024}
 
@@ -45,16 +48,16 @@ class CheckRequest(BaseModel):
 
 def load_model() -> None:
     global _model, _processor
-    log.info("loading %s", _MODEL_NAME)
+    log.info("loading %s%s", _MODEL_NAME, f"@{_MODEL_REVISION}" if _MODEL_REVISION else "")
     started = time.perf_counter()
-    kwargs: dict = {"device_map": "auto", "trust_remote_code": True}
+    kwargs: dict = {"device_map": "auto", "trust_remote_code": True, "revision": _MODEL_REVISION}
     if os.environ.get("SINGGUARD_LOAD_IN_4BIT") == "1":
         kwargs["quantization_config"] = BitsAndBytesConfig(
             load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16
         )
     else:
         kwargs["dtype"] = torch.bfloat16
-    _processor = AutoProcessor.from_pretrained(_MODEL_NAME, trust_remote_code=True)
+    _processor = AutoProcessor.from_pretrained(_MODEL_NAME, trust_remote_code=True, revision=_MODEL_REVISION)
     _model = AutoModelForImageTextToText.from_pretrained(_MODEL_NAME, **kwargs).eval()
     log.info("loaded %s in %.1fs", _MODEL_NAME, time.perf_counter() - started)
 
@@ -91,18 +94,20 @@ def _generate(image: Image.Image, text: str, policy: str | None, thinking: str) 
     if policy and policy.strip():
         template_kwargs["policy"] = policy
     assert _processor is not None and _model is not None
-    inputs = _processor.apply_chat_template(
-        [{"role": "user", "content": content}],
-        tokenize=True,
-        add_generation_prompt=True,
-        return_dict=True,
-        return_tensors="pt",
-        **template_kwargs,
-    ).to(_model.device)
+    # The curator sends two requests at a time. One lock around the whole pass
+    # keeps the processor and the GPU to one request each.
     with _infer, torch.inference_mode():
+        inputs = _processor.apply_chat_template(
+            [{"role": "user", "content": content}],
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            **template_kwargs,
+        ).to(_model.device)
         generated = _model.generate(**inputs, max_new_tokens=_MAX_NEW[thinking], do_sample=False)
-    trimmed = generated[:, inputs["input_ids"].shape[-1] :]
-    return _processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        trimmed = generated[:, inputs["input_ids"].shape[-1] :]
+        return _processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
 
 @app.post("/api/guard/check")

@@ -111,14 +111,17 @@ export function minorAwaitingNude(image: AgeChecked, pending: readonly string[])
  * Blur until NudeNet reports. A score under the line lifts it immediately, even
  * while policy is still running. An unsafe policy verdict puts it back, unless
  * that re-blur is opted out. An under-18 face with an exposed score stays blurred.
- * Unblur NSFW reveals other NudeNet and policy blur, and leaves every under-18 face blurred.
+ * Unblur NSFW reveals NudeNet and policy blur on frames NudeNet has already
+ * scored, and leaves every under-18 face blurred. A frame NudeNet has not
+ * reached stays blurred either way: the scan delivers scoring batches before
+ * MiVOLO runs, so an unchecked frame may still turn out to be an under-18 one.
  */
 export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: BlurPolicy = DEFAULT_BLUR): boolean {
   if (isMinorExposed(image)) return true;
   if (minorAwaitingNude(image, pending)) return true;
+  if (pending.includes("nsfw") && image.nsfw == null) return true;
   const ageStillComing = pending.includes("faces") && mivoloAges(image).length === 0;
   if (blur.unblurNsfw && !hasMinorAge(image) && !ageStillComing) return false;
-  if (pending.includes("nsfw") && image.nsfw == null) return true;
   const score = image.nsfw?.exposed_score;
   if (score != null && score >= blur.exposedScore) return true;
   if (blur.policyBlur && image.guard?.safe === false) return true;
