@@ -1,6 +1,11 @@
 services:
   argus-curator:
-    image: ghcr.io/smk762/argus-curator:latest
+    # Published 0.4.0 image with the local scan-batch overlay. The sibling
+    # argus-curator checkout has to be next to this repo.
+    image: argus-cull-curator:local
+    build:
+      context: ../argus-curator
+      dockerfile: Dockerfile.overlay
     ports:
       - "${CURATOR_PORT:-8101}:8101"
     environment:
@@ -12,10 +17,13 @@ services:
       - ARGUS_CURATOR_MIVOLO_MODEL=/root/.cache/argus_curator/models/mivolo_v2_d1_384.onnx
       - ARGUS_CURATOR_PLACES365_MODEL=/root/.cache/argus_curator/models/places365_resnet18.onnx
       - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
-      # NudeNet is on unless .env sets this empty. SingGuard stays off until a URL is set.
+      # Both checks are on unless .env sets the URL empty.
       - ARGUS_CURATOR_NUDENET_URL=${ARGUS_CURATOR_NUDENET_URL-http://nudenet:8080}
-      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-}
+      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://singguard:9150}
       - ARGUS_CURATOR_SINGGUARD_THINKING=${ARGUS_CURATOR_SINGGUARD_THINKING-fast}
+      # Empty keeps the curator's localhost:3000 allow-list. A set value replaces
+      # that list, so name every origin the page is opened as.
+      - CURATOR_CORS_ORIGINS=${CURATOR_CORS_ORIGINS-}
       # - CURATOR_ALLOW_MOVE=1
     volumes:
       - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images
@@ -33,6 +41,35 @@ services:
       nofile: 1000000
     restart: unless-stopped
 
+  # SingGuard (inclusionAI/Sing-Guard-4b). Curator calls POST /api/guard/check.
+  # The first start downloads the weights into the named volume. Needs an NVIDIA GPU.
+  singguard:
+    build:
+      context: ./singguard
+    environment:
+      - HF_HOME=/data/hf
+      - SINGGUARD_MODEL=${SINGGUARD_MODEL:-inclusionAI/Sing-Guard-4b}
+      - SINGGUARD_LOAD_IN_4BIT=${SINGGUARD_LOAD_IN_4BIT:-0}
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - singguard_hf:/data/hf
+    ports:
+      - "127.0.0.1:${SINGGUARD_PORT:-9150}:9150"
+    gpus: all
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9150/health', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 1800s
+
   web:
     build:
       context: .
@@ -41,6 +78,16 @@ services:
         NEXT_PUBLIC_CURATOR_URL: ${NEXT_PUBLIC_CURATOR_URL:-http://localhost:8101}
     ports:
       - "3000:3000"
+    environment:
+      - SCAN_CACHE_DIR=/scans
+      # Read at request time. A change needs the web container recreated, not a rebuild.
+      - ARGUS_CULL_BLUR_EXPOSED_SCORE=${ARGUS_CULL_BLUR_EXPOSED_SCORE-0.25}
+      - ARGUS_CULL_POLICY_BLUR=${ARGUS_CULL_POLICY_BLUR-1}
+    volumes:
+      - ~/.cache/argus_curator/scans:/scans
     depends_on:
       - argus-curator
     restart: unless-stopped
+
+volumes:
+  singguard_hf:
