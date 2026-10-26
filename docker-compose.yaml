@@ -49,6 +49,9 @@ services:
     environment:
       - HF_HOME=/data/hf
       - SINGGUARD_MODEL=${SINGGUARD_MODEL:-inclusionAI/Sing-Guard-4b}
+      # Hub commit sha to pin. The model loads with trust_remote_code, so this
+      # also pins the code that runs. Empty follows the branch head.
+      - SINGGUARD_REVISION=${SINGGUARD_REVISION:-}
       - SINGGUARD_LOAD_IN_4BIT=${SINGGUARD_LOAD_IN_4BIT:-0}
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
@@ -79,12 +82,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - SCAN_CACHE_DIR=/scans
       # Read at request time. A change needs the web container recreated, not a rebuild.
       - ARGUS_CULL_BLUR_EXPOSED_SCORE=${ARGUS_CULL_BLUR_EXPOSED_SCORE-0.25}
       - ARGUS_CULL_POLICY_BLUR=${ARGUS_CULL_POLICY_BLUR-1}
-    volumes:
-      - ~/.cache/argus_curator/scans:/scans
     depends_on:
       - argus-curator
     restart: unless-stopped
