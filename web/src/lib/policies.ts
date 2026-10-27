@@ -78,6 +78,63 @@ export function dissentingPolicies(image: Guarded): string[] {
   return verdicts.filter((verdict) => !verdict.official && !verdict.result.safe).map((verdict) => verdict.policy);
 }
 
+/**
+ * What the shield on a tile shows. The colour is the verdict the shield
+ * follows: grey before any verdict, green passed, red flagged. An orange
+ * core means another policy disagreed with that verdict.
+ */
+export type ShieldState = "none" | "safe" | "safe-split" | "unsafe" | "unsafe-split";
+
+/** The verdict the shield follows: the override's policy when it ran, else the official one. */
+function followedVerdict(verdicts: PolicyVerdict[], override?: string | null): PolicyVerdict {
+  return (override && verdicts.find((verdict) => verdict.policy === override)) || verdicts.find((verdict) => verdict.official) || verdicts[0];
+}
+
+export function shieldState(image: Guarded, override?: string | null): ShieldState {
+  const verdicts = policyVerdicts(image);
+  if (verdicts.length === 0) return "none";
+  const followed = followedVerdict(verdicts, override);
+  const split = verdicts.some((verdict) => verdict.result.safe !== followed.result.safe);
+  if (followed.result.safe) return split ? "safe-split" : "safe";
+  return split ? "unsafe-split" : "unsafe";
+}
+
+/** Short word for the state, as the detail view's summary strip shows it. */
+export function shieldLabel(state: ShieldState): string {
+  switch (state) {
+    case "none":
+      return "no verdict";
+    case "safe":
+      return "safe";
+    case "safe-split":
+      return "safe, split";
+    case "unsafe":
+      return "unsafe";
+    case "unsafe-split":
+      return "unsafe, split";
+  }
+}
+
+/** One line for a tooltip: the followed verdict, then who disagreed. */
+export function shieldTitle(image: Guarded, override?: string | null): string {
+  const verdicts = policyVerdicts(image);
+  if (verdicts.length === 0) return "No policy verdict yet";
+  const followed = followedVerdict(verdicts, override);
+  const others = verdicts.filter((verdict) => verdict.result.safe !== followed.result.safe).map((verdict) => verdict.policy);
+  const verdict = followed.result.safe ? "Safe" : "Unsafe";
+  if (others.length === 0) return `${verdict} under ${verdicts.map((entry) => entry.policy).join(", ")}`;
+  return `${verdict} under ${followed.policy}; ${others.join(", ")} ${followed.result.safe ? "flagged" : "passed"}`;
+}
+
+/**
+ * A verdict recorded as unsafe whose only rule is "Safe". SingGuard's fast
+ * first-line signal said unsafe and its reasoned answer said Safe; a server
+ * before this fix kept the first line. The scan needs re-running to settle it.
+ */
+export function verdictConflict(guard: GuardResult): boolean {
+  return !guard.safe && guard.rules.length > 0 && guard.rules.every((rule) => rule.trim().toLowerCase() === "safe");
+}
+
 export interface PolicyStats {
   policy: string;
   official: boolean;

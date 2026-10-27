@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, normalisePolicyChoice, policiesRun, policyStats, policyVerdicts } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, normalisePolicyChoice, policiesRun, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -59,6 +59,33 @@ describe("policy verdicts", () => {
     expect(effectiveUnsafe(unchecked)).toBeNull();
     expect(dissentingPolicies(split)).toEqual(["adult-granular"]);
     expect(dissentingPolicies(agreed)).toEqual([]);
+  });
+
+  it("colours the shield by the followed verdict, with a core when a policy disagrees", () => {
+    expect(shieldState(unchecked)).toBe("none");
+    expect(shieldState(clean)).toBe("safe");
+    expect(shieldState(agreed)).toBe("unsafe");
+    expect(shieldState(single)).toBe("unsafe");
+    // Official passes, a variant flags: green with the core, and the union still blurs.
+    expect(shieldState(split)).toBe("safe-split");
+    // Following the flagging variant makes it red with the core; the official one keeps green with the core.
+    expect(shieldState(split, "adult-granular")).toBe("unsafe-split");
+    expect(shieldState(split, "adult")).toBe("safe-split");
+    expect(shieldState(split, "not-run")).toBe("safe-split");
+    expect(shieldTitle(unchecked)).toBe("No policy verdict yet");
+    expect(shieldTitle(split)).toBe("Safe under adult; adult-granular flagged");
+    expect(shieldTitle(split, "adult-granular")).toBe("Unsafe under adult-granular; adult, adult-cautious passed");
+    expect(shieldTitle(agreed)).toBe("Unsafe under adult, adult-granular, adult-cautious");
+    expect(shieldTitle(clean)).toBe("Safe under adult, adult-granular");
+    expect(shieldLabel("unsafe-split")).toBe("unsafe, split");
+  });
+
+  it("spots a recorded unsafe whose only rule is Safe", () => {
+    expect(verdictConflict({ safe: false, rules: ["Safe"] })).toBe(true);
+    expect(verdictConflict({ safe: false, rules: ["safe "] })).toBe(true);
+    expect(verdictConflict({ safe: false, rules: ["A. Sexual Content Risk"] })).toBe(false);
+    expect(verdictConflict({ safe: false, rules: [] })).toBe(false);
+    expect(verdictConflict({ safe: true, rules: ["Safe"] })).toBe(false);
   });
 
   it("blurs and sorts on the union, and lets an override lift it", () => {

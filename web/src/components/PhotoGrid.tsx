@@ -1,11 +1,28 @@
 "use client";
 
-import { attributeLine } from "@/lib/attributes";
 import { thumbUrl } from "@/lib/api";
 import { awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
-import { EXPECT_LABELS, type ImageLabel } from "@/lib/labels";
-import { dissentingPolicies, effectiveUnsafe } from "@/lib/policies";
+import type { ImageLabel } from "@/lib/labels";
+import { shieldState, shieldTitle } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
+
+import { Shield } from "./Shield";
+
+/** The file name alone; the folder is in the tile's tooltip and the detail view. */
+function baseName(relPath: string): string {
+  return relPath.split("/").pop() || relPath;
+}
+
+/** Primary face age as MiVOLO years or a FairFace bracket, with a younger face beside it when one exists. */
+function apparentAge(image: ImageResult): string {
+  const attrs = image.primary_face_attributes;
+  const primary = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? null;
+  const youngest = youngestAge(image);
+  if (youngest != null && (attrs?.age_years == null || youngest < attrs.age_years)) {
+    return primary ? `${primary} · ${Math.round(youngest)}y` : `${Math.round(youngest)}y`;
+  }
+  return primary ?? "–";
+}
 
 export function PhotoGrid({
   images,
@@ -43,7 +60,6 @@ export function PhotoGrid({
   tag = null,
   tagOptions = [],
   onTag,
-  tags = null,
 }: {
   images: ImageResult[];
   reasons: Map<string, string> | null;
@@ -85,8 +101,6 @@ export function PhotoGrid({
   tag?: string | null;
   tagOptions?: readonly string[];
   onTag?: (tag: string | null) => void;
-  /** Effective cohort tags by rel_path. */
-  tags?: ReadonlyMap<string, readonly string[]> | null;
 }) {
   const pages = Math.max(1, Math.ceil(images.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -215,15 +229,11 @@ export function PhotoGrid({
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {slice.map((image) => {
           const reason = reasons?.get(image.rel_path);
-          const attrs = attributeLine(image.primary_face_attributes);
-          const youngest = youngestAge(image);
           const kept = reason === "";
-          const label = labels?.get(image.rel_path) ?? null;
-          const imageTags = tags?.get(image.rel_path) ?? [];
-          const blurred = shouldBlur(image, pending, blur, label?.override ?? null);
-          const unsafe = effectiveUnsafe(image, label?.override ?? null);
-          const dissent = dissentingPolicies(image);
+          const override = labels?.get(image.rel_path)?.override ?? null;
+          const blurred = shouldBlur(image, pending, blur, override);
           const checking = awaitingChecks(image, pending);
+          const age = apparentAge(image);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
           return (
@@ -251,40 +261,36 @@ export function PhotoGrid({
                     alt=""
                     className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
                   />
-                  {checking || blurred ? (
+                  {/* A blur speaks for itself; only a frame still waiting on checks gets a word. */}
+                  {checking ? (
                     <span className="absolute inset-0 flex items-center justify-center">
-                      <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">{checking ? "Scanning…" : "Blurred"}</span>
+                      <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">Scanning…</span>
                     </span>
                   ) : null}
                 </span>
-                <span className="block space-y-1 p-2">
-                  <span className="block truncate text-caption text-text-secondary">{image.rel_path}</span>
-                  <span className="block text-caption text-text-muted">quality {image.score.toFixed(2)}</span>
-                  {image.nsfw ? (
-                    <span className="block text-caption text-text-muted">NudeNet {image.nsfw.exposed_score.toFixed(2)}</span>
-                  ) : null}
-                  {unsafe != null ? (
-                    <span className={`block text-caption ${unsafe ? "text-warning" : "text-text-muted"}`}>
-                      {unsafe ? "policy issue" : "policy safe"}
-                      {dissent.length > 0 ? ` · ${dissent.join(", ")}` : ""}
+                <span className="block p-2 text-caption">
+                  <span className="flex items-center gap-1.5">
+                    <Shield state={shieldState(image, override)} title={shieldTitle(image, override)} className="h-3.5 w-3.5" />
+                    <span className="min-w-0 flex-1 truncate text-text-secondary" title={image.rel_path}>
+                      {baseName(image.rel_path)}
                     </span>
-                  ) : null}
-                  {label?.expect ? (
-                    <span className="block text-caption text-accent-tertiary">
-                      label {EXPECT_LABELS[label.expect].label.toLowerCase()}
-                      {label.proxy ? " · proxy" : ""}
+                  </span>
+                  <span className="mt-1 grid grid-cols-[auto_1fr_auto_1fr] gap-x-1.5 gap-y-0.5 tabular-nums">
+                    <span className="text-text-muted">quality</span>
+                    <span>{image.score.toFixed(2)}</span>
+                    <span className="text-text-muted" title="NudeNet exposed score">
+                      nude
                     </span>
-                  ) : null}
-                  {imageTags.length > 0 ? <span className="block truncate text-caption text-text-muted">{imageTags.join(", ")}</span> : null}
-                  {reasons ? (
-                    <span className={`block text-caption ${kept ? "text-success" : "text-warning"}`}>{kept ? "keep" : reason}</span>
-                  ) : scanning ? null : (
-                    <span className="block text-caption text-text-muted">Selecting…</span>
-                  )}
-                  {attrs ? <span className="block truncate text-caption text-text-muted">{attrs}</span> : null}
-                  {youngest != null && (image.primary_face_attributes?.age_years == null || youngest < image.primary_face_attributes.age_years) ? (
-                    <span className="block text-caption text-text-muted">youngest {Math.round(youngest)}y</span>
-                  ) : null}
+                    <span title="NudeNet exposed score">{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
+                    <span className="text-text-muted">age</span>
+                    <span className="truncate" title="Apparent age, MiVOLO years or FairFace bracket">
+                      {age}
+                    </span>
+                    {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
+                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reason}>
+                      {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : reason}
+                    </span>
+                  </span>
                 </span>
               </button>
             </li>

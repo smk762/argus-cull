@@ -738,7 +738,6 @@ export function CullApp() {
             tag={tag}
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
-            tags={tags}
             keepView={keepView}
             keptCount={keepCounts?.kept ?? null}
             leftOutCount={keepCounts?.leftOut ?? null}
@@ -781,7 +780,6 @@ export function CullApp() {
             tag={tag}
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
-            tags={tags}
             keepView={keepView}
             keptCount={keepCounts?.kept ?? null}
             leftOutCount={keepCounts?.leftOut ?? null}
