@@ -3,6 +3,8 @@
 import { attributeLine } from "@/lib/attributes";
 import { thumbUrl } from "@/lib/api";
 import { DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { EXPECT_LABELS, type ImageLabel } from "@/lib/labels";
+import { dissentingPolicies, effectiveUnsafe } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
 
 export function PhotoGrid({
@@ -36,6 +38,7 @@ export function PhotoGrid({
   deleteConfirm,
   deleting,
   deleteError,
+  labels = null,
 }: {
   images: ImageResult[];
   reasons: Map<string, string> | null;
@@ -69,6 +72,8 @@ export function PhotoGrid({
   deleteConfirm: boolean;
   deleting: boolean;
   deleteError: string | null;
+  /** Labels by rel_path. An override on a label picks the policy the blur follows for that image. */
+  labels?: ReadonlyMap<string, ImageLabel> | null;
 }) {
   const pages = Math.max(1, Math.ceil(images.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -181,7 +186,10 @@ export function PhotoGrid({
           const attrs = attributeLine(image.primary_face_attributes);
           const youngest = youngestAge(image);
           const kept = reason === "";
-          const blurred = shouldBlur(image, pending, blur);
+          const label = labels?.get(image.rel_path) ?? null;
+          const blurred = shouldBlur(image, pending, blur, label?.override ?? null);
+          const unsafe = effectiveUnsafe(image, label?.override ?? null);
+          const dissent = dissentingPolicies(image);
           const checking = pending.includes("nsfw") && image.nsfw == null;
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
@@ -215,9 +223,16 @@ export function PhotoGrid({
                   {image.nsfw ? (
                     <span className="block text-caption text-text-muted">NudeNet {image.nsfw.exposed_score.toFixed(2)}</span>
                   ) : null}
-                  {image.guard ? (
-                    <span className={`block text-caption ${image.guard.safe ? "text-text-muted" : "text-warning"}`}>
-                      {image.guard.safe ? "policy safe" : "policy issue"}
+                  {unsafe != null ? (
+                    <span className={`block text-caption ${unsafe ? "text-warning" : "text-text-muted"}`}>
+                      {unsafe ? "policy issue" : "policy safe"}
+                      {dissent.length > 0 ? ` · ${dissent.join(", ")}` : ""}
+                    </span>
+                  ) : null}
+                  {label?.expect ? (
+                    <span className="block text-caption text-accent-tertiary">
+                      label {EXPECT_LABELS[label.expect].label.toLowerCase()}
+                      {label.proxy ? " · proxy" : ""}
                     </span>
                   ) : null}
                   {checking ? <span className="block text-caption text-text-muted">Checking</span> : null}

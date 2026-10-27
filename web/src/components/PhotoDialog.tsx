@@ -6,7 +6,9 @@ import { attributeLine } from "@/lib/attributes";
 import { imageUrl, thumbUrl } from "@/lib/api";
 import { DEFAULT_BLUR, isMinorExposed, shouldBlur, type BlurPolicy } from "@/lib/chunks";
 import { splitGuardExplanation } from "@/lib/guardText";
+import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { nudeNetLabel } from "@/lib/moderation";
+import { dissentingPolicies, effectiveUnsafe, policyVerdicts } from "@/lib/policies";
 import { NUDENET_LABELS, slugLabel, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 const SCORE_PARTS: [string, string][] = [
@@ -46,12 +48,7 @@ function NudeNetReport({ nsfw }: { nsfw: NsfwResult }) {
 function GuardReport({ guard }: { guard: GuardResult }) {
   const steps = splitGuardExplanation(guard.explanation ?? "", guard.rules);
   return (
-    <section className="border-t border-base-700 pt-3">
-      <h3 className="text-caption text-text-muted">SingGuard</h3>
-      <p className={guard.safe ? "text-success" : "text-warning"}>
-        {guard.safe ? "Safe" : "Unsafe"}
-        {guard.policy ? ` · ${guard.policy}` : ""}
-      </p>
+    <>
       {guard.rules.length > 0 ? <p className="mt-1">{guard.rules.join(", ")}</p> : null}
       <div className="mt-3 space-y-3">
         {steps.map((step) => (
@@ -77,6 +74,113 @@ function GuardReport({ guard }: { guard: GuardResult }) {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+/** One collapsible section per policy that judged the image. The official one and any that disagree with it start open. */
+function PolicyReports({ image, override }: { image: ImageResult; override: string | null }) {
+  const verdicts = policyVerdicts(image);
+  if (verdicts.length === 0) return null;
+  const union = effectiveUnsafe(image);
+  const followed = effectiveUnsafe(image, override);
+  const dissent = new Set(dissentingPolicies(image));
+  return (
+    <section className="border-t border-base-700 pt-3">
+      <h3 className="text-caption text-text-muted">SingGuard</h3>
+      {verdicts.length > 1 ? (
+        <p className={followed ? "text-warning" : "text-success"}>
+          {followed ? "Unsafe" : "Safe"}
+          {override ? ` · following ${override}` : union ? ` · ${verdicts.filter((verdict) => !verdict.result.safe).map((verdict) => verdict.policy).join(", ")} flagged` : " · every policy passed"}
+        </p>
+      ) : null}
+      <div className="mt-2 space-y-2">
+        {verdicts.map((verdict) => (
+          <details key={verdict.policy} open={verdict.official || dissent.has(verdict.policy) || override === verdict.policy} className="rounded-md border border-base-700 px-3 py-2">
+            <summary className="cursor-pointer text-small">
+              <span className={verdict.result.safe ? "text-success" : "text-warning"}>{verdict.result.safe ? "Safe" : "Unsafe"}</span>
+              {` · ${verdict.policy}`}
+              {verdict.official ? <span className="text-text-muted"> · official</span> : null}
+              {dissent.has(verdict.policy) ? <span className="text-warning"> · differs</span> : null}
+              {override === verdict.policy ? <span className="text-accent-tertiary"> · shield follows this</span> : null}
+            </summary>
+            <GuardReport guard={verdict.result} />
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** What a correct verdict is for this image, kept on this page's server. Scored against every policy in the Policies panel. */
+function LabelControl({
+  label,
+  policies,
+  saving,
+  error,
+  onChange,
+}: {
+  label: ImageLabel | null;
+  policies: string[];
+  saving: boolean;
+  error: string | null;
+  onChange: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+}) {
+  const current: Omit<ImageLabel, "updated_at"> = { expect: label?.expect ?? null, proxy: label?.proxy ?? false, override: label?.override ?? null, note: label?.note ?? "" };
+  const update = (patch: Partial<typeof current>) => onChange({ ...current, ...patch });
+  const canProxy = current.expect === "hard" || current.expect === "ambiguous";
+  return (
+    <section className="border-t border-base-700 pt-3">
+      <h3 className="text-caption text-text-muted">Label{saving ? " · saving" : ""}</h3>
+      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Correct verdict">
+        {EXPECTS.map((expect) => (
+          <button
+            key={expect}
+            type="button"
+            title={EXPECT_LABELS[expect].detail}
+            aria-pressed={current.expect === expect}
+            className={`rounded-md border px-2 py-1 text-small ${current.expect === expect ? "border-accent-primary text-text-primary" : "border-base-600 text-text-secondary"}`}
+            onClick={() => update({ expect: current.expect === expect ? null : expect, proxy: expect === "hard" || expect === "ambiguous" ? current.proxy : false })}
+          >
+            {EXPECT_LABELS[expect].label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-caption text-text-muted">{current.expect ? EXPECT_LABELS[current.expect].detail : "Hard, ambiguous, and other count as positives; adult and safe as negatives."}</p>
+      {canProxy ? (
+        <label className="mt-2 flex items-center gap-2 text-small">
+          <input type="checkbox" checked={Boolean(current.proxy)} onChange={(event) => update({ proxy: event.target.checked })} />
+          Proxy: verified 18+, standing in for a hard case
+        </label>
+      ) : null}
+      {policies.length > 1 ? (
+        <label className="mt-2 flex items-center gap-2 text-small">
+          Shield follows
+          <select
+            className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+            value={current.override ?? ""}
+            onChange={(event) => update({ override: event.target.value || null })}
+          >
+            <option value="">any policy that flags</option>
+            {policies.map((policy) => (
+              <option key={policy} value={policy}>
+                {policy} only
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      <input
+        className="mt-2 w-full rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+        type="text"
+        placeholder="Note"
+        aria-label="Label note"
+        defaultValue={current.note ?? ""}
+        onBlur={(event) => {
+          if (event.target.value !== (current.note ?? "")) update({ note: event.target.value });
+        }}
+      />
+      {error ? <p className="mt-1 text-caption text-warning">{error}</p> : null}
     </section>
   );
 }
@@ -102,6 +206,11 @@ export function PhotoDialog({
   onPrevious,
   onNext,
   position,
+  label = null,
+  policies = [],
+  labelSaving = false,
+  labelError = null,
+  onLabel,
 }: {
   image: ImageResult;
   scanId: string;
@@ -113,6 +222,12 @@ export function PhotoDialog({
   onPrevious: (() => void) | null;
   onNext: (() => void) | null;
   position: string | null;
+  label?: ImageLabel | null;
+  /** Policies the scan ran, official first. */
+  policies?: string[];
+  labelSaving?: boolean;
+  labelError?: string | null;
+  onLabel?: (next: Omit<ImageLabel, "updated_at"> | null) => void;
 }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -142,7 +257,8 @@ export function PhotoDialog({
   const blocked = isMinorExposed(image);
   // No reveal until NudeNet has reported: MiVOLO may still read a face as under 18.
   const holdReveal = blocked || (pending.includes("nsfw") && image.nsfw == null);
-  const obscured = shouldBlur(image, pending, blur);
+  const override = label?.override ?? null;
+  const obscured = shouldBlur(image, pending, blur, override);
   const blurred = blocked || (obscured && !shown);
 
   async function remove() {
@@ -294,12 +410,13 @@ export function PhotoDialog({
             </section>
           ) : null}
           {image.nsfw ? <NudeNetReport nsfw={image.nsfw} /> : null}
-          {image.nsfw && image.guard && image.nsfw.exposed_score < 0.2 && !image.guard.safe ? (
+          {image.nsfw && image.nsfw.exposed_score < 0.2 && effectiveUnsafe(image, override) ? (
             <p className="text-caption leading-relaxed text-text-secondary">
               NudeNet scored no exposed class. SingGuard still marked the image unsafe under its policy.
             </p>
           ) : null}
-          {image.guard ? <GuardReport guard={image.guard} /> : null}
+          <PolicyReports image={image} override={override} />
+          {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}
         </div>
       </div>
     </div>

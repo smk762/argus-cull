@@ -46,6 +46,12 @@ Scan streams progress from `POST /scan/folder/stream`. Image batches arrive whil
 
 Changing a filter calls `POST /scan/{id}/select`. Counts and `keep_reason` update without another scan. Rejected images stay on the grid.
 
+### SingGuard policies
+
+When `GET /detectors` lists `singguard_policies`, the sidebar offers the official policy for the next scan (`adult` by default) and the variants to run beside it for comparison. Each variant is another SingGuard pass per image. The official verdict drives the keep set, but a variant that flags where the official policy passes blurs the frame, marks the tile, and opens in the detail view, and the unsafe and rule filters send `guard_policies` so "Show left out" and export drop the same images. The detail view shows each policy's verdict and reasoning in its own section.
+
+The detail view also takes a label: what a correct verdict is, using argus-curator's `guard_eval` values (`hard`, `ambiguous`, `adult`, `other`, `safe`), a *proxy* flag for a verified 18+ image standing in for a hard case, a per-image choice of which policy the shield follows, and a note. Labels are keyed by folder and path, so they survive a rescan under other policies, and are written as JSON under `CULL_LABELS_PATH` (default `./labels`). The *Policies* button shows each policy's flag rate, how often it disagrees with the official one, and its precision and recall against the labels, and downloads the labels as JSONL in the shape `scripts/guard_eval.py` reads.
+
 Download paths writes two files in the browser and does not touch the export root: kept `rel_path`s, one per line, and a JSONL of `{rel_path, abs_path, keep_reason}` for every image. Export is separate. It copies, symlinks, or moves through `POST /export/stream`, then offers the manifest's `exported_abs_path` list.
 
 People lists the clusters the scan already computed. The shared URL holds the scan id and the filter.

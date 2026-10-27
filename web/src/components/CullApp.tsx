@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { deleteImages, exportScan, getDetectors, getFolders, getHealth, getScan, getScans, scanFolder, selectScan } from "@/lib/api";
+import { deleteImages, exportScan, getDetectors, getFolders, getHealth, getLabels, getScan, getScans, putLabel, scanFolder, selectScan } from "@/lib/api";
 import { DEFAULT_BLUR, filterByAge, filterByKeep, filterByRace, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { downloadText } from "@/lib/download";
+import { labelsJsonl, type ImageLabel } from "@/lib/labels";
 import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
+import { defaultPolicyChoice, policiesRun, policyStats, type PolicyChoice } from "@/lib/policies";
 import { availability, selectBody } from "@/lib/select";
 import { evaluateSubset } from "@/lib/subset";
 import {
@@ -32,6 +34,8 @@ import { FolderPicker } from "./FolderPicker";
 import { People } from "./People";
 import { PhotoDialog } from "./PhotoDialog";
 import { PhotoGrid } from "./PhotoGrid";
+import { PolicyDialog } from "./PolicyDialog";
+import { PolicyPicker } from "./PolicyPicker";
 import { ProgressBar } from "./ProgressBar";
 import { ScanList as ScanListView } from "./ScanList";
 
@@ -52,6 +56,12 @@ export function CullApp() {
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [detectors, setDetectors] = useState<Detectors | null>(null);
+  const [policyChoice, setPolicyChoice] = useState<PolicyChoice | null>(null);
+  const [labels, setLabels] = useState<Map<string, ImageLabel>>(() => new Map());
+  const [labelsFolder, setLabelsFolder] = useState<string | null>(null);
+  const [labelSaving, setLabelSaving] = useState(false);
+  const [labelError, setLabelError] = useState<string | null>(null);
+  const [policyOpen, setPolicyOpen] = useState(false);
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [listingError, setListingError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ScanSummary | null>(null);
@@ -212,7 +222,7 @@ export function CullApp() {
   useEffect(() => {
     if (!summary || !detectors || scanning) return;
     let cancel = false;
-    selectScan(summary.scan_id, selectBody(view.filter, availability(detectors, summary)))
+    selectScan(summary.scan_id, selectBody(view.filter, availability(detectors, summary), summary))
       .then((body) => {
         if (cancel) return;
         setSelection(body);
@@ -260,6 +270,51 @@ export function CullApp() {
     return { kept, leftOut: viewed.length - kept };
   }, [viewed, reasons]);
   const subset = useMemo(() => (summary && reasons ? evaluateSubset(summary, reasons, view.filter.minScore) : null), [summary, reasons, view.filter.minScore]);
+  const policyNames = useMemo(() => policiesRun(summary), [summary]);
+  const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
+  const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
+
+  // Labels follow the scanned folder, not the scan, so they survive a rescan under other policies.
+  const scanFolderPath = summary?.folder ?? null;
+  useEffect(() => {
+    if (!scanFolderPath) return;
+    if (scanFolderPath === labelsFolder) return;
+    let cancel = false;
+    getLabels(scanFolderPath)
+      .then((file) => {
+        if (cancel) return;
+        setLabels(new Map(Object.entries(file.labels)));
+        setLabelsFolder(scanFolderPath);
+        setLabelError(null);
+      })
+      .catch((err: unknown) => {
+        if (!cancel) setLabelError(err instanceof Error ? err.message : "Could not load labels.");
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [scanFolderPath, labelsFolder]);
+
+  async function saveLabel(relPath: string, next: Omit<ImageLabel, "updated_at"> | null) {
+    if (!scanFolderPath) return;
+    setLabelSaving(true);
+    setLabelError(null);
+    try {
+      const file = await putLabel(scanFolderPath, relPath, next);
+      setLabels(new Map(Object.entries(file.labels)));
+      setLabelsFolder(scanFolderPath);
+    } catch (err: unknown) {
+      setLabelError(err instanceof Error ? err.message : "Could not save the label.");
+    } finally {
+      setLabelSaving(false);
+    }
+  }
+
+  function downloadLabels() {
+    if (!summary) return;
+    const absPaths = new Map(summary.results.map((image) => [image.rel_path, image.abs_path]));
+    downloadText("guard-labels.jsonl", labelsJsonl(summary.folder, labels, absPaths), "application/x-ndjson");
+  }
   const displayBlur = useMemo(() => ({ ...blur, unblurNsfw }), [blur, unblurNsfw]);
   const flagged = useMemo(() => gallery.filter((image) => isMinorExposed(image)).map((image) => image.rel_path), [gallery]);
 
@@ -284,6 +339,7 @@ export function CullApp() {
       const next = await scanFolder(
         view.folder,
         live,
+        policyChoice ?? defaultPolicyChoice(live.singguard_policies),
         setProgress,
         (chunk) => {
           setProgress({ phase: chunk.phase, done: chunk.done, total: chunk.total });
@@ -313,7 +369,7 @@ export function CullApp() {
         if (body) setScanList(body);
       });
     }
-  }, [sourceReady, scanning, scanList?.active, view]);
+  }, [sourceReady, scanning, scanList?.active, view, policyChoice]);
 
   const photo = summary?.results.find((image) => image.rel_path === view.photo) ?? null;
   const photoIndex = photo ? gallery.findIndex((image) => image.rel_path === photo.rel_path) : -1;
@@ -410,10 +466,10 @@ export function CullApp() {
   const sensitive = useMemo(() => {
     const flagged = new Set<string>();
     for (const image of summary?.results ?? []) {
-      if (shouldBlur(image, pending, displayBlur)) flagged.add(image.rel_path);
+      if (shouldBlur(image, pending, displayBlur, labels.get(image.rel_path)?.override ?? null)) flagged.add(image.rel_path);
     }
     return flagged;
-  }, [summary, pending, displayBlur]);
+  }, [summary, pending, displayBlur, labels]);
   const peopleEnabled = gates.faces || (summary?.face_clusters.length ?? 0) > 0;
 
   function downloadPaths() {
@@ -430,7 +486,7 @@ export function CullApp() {
     setExportError(null);
     setExportProgress(null);
     try {
-      const result = await exportScan(summary.scan_id, dest, mode, selectBody(view.filter, gates), setExportProgress);
+      const result = await exportScan(summary.scan_id, dest, mode, selectBody(view.filter, gates, summary), setExportProgress);
       setExportResult(result);
     } catch (err: unknown) {
       setExportError(err instanceof Error ? err.message : "Export failed.");
@@ -463,6 +519,12 @@ export function CullApp() {
           scanLabel={scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "Scan"}
           onOpen={(folder) => replaceView(withoutScan(view, folder))}
           onScan={() => void onScan()}
+        />
+        <PolicyPicker
+          available={detectors?.singguard_policies ?? []}
+          choice={policyChoice ?? defaultPolicyChoice(detectors?.singguard_policies)}
+          disabled={scanBusy}
+          onChange={setPolicyChoice}
         />
         <ScanListView
           scans={scanList}
@@ -512,6 +574,9 @@ export function CullApp() {
             </button>
             <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!subset} onClick={() => setSubsetOpen(true)}>
               Evaluate keep set
+            </button>
+            <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={policyNames.length === 0} onClick={() => setPolicyOpen(true)}>
+              Policies
             </button>
             <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!selection} onClick={downloadPaths}>
               Download paths
@@ -592,6 +657,7 @@ export function CullApp() {
             deleteConfirm={deleteConfirm}
             deleting={batchDeleting}
             deleteError={batchError}
+            labels={labels}
           />
         ) : null}
         {summary && view.view === "people" && view.cluster ? (
@@ -629,6 +695,7 @@ export function CullApp() {
             deleteConfirm={deleteConfirm}
             deleting={batchDeleting}
             deleteError={batchError}
+            labels={labels}
           />
         ) : null}
         <p className="text-caption text-text-muted">
@@ -651,6 +718,11 @@ export function CullApp() {
           onPrevious={previousPhoto ? () => openPhoto(previousPhoto.rel_path) : null}
           onNext={nextPhoto ? () => openPhoto(nextPhoto.rel_path) : null}
           position={photoIndex >= 0 ? `${photoIndex + 1} of ${gallery.length}` : null}
+          label={labels.get(photo.rel_path) ?? null}
+          policies={policyNames}
+          labelSaving={labelSaving}
+          labelError={labelError}
+          onLabel={(next) => void saveLabel(photo.rel_path, next)}
           onDelete={async () => {
             if (!summary || !photo) return;
             const scanId = summary.scan_id;
@@ -661,6 +733,9 @@ export function CullApp() {
         />
       ) : null}
       {subsetOpen && subset ? <SubsetDialog report={subset} onClose={() => setSubsetOpen(false)} /> : null}
+      {policyOpen ? (
+        <PolicyDialog stats={stats} total={viewed.length} labelled={labelledInView} onClose={() => setPolicyOpen(false)} onDownloadLabels={labels.size > 0 ? downloadLabels : null} />
+      ) : null}
       {exportOpen ? (
         <ExportDialog
           allowMove={Boolean(health?.allow_move)}
