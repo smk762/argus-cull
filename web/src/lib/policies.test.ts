@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, normalisePolicyChoice, policiesRun, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -37,6 +37,8 @@ const split = {
 const agreed = { rel_path: "agreed.jpg", guard: unsafe("adult"), guard_variants: { adult: unsafe("adult"), "adult-granular": unsafe("adult-granular"), "adult-cautious": unsafe("adult-cautious") } } as unknown as ImageResult;
 const clean = { rel_path: "clean.jpg", guard: safe("adult"), guard_variants: { adult: safe("adult"), "adult-granular": safe("adult-granular") } } as unknown as ImageResult;
 const single = { rel_path: "single.jpg", guard: unsafe("default"), guard_variants: null } as unknown as ImageResult;
+/** Official flags; a variant passes. Determined fail, split. */
+const dissent = { rel_path: "dissent.jpg", guard: unsafe("adult"), guard_variants: { "adult-cautious": safe("adult-cautious") } } as unknown as ImageResult;
 const unchecked = { rel_path: "unchecked.jpg" } as unknown as ImageResult;
 
 describe("policy verdicts", () => {
@@ -78,6 +80,20 @@ describe("policy verdicts", () => {
     expect(shieldTitle(agreed)).toBe("Unsafe under adult, adult-granular, adult-cautious");
     expect(shieldTitle(clean)).toBe("Safe under adult, adult-granular");
     expect(shieldLabel("unsafe-split")).toBe("unsafe, split");
+  });
+
+  it("selects by the determined verdict, and Split is the disagreement", () => {
+    const images = [clean, split, agreed, single, dissent, unchecked];
+    // Unsafe is a red shield: unanimous fail, or official fail with a passing variant. Official-safe with a flagging variant is not.
+    expect(pathsByShield(images, "unsafe")).toEqual(["agreed.jpg", "single.jpg", "dissent.jpg"]);
+    expect(pathsByShield(images, "split")).toEqual(["split.jpg", "dissent.jpg"]);
+    expect(pathsByShield(images, "safe")).toEqual(["clean.jpg", "split.jpg"]);
+    // Following the flagging variant turns the split into a determined fail.
+    expect(pathsByShield(images, "unsafe", (rel) => (rel === "split.jpg" ? "adult-granular" : null))).toEqual(["split.jpg", "agreed.jpg", "single.jpg", "dissent.jpg"]);
+    expect(pathsByShield(images, "safe", (rel) => (rel === "split.jpg" ? "adult-granular" : null))).toEqual(["clean.jpg"]);
+    expect(matchesShieldPick("unsafe-split", "unsafe")).toBe(true);
+    expect(matchesShieldPick("safe-split", "unsafe")).toBe(false);
+    expect(matchesShieldPick("none", "unsafe")).toBe(false);
   });
 
   it("spots a recorded unsafe whose only rule is Safe", () => {

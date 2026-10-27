@@ -8,7 +8,7 @@ import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type 
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
 import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
-import { policiesRun, policyStats } from "@/lib/policies";
+import { pathsByShield, policiesRun, policyStats, type ShieldPick } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
 import { availability, selectBody } from "@/lib/select";
@@ -608,6 +608,13 @@ export function CullApp() {
     setSelected((prev) => (flagged.every((rel) => prev.has(rel)) ? new Set() : new Set(flagged)));
   }
 
+  function selectShield(pick: ShieldPick) {
+    setDeleteConfirm(false);
+    setBatchError(null);
+    const paths = pathsByShield(gallery, pick, (rel) => labels.get(rel)?.override ?? null);
+    setSelected((prev) => (paths.length > 0 && paths.every((rel) => prev.has(rel)) ? new Set() : new Set(paths)));
+  }
+
   async function deleteSelected() {
     if (!summary) return;
     const paths = flagged.filter((rel) => selected.has(rel));
@@ -864,6 +871,7 @@ export function CullApp() {
             onToggleSelected={toggleSelected}
             onSelectAll={selectAll}
             onSelectFlagged={selectFlagged}
+            onSelectShield={selectShield}
             onDeleteSelected={() => void deleteSelected()}
             deleteConfirm={deleteConfirm}
             deleting={batchDeleting}
@@ -909,6 +917,7 @@ export function CullApp() {
             onToggleSelected={toggleSelected}
             onSelectAll={selectAll}
             onSelectFlagged={selectFlagged}
+            onSelectShield={selectShield}
             onDeleteSelected={() => void deleteSelected()}
             deleteConfirm={deleteConfirm}
             deleting={batchDeleting}

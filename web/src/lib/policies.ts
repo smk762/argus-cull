@@ -99,6 +99,38 @@ export function shieldState(image: Guarded, override?: string | null): ShieldSta
   return split ? "unsafe-split" : "unsafe";
 }
 
+/**
+ * What the grid's Policy select picks. These are queries, not a partition:
+ * Split overlaps both Safe and Unsafe. Unsafe is the determined fail (the
+ * shield is red), so official-safe with a flagging variant is Split, not
+ * Unsafe: that is a split toward safe, not a fail.
+ */
+export type ShieldPick = "safe" | "split" | "unsafe";
+
+export const SHIELD_PICKS = ["unsafe", "split", "safe"] as const satisfies readonly ShieldPick[];
+
+export const SHIELD_PICK_LABELS: Record<ShieldPick, string> = {
+  unsafe: "Unsafe",
+  split: "Split",
+  safe: "Safe",
+};
+
+export function matchesShieldPick(state: ShieldState, pick: ShieldPick): boolean {
+  switch (pick) {
+    case "safe":
+      return state === "safe" || state === "safe-split";
+    case "unsafe":
+      return state === "unsafe" || state === "unsafe-split";
+    case "split":
+      return state === "safe-split" || state === "unsafe-split";
+  }
+}
+
+/** Paths whose shield matches the pick. An override names the policy the shield follows, the way the tile does. */
+export function pathsByShield(images: readonly (Guarded & { rel_path: string })[], pick: ShieldPick, override: (relPath: string) => string | null = () => null): string[] {
+  return images.filter((image) => matchesShieldPick(shieldState(image, override(image.rel_path)), pick)).map((image) => image.rel_path);
+}
+
 /** Short word for the state, as the detail view's summary strip shows it. */
 export function shieldLabel(state: ShieldState): string {
   switch (state) {
