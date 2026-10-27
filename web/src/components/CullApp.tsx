@@ -7,6 +7,7 @@ import { DEFAULT_BLUR, filterByAge, filterByKeep, filterByRace, isMinorExposed, 
 import { downloadText } from "@/lib/download";
 import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
 import { availability, selectBody } from "@/lib/select";
+import { policyOffered } from "@/lib/detectors";
 import { evaluateSubset } from "@/lib/subset";
 import {
   PAGE_SIZE,
@@ -284,6 +285,7 @@ export function CullApp() {
       const next = await scanFolder(
         view.folder,
         live,
+        view.guardPolicy,
         setProgress,
         (chunk) => {
           setProgress({ phase: chunk.phase, done: chunk.done, total: chunk.total });
@@ -463,6 +465,8 @@ export function CullApp() {
           scanLabel={scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "Scan"}
           onOpen={(folder) => replaceView(withoutScan(view, folder))}
           onScan={() => void onScan()}
+          adultPolicy={policyOffered(detectors, "adult") ? view.guardPolicy === "adult" : null}
+          onAdultPolicy={(adult) => replaceView({ ...view, guardPolicy: adult ? "adult" : "default" })}
         />
         <ScanListView
           scans={scanList}

@@ -10,6 +10,8 @@ export function FolderPicker({
   scanLabel,
   onOpen,
   onScan,
+  adultPolicy,
+  onAdultPolicy,
 }: {
   listing: FolderListing | null;
   error: string | null;
@@ -18,6 +20,9 @@ export function FolderPicker({
   scanLabel: string;
   onOpen: (path: string) => void;
   onScan: () => void;
+  /** Whether the next scan uses SingGuard's adult policy; null when the server does not offer it. */
+  adultPolicy: boolean | null;
+  onAdultPolicy: (adult: boolean) => void;
 }) {
   return (
     <section className="space-y-3">
@@ -44,6 +49,23 @@ export function FolderPicker({
               {scanLabel}
             </button>
           </div>
+          {adultPolicy !== null ? (
+            <label className="flex items-start gap-2 text-small">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={adultPolicy}
+                disabled={scanning}
+                onChange={(event) => onAdultPolicy(event.target.checked)}
+              />
+              <span>
+                Adult content allowed
+                <span className="block text-caption text-text-muted">
+                  SingGuard judges the next scan under the adult policy: consensual adult nudity passes, and apparent minors, non-consent and sexual violence are still rule A. NudeNet scores and blur do not change.
+                </span>
+              </span>
+            </label>
+          ) : null}
           <ul className="space-y-1">
             {listing.folders.map((folder) => (
               <li key={folder.rel_path}>

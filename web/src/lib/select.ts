@@ -1,5 +1,17 @@
+import { policyOffered } from "./detectors";
 import { exposedLabelsForRequest } from "./moderation";
-import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
+import type {
+  CheckConfig,
+  Detectors,
+  FaceConfig,
+  FilterState,
+  GarmentConfig,
+  GuardConfig,
+  GuardPolicy,
+  ScanSummary,
+  SceneConfig,
+  SelectRequest,
+} from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -87,11 +99,11 @@ export interface ScanBody {
   scenes: SceneConfig;
   garments: GarmentConfig;
   nsfw: CheckConfig;
-  guard: CheckConfig;
+  guard: GuardConfig;
 }
 
 /** Turn a detector on only when /detectors says its weights are loaded. */
-export function scanBody(folder: string, detectors: Detectors): ScanBody {
+export function scanBody(folder: string, detectors: Detectors, policy: GuardPolicy = "default"): ScanBody {
   const fairface = detectors.fairface;
   const mivolo = detectors.mivolo;
   return {
@@ -105,7 +117,12 @@ export function scanBody(folder: string, detectors: Detectors): ScanBody {
     garments: { enabled: detectors.garments, min_conf: 0.3 },
     // NudeNet and SingGuard are remote servers. Ask only when /detectors says the URL is set.
     nsfw: { enabled: Boolean(detectors.nudenet) },
-    guard: { enabled: Boolean(detectors.singguard) },
+    // Name a policy only when the server lists it: an older curator ignores the
+    // field and would judge the scan under its default policy without saying so.
+    guard:
+      policy !== "default" && policyOffered(detectors, policy)
+        ? { enabled: true, policy }
+        : { enabled: Boolean(detectors.singguard) },
   };
 }
 

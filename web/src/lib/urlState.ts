@@ -8,6 +8,7 @@ import {
   NUDENET_LABELS,
   GARMENTS,
   GENDERS,
+  GUARD_POLICIES,
   POSES,
   RACES,
   type ExposedLabel,
@@ -131,6 +132,7 @@ export function parseView(params: URLSearchParams): ViewState {
     photo: params.get("photo") || null,
     view,
     cluster: params.get("cluster") || null,
+    guardPolicy: take(params.get("policy") ?? "", GUARD_POLICIES) ?? "default",
     filter,
   };
 }
@@ -148,6 +150,7 @@ export function serializeView(view: ViewState): string {
   if (view.photo) params.set("photo", view.photo);
   if (view.view === "people") params.set("view", "people");
   if (view.cluster) params.set("cluster", view.cluster);
+  if (view.guardPolicy !== "default") params.set("policy", view.guardPolicy);
   if (filter.minScore !== DEFAULT_FILTER.minScore) params.set("min_score", String(filter.minScore));
   if (filter.includeRejected) params.set("include_rejected", "1");
   if (filter.keepSimilar) params.set("keep_similar", "1");
