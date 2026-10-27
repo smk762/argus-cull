@@ -143,7 +143,7 @@ export function Filters({
         <input type="checkbox" checked={unblurNsfw} onChange={(event) => onUnblurNsfw(event.target.checked)} />
         Unblur NSFW
       </label>
-      <p className="text-caption text-text-muted">Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame NudeNet has not checked yet.</p>
+      <p className="text-caption text-text-muted">Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame the scan has not finished checking.</p>
       <label className="flex items-center gap-2 text-small">
         <input type="checkbox" checked={filter.includeRejected} onChange={(event) => onChange({ includeRejected: event.target.checked })} />
         Keep hard rejects

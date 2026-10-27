@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { imageUrl, thumbUrl } from "@/lib/api";
-import { DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy } from "@/lib/chunks";
+import { awaitingChecks, DEFAULT_BLUR, isMinorExposed, revealHeld, shouldBlur, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
@@ -427,12 +427,30 @@ function TagControl({
 }
 
 /** The four numbers a reader checks first, in one row above the tables. */
-function Summary({ image, reason, override, checking }: { image: ImageResult; reason: string | undefined; override: string | null; checking: boolean }) {
+function Summary({
+  image,
+  reason,
+  override,
+  checking,
+  scanning,
+}: {
+  image: ImageResult;
+  reason: string | undefined;
+  override: string | null;
+  checking: boolean;
+  /** The scan is still running, so there is no keep set to report yet. */
+  scanning: boolean;
+}) {
   const attrs = image.primary_face_attributes;
   const age = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? "–";
   const state = shieldState(image, override);
   const cells: [string, ReactNode][] = [
-    ["Selection", <span key="sel" className={reason === undefined ? "text-text-muted" : reason ? "text-warning" : "text-success"}>{reason === undefined ? "Selecting…" : reason || "keep"}</span>],
+    [
+      "Selection",
+      <span key="sel" className={reason === undefined ? "text-text-muted" : reason ? "text-warning" : "text-success"}>
+        {reason === undefined ? (scanning ? "after the scan" : "Selecting…") : reason || "keep"}
+      </span>,
+    ],
     [
       "Policy",
       <span key="pol" className="flex items-center gap-1.5">
@@ -461,6 +479,7 @@ export function PhotoDialog({
   scanId,
   reason,
   pending,
+  scanning = false,
   blur = DEFAULT_BLUR,
   onClose,
   onDelete,
@@ -480,6 +499,8 @@ export function PhotoDialog({
   scanId: string;
   reason: string | undefined;
   pending: readonly string[];
+  /** The scan is still running, so there is no keep set to report yet. */
+  scanning?: boolean;
   blur?: BlurPolicy;
   onClose: () => void;
   onDelete: () => Promise<void>;
@@ -519,9 +540,9 @@ export function PhotoDialog({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const worn = (image.garments ?? []).map((garment) => ({ label: slugLabel(garment.label), conf: garment.conf }));
   const blocked = isMinorExposed(image);
-  const checking = pending.includes("nsfw") && image.nsfw == null;
-  // No reveal until NudeNet has reported: MiVOLO may still read a face as under 18.
-  const holdReveal = blocked || checking;
+  const checking = awaitingChecks(image, pending);
+  // No reveal while the under-18 rule could still apply: NudeNet has not reported, or the ages are still coming.
+  const holdReveal = revealHeld(image, pending);
   const override = label?.override ?? null;
   const obscured = shouldBlur(image, pending, blur, override);
   const blurred = blocked || (obscured && !shown);
@@ -598,7 +619,7 @@ export function PhotoDialog({
             </button>
           ) : null}
           {holdReveal && !blocked ? (
-            <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Checking</p>
+            <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Scanning…</p>
           ) : null}
           {blocked ? (
             <p className="absolute inset-x-4 bottom-4 rounded-md bg-base-800 px-3 py-2 text-caption text-text-secondary">
@@ -607,7 +628,7 @@ export function PhotoDialog({
           ) : null}
         </div>
         <div className="mt-4 space-y-4 text-small">
-          <Summary image={image} reason={reason} override={override} checking={checking} />
+          <Summary image={image} reason={reason} override={override} checking={checking} scanning={scanning} />
           {blocked ? (
             <p className="text-caption text-warning">
               {deleteError ?? "Delete removes this file from the source folder. Review the ages and scores in this panel first."}

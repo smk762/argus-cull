@@ -93,13 +93,18 @@ function hasMinorAge(image: AgeChecked): boolean {
   return mivoloAges(image).some((age) => age < MINOR_AGE_YEARS);
 }
 
+/** The strongest exposed reading NudeNet gave: the highest exposed class or the exposed score. Zero before it reports. */
+function exposedReading(image: AgeChecked): number {
+  if (image.nsfw == null) return 0;
+  const labels = image.nsfw.labels;
+  const fromLabels = EXPOSED_LABELS.reduce((max, label) => Math.max(max, labels?.[label] ?? 0), 0);
+  return Math.max(fromLabels, image.nsfw.exposed_score ?? 0);
+}
+
 /** Any face MiVOLO puts under 18, once an exposed class scores at least 0.2. */
 export function isMinorExposed(image: AgeChecked): boolean {
   if (image.nsfw == null) return false;
-  const labels = image.nsfw.labels;
-  const fromLabels = EXPOSED_LABELS.reduce((max, label) => Math.max(max, labels?.[label] ?? 0), 0);
-  const score = Math.max(fromLabels, image.nsfw.exposed_score ?? 0);
-  if (score < MINOR_EXPOSED_SCORE) return false;
+  if (exposedReading(image) < MINOR_EXPOSED_SCORE) return false;
   return hasMinorAge(image);
 }
 
@@ -110,21 +115,53 @@ export function minorAwaitingNude(image: AgeChecked, pending: readonly string[])
 }
 
 /**
+ * The ages are still coming for a frame with no age yet. Only the curator
+ * that lists `faces` in `pending_checks` says so; an older one runs faces
+ * before NudeNet, so by the time NudeNet reports the ages are known.
+ */
+function ageStillComing(image: AgeChecked, pending: readonly string[]): boolean {
+  return pending.includes("faces") && mivoloAges(image).length === 0;
+}
+
+/**
+ * Checks this frame is still waiting on, for a "scanning" mark: NudeNet when
+ * it has not reported, and the ages while face detection runs. Policy is left
+ * out, since a verdict can only put a blur back, never hold one.
+ */
+export function awaitingChecks(image: AgeChecked, pending: readonly string[]): boolean {
+  if (pending.includes("nsfw") && image.nsfw == null) return true;
+  return ageStillComing(image, pending);
+}
+
+/**
+ * The blur no setting or click lifts: an under-18 face with exposure, and the
+ * frames whose under-18 status is not known yet. That is a frame NudeNet has
+ * not reported on while it is running, and, while face detection is running,
+ * a frame with no age yet whose exposed reading is 0.2 or more. Under 0.2
+ * the under-18 rule cannot apply, so the age is not waited for.
+ */
+export function revealHeld(image: AgeChecked, pending: readonly string[]): boolean {
+  if (isMinorExposed(image)) return true;
+  if (minorAwaitingNude(image, pending)) return true;
+  if (pending.includes("nsfw") && image.nsfw == null) return true;
+  return ageStillComing(image, pending) && exposedReading(image) >= MINOR_EXPOSED_SCORE;
+}
+
+/**
  * Blur until NudeNet reports. A score under the line lifts it immediately, even
  * while policy is still running. An unsafe policy verdict puts it back, unless
  * that re-blur is opted out; the verdict is the union of every policy the scan
  * ran, or the one policy an override names. An under-18 face with an exposed score stays blurred.
  * Unblur NSFW reveals NudeNet and policy blur on frames NudeNet has already
  * scored, and leaves every under-18 face blurred. A frame NudeNet has not
- * reached stays blurred either way: the scan delivers scoring batches before
- * MiVOLO runs, so an unchecked frame may still turn out to be an under-18 one.
+ * reached stays blurred either way. While face detection is still running,
+ * a frame with no age yet and an exposed reading of 0.2 or more stays
+ * blurred too: it may still turn out to be an under-18 one. Under 0.2 the
+ * under-18 rule cannot apply, so the age is not waited for.
  */
 export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: BlurPolicy = DEFAULT_BLUR, policyOverride: string | null = null): boolean {
-  if (isMinorExposed(image)) return true;
-  if (minorAwaitingNude(image, pending)) return true;
-  if (pending.includes("nsfw") && image.nsfw == null) return true;
-  const ageStillComing = pending.includes("faces") && mivoloAges(image).length === 0;
-  if (blur.unblurNsfw && !hasMinorAge(image) && !ageStillComing) return false;
+  if (revealHeld(image, pending)) return true;
+  if (blur.unblurNsfw && !hasMinorAge(image)) return false;
   const score = image.nsfw?.exposed_score;
   if (score != null && score >= blur.exposedScore) return true;
   if (blur.policyBlur && effectiveUnsafe(image, policyOverride) === true) return true;

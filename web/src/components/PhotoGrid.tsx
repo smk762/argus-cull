@@ -1,7 +1,7 @@
 "use client";
 
 import { thumbUrl } from "@/lib/api";
-import { DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
 import { shieldState, shieldTitle } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
@@ -30,6 +30,7 @@ export function PhotoGrid({
   scanId,
   page,
   pending,
+  scanning = false,
   blur = DEFAULT_BLUR,
   sort,
   direction,
@@ -65,6 +66,8 @@ export function PhotoGrid({
   scanId: string;
   page: number;
   pending: readonly string[];
+  /** The scan on screen is still running, so no keep set exists yet. */
+  scanning?: boolean;
   blur?: BlurPolicy;
   sort: GridSort;
   direction: SortDirection;
@@ -229,7 +232,7 @@ export function PhotoGrid({
           const kept = reason === "";
           const override = labels?.get(image.rel_path)?.override ?? null;
           const blurred = shouldBlur(image, pending, blur, override);
-          const checking = pending.includes("nsfw") && image.nsfw == null;
+          const checking = awaitingChecks(image, pending);
           const age = apparentAge(image);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
@@ -250,13 +253,21 @@ export function PhotoGrid({
                 className={`w-full overflow-hidden rounded-lg border bg-base-800 text-left hover:border-accent-primary ${isSelected && deletable ? "border-warning" : isSelected ? "border-accent-primary" : "border-base-700"}`}
                 onClick={() => onOpen(image.rel_path)}
               >
-                {/* Thumbnails are already resized by the curator. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbUrl(scanId, image.rel_path)}
-                  alt=""
-                  className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
-                />
+                <span className="relative block">
+                  {/* Thumbnails are already resized by the curator. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={thumbUrl(scanId, image.rel_path)}
+                    alt=""
+                    className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
+                  />
+                  {/* A blur speaks for itself; only a frame still waiting on checks gets a word. */}
+                  {checking ? (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">Scanning…</span>
+                    </span>
+                  ) : null}
+                </span>
                 <span className="block p-2 text-caption">
                   <span className="flex items-center gap-1.5">
                     <Shield state={shieldState(image, override)} title={shieldTitle(image, override)} className="h-3.5 w-3.5" />
@@ -275,8 +286,9 @@ export function PhotoGrid({
                     <span className="truncate" title="Apparent age, MiVOLO years or FairFace bracket">
                       {age}
                     </span>
-                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? "Selecting" : kept ? "keep" : reason}>
-                      {reasons == null ? "…" : kept ? "keep" : reason}
+                    {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
+                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reason}>
+                      {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : reason}
                     </span>
                   </span>
                 </span>
