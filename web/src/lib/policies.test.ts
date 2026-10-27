@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, normalisePolicyChoice, policiesRun, policyStats, policyVerdicts, shieldState, shieldTitle, verdictConflict } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, normalisePolicyChoice, policiesRun, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -61,21 +61,23 @@ describe("policy verdicts", () => {
     expect(dissentingPolicies(agreed)).toEqual([]);
   });
 
-  it("colours the shield by the followed verdict, then by dissent", () => {
+  it("colours the shield by the followed verdict, with a core when a policy disagrees", () => {
     expect(shieldState(unchecked)).toBe("none");
     expect(shieldState(clean)).toBe("safe");
     expect(shieldState(agreed)).toBe("unsafe");
     expect(shieldState(single)).toBe("unsafe");
-    // Official passes, a variant flags: orange, and the union still blurs.
-    expect(shieldState(split)).toBe("dissent");
-    // Following the flagging variant makes it red; following the official one keeps the dissent visible.
-    expect(shieldState(split, "adult-granular")).toBe("unsafe");
-    expect(shieldState(split, "adult")).toBe("dissent");
-    expect(shieldState(split, "not-run")).toBe("dissent");
+    // Official passes, a variant flags: green with the core, and the union still blurs.
+    expect(shieldState(split)).toBe("safe-split");
+    // Following the flagging variant makes it red with the core; the official one keeps green with the core.
+    expect(shieldState(split, "adult-granular")).toBe("unsafe-split");
+    expect(shieldState(split, "adult")).toBe("safe-split");
+    expect(shieldState(split, "not-run")).toBe("safe-split");
     expect(shieldTitle(unchecked)).toBe("No policy verdict yet");
-    expect(shieldTitle(split)).toBe("Followed verdict safe; adult-granular flagged");
-    expect(shieldTitle(agreed)).toContain("Unsafe");
+    expect(shieldTitle(split)).toBe("Safe under adult; adult-granular flagged");
+    expect(shieldTitle(split, "adult-granular")).toBe("Unsafe under adult-granular; adult, adult-cautious passed");
+    expect(shieldTitle(agreed)).toBe("Unsafe under adult, adult-granular, adult-cautious");
     expect(shieldTitle(clean)).toBe("Safe under adult, adult-granular");
+    expect(shieldLabel("unsafe-split")).toBe("unsafe, split");
   });
 
   it("spots a recorded unsafe whose only rule is Safe", () => {

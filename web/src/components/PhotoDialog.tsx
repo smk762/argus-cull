@@ -8,7 +8,7 @@ import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type Coh
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { nudeNetLabel } from "@/lib/moderation";
-import { policyVerdicts, shieldState, shieldTitle, verdictConflict } from "@/lib/policies";
+import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "@/lib/policies";
 import { NUDENET_LABELS, slugLabel, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
@@ -437,7 +437,7 @@ function Summary({ image, reason, override, checking }: { image: ImageResult; re
       "Policy",
       <span key="pol" className="flex items-center gap-1.5">
         <Shield state={state} title={shieldTitle(image, override)} />
-        {state === "none" ? <span className="text-text-muted">{checking ? "checking" : "no verdict"}</span> : state === "safe" ? "safe" : state === "dissent" ? "dissent" : "unsafe"}
+        {state === "none" ? <span className="text-text-muted">{checking ? "checking" : "no verdict"}</span> : shieldLabel(state)}
       </span>,
     ],
     ["Quality", image.score.toFixed(3)],
@@ -626,7 +626,7 @@ export function PhotoDialog({
             {worn.length > 0 ? <ConfTable title="Fashionpedia" rows={worn} /> : null}
             {image.nsfw ? <NudeNetTable nsfw={image.nsfw} /> : null}
           </div>
-          {image.nsfw && image.nsfw.exposed_score < 0.2 && shieldState(image, override) !== "safe" && shieldState(image, override) !== "none" ? (
+          {image.nsfw && image.nsfw.exposed_score < 0.2 && effectiveUnsafe(image, override) ? (
             <p className="text-caption leading-relaxed text-text-secondary">NudeNet scored no exposed class. SingGuard still marked the image unsafe under a policy.</p>
           ) : null}
           <PolicyReports image={image} override={override} />
