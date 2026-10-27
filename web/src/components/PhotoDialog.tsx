@@ -3,8 +3,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { imageUrl, thumbUrl } from "@/lib/api";
-import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, revealHeld, shouldBlur, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, measuredAges, revealHeld, shouldBlur, shownAge, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
+import { confLine, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { nudeNetLabel } from "@/lib/moderation";
@@ -23,14 +24,14 @@ const SCORE_PARTS: [string, string][] = [
 
 type Row = [label: ReactNode, value: ReactNode, note?: ReactNode];
 
-/** A two- or three-column key/value table. Null rows are skipped so callers can inline conditions. */
-function StatTable({ title, rows, caption }: { title: string; rows: (Row | null)[]; caption?: ReactNode }) {
+/** A two- or three-column key/value table. Null rows are skipped so callers can inline conditions. No title inside a fold, whose summary line names it. */
+function StatTable({ title, rows, caption }: { title?: string; rows: (Row | null)[]; caption?: ReactNode }) {
   const shown = rows.filter((row): row is Row => row != null);
   if (shown.length === 0) return null;
   const notes = shown.some((row) => row[2] != null);
   return (
     <section>
-      <h3 className="text-caption text-text-muted">{title}</h3>
+      {title ? <h3 className="text-caption text-text-muted">{title}</h3> : null}
       <table className="mt-1 w-full border-collapse text-small tabular-nums">
         <tbody>
           {shown.map((row, index) => (
@@ -50,11 +51,11 @@ function StatTable({ title, rows, caption }: { title: string; rows: (Row | null)
 }
 
 /** A list of label/confidence pairs as a table. */
-function ConfTable({ title, rows, caption }: { title: string; rows: { label: string; conf: number }[]; caption?: ReactNode }) {
+function ConfTable({ title, rows, caption }: { title?: string; rows: { label: string; conf: number }[]; caption?: ReactNode }) {
   if (rows.length === 0 && !caption) return null;
   return (
     <section>
-      <h3 className="text-caption text-text-muted">{title}</h3>
+      {title ? <h3 className="text-caption text-text-muted">{title}</h3> : null}
       {rows.length > 0 ? (
         <table className="mt-1 w-full border-collapse text-small tabular-nums">
           <tbody>
@@ -78,7 +79,6 @@ function QualityTable({ image }: { image: ImageResult }) {
   const extra = Object.entries(breakdown).filter(([key]) => !known.has(key));
   return (
     <StatTable
-      title="Quality"
       rows={[
         ["Score", <span key="score" className="font-semibold">{image.score.toFixed(3)}</span>, image.reject_reason ? image.reject_reason : undefined],
         ...SCORE_PARTS.filter(([key]) => breakdown[key] != null).map(([key, label]): Row => [label, breakdown[key].toFixed(3)]),
@@ -100,7 +100,10 @@ function AppearanceTable({ image }: { image: ImageResult }) {
   const faceCount = image.faces?.length ?? 0;
   const setAge = usesSetAge(image) ? image.set_age : null;
   if (!attrs && !image.primary_face_pose && faceCount === 0 && !setAge) return null;
-  const age = attrs?.age_years != null ? `${Math.round(attrs.age_years)} years` : attrs?.age ?? null;
+  // The age row is the youngest face, the one the under-18 rule reads. The primary face gets its own row when it reads older.
+  const primaryYears = attrs?.age_source === "mivolo" || attrs?.age_source == null ? attrs?.age_years ?? null : null;
+  const age = !setAge && youngest != null ? `${Math.round(youngest)} years` : attrs?.age ?? null;
+  const agedFaces = measuredAges(image).length;
   return (
     <StatTable
       title="Appearance guess"
@@ -113,14 +116,25 @@ function AppearanceTable({ image }: { image: ImageResult }) {
             ]
           : null,
         attrs?.gender ? ["Gender", attrs.gender, [attrs.gender_source, attrs.gender_conf != null ? attrs.gender_conf.toFixed(2) : null].filter(Boolean).join(" · ")] : null,
-        age ? ["Age", age, [attrs?.age_source, attrs?.age_conf != null ? attrs.age_conf.toFixed(2) : null].filter(Boolean).join(" · ")] : null,
-        youngest != null && attrs?.age_years != null && youngest < attrs.age_years ? ["Youngest face", `${Math.round(youngest)} years`, "mivolo"] : null,
-        ["Race", attrs?.race ? slugLabel(attrs.race) : <span className="text-text-muted">not recorded</span>, attrs?.race ? ["fairface", attrs.race_conf != null ? attrs.race_conf.toFixed(2) : null].filter(Boolean).join(" · ") : "FairFace is the only model that records race"],
+        age
+          ? [
+              "Age",
+              age,
+              youngest != null && !setAge
+                ? agedFaces > 1
+                  ? `mivolo · youngest of ${agedFaces} faces`
+                  : [attrs?.age_source ?? "mivolo", attrs?.age_conf != null ? attrs.age_conf.toFixed(2) : null].filter(Boolean).join(" · ")
+                : [attrs?.age_source, attrs?.age_conf != null ? attrs.age_conf.toFixed(2) : null].filter(Boolean).join(" · "),
+            ]
+          : null,
+        youngest != null && primaryYears != null && primaryYears > youngest ? ["Primary face", `${Math.round(primaryYears)} years`, "mivolo · the face the gender and race read from"] : null,
+        // Only FairFace records race; a scan without it says nothing rather than "not recorded" on every frame.
+        attrs?.race ? ["Race", slugLabel(attrs.race), ["fairface", attrs.race_conf != null ? attrs.race_conf.toFixed(2) : null].filter(Boolean).join(" · ")] : null,
         otherRaces.length > 0 ? ["Other faces", otherRaces.join(", ")] : null,
         image.primary_face_pose ? ["Head pose", image.primary_face_pose.replaceAll("_", " ")] : null,
         faceCount > 1 ? ["Faces", String(faceCount)] : null,
       ]}
-      caption="Appearance guesses from the primary face. Sources are named so a guess is not read as a fact."
+      caption="Age is the youngest face in the frame, the one the under-18 check reads; gender and race come from the primary face. Sources are named so a guess is not read as a fact."
     />
   );
 }
@@ -130,7 +144,6 @@ function NudeNetTable({ nsfw }: { nsfw: NsfwResult }) {
   const quiet = NUDENET_LABELS.filter((label) => nsfw.labels[label] == null);
   return (
     <section>
-      <h3 className="text-caption text-text-muted">NudeNet</h3>
       <table className="mt-1 w-full border-collapse text-small tabular-nums">
         <tbody>
           <tr>
@@ -453,8 +466,8 @@ function Summary({
   pending: readonly string[];
   facesRan: boolean;
 }) {
-  const attrs = image.primary_face_attributes;
-  const age = usesSetAge(image) && image.set_age ? `≈${Math.round(image.set_age.years)}y set` : attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? ageMissing(image, pending, facesRan);
+  const shown = shownAge(image);
+  const age = shown ? <span title={shown.title}>{shown.text}</span> : ageMissing(image, pending, facesRan);
   const state = shieldState(image, override);
   const cells: [string, ReactNode][] = [
     [
@@ -649,19 +662,26 @@ export function PhotoDialog({
               {deleteError ?? "Delete removes this file from the source folder. Review the ages and scores in this panel first."}
             </p>
           ) : null}
-          <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+          <AppearanceTable image={image} />
+          {/* The numbers the summary strip already gives are folded: the strip says how much, these say why. */}
+          <Fold title="Quality" summary={qualityLine(image)} open={false}>
             <QualityTable image={image} />
-            <AppearanceTable image={image} />
-            {image.scene ? (
-              <ConfTable
-                title="Places365"
-                rows={image.scene.categories.map((category) => ({ label: category.label, conf: category.conf }))}
-                caption={`Environment: ${image.scene.environment}`}
-              />
-            ) : null}
-            {worn.length > 0 ? <ConfTable title="Fashionpedia" rows={worn} /> : null}
-            {image.nsfw ? <NudeNetTable nsfw={image.nsfw} /> : null}
-          </div>
+          </Fold>
+          {image.nsfw ? (
+            <Fold title="NudeNet" summary={nudeNetLine(image.nsfw)} open={false}>
+              <NudeNetTable nsfw={image.nsfw} />
+            </Fold>
+          ) : null}
+          {image.scene ? (
+            <Fold title="Places365" summary={sceneLine(image.scene.categories, image.scene.environment)} open={false}>
+              <ConfTable rows={image.scene.categories.map((category) => ({ label: category.label, conf: category.conf }))} caption={`Environment: ${image.scene.environment}`} />
+            </Fold>
+          ) : null}
+          {worn.length > 0 ? (
+            <Fold title="Fashionpedia" summary={confLine(worn)} open={false}>
+              <ConfTable rows={worn} />
+            </Fold>
+          ) : null}
           {image.nsfw && image.nsfw.exposed_score < 0.2 && effectiveUnsafe(image, override) ? (
             <p className="text-caption leading-relaxed text-text-secondary">NudeNet scored no exposed class. SingGuard still marked the image unsafe under a policy.</p>
           ) : null}
