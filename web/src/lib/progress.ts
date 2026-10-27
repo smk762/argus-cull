@@ -20,7 +20,7 @@ export function phaseLabel(phase: string): string {
 
 /**
  * Fold a progress event into the phases on the bar. Face detection and NudeNet
- * run at the same time on curator 0.6, and their events interleave, so a phase
+ * run at the same time on curator 0.5.1, and their events interleave, so a phase
  * stays on the bar until an event shows it finished and a later event arrives.
  * Phases run one after the other otherwise, so a new phase replaces finished ones.
  */

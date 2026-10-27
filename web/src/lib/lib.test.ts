@@ -366,7 +366,7 @@ describe("scan chunks", () => {
     expect(shouldBlur({ primary_face_attributes: years(30), nsfw: { detections: [], labels: {}, exposed_score: 0.9 } }, ["guard"], shown)).toBe(false);
     expect(shouldBlur({}, ["faces", "nsfw"], shown)).toBe(true);
     expect(shouldBlur({ primary_face_attributes: years(16) }, ["nsfw"], shown)).toBe(true);
-    // Curator 0.6 runs NudeNet beside faces. With the ages still coming, a frame
+    // Curator 0.5.1 runs NudeNet beside faces. With the ages still coming, a frame
     // exposed enough for the under-18 rule waits; one under 0.2 cannot be hit by it.
     const exposed = { nsfw: { detections: [], labels: {}, exposed_score: 0.2 } };
     const faint = { nsfw: { detections: [], labels: { FACE_FEMALE: 0.9 }, exposed_score: 0.1 } };
