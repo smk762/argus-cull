@@ -67,12 +67,22 @@ class ParseGenerationTest(unittest.TestCase):
         self.assertTrue(fast_safe)
 
     def test_answer_alone_is_a_verdict(self) -> None:
-        safe, rule, _, fast_safe = parse_generation("I am not sure\n<answer>Safe</answer>")
+        safe, rule, explanation, fast_safe = parse_generation("I am not sure\n<answer>Safe</answer>")
         self.assertTrue(safe)
         self.assertEqual(rule, "Safe")
         self.assertIsNone(fast_safe)
+        # Without a verdict line the whole text before the tag is the explanation.
+        self.assertEqual(explanation, "I am not sure")
         body = to_response("I am not sure\n<answer>Safe</answer>", "m", 1)
         self.assertIsNone(body["fast_verdict"])
+
+    def test_slow_mode_keeps_the_first_step(self) -> None:
+        text = "[Step 1] Content Summary\nA portrait.\n[Step 3] Final Judgment\nSafe.\n<answer>Safe</answer>"
+        safe, rule, explanation, fast_safe = parse_generation(text)
+        self.assertTrue(safe)
+        self.assertIsNone(fast_safe)
+        self.assertTrue(explanation.startswith("[Step 1] Content Summary"))
+        self.assertNotIn("<answer>", explanation)
 
     def test_missing_verdict_is_a_failure(self) -> None:
         with self.assertRaises(NoVerdict):
