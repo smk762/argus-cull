@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { exposedLabelsForRequest, guardRuleLabel, isSensitive, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
-import { blurFromEnv, filterByAge, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages } from "./chunks";
+import { awaitingChecks, blurFromEnv, filterByAge, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { splitGuardExplanation } from "./guardText";
-import { phaseLabel, progressRatio } from "./progress";
+import { mergeProgress, phaseLabel, progressRatio } from "./progress";
 import { withoutScan } from "./purge";
 import { availability, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
@@ -304,6 +304,21 @@ describe("progress", () => {
     expect(progressRatio({ phase: "scoring", done: 1, total: 4 })).toBe(0.25);
     expect(progressRatio({ phase: "scoring", done: 9, total: 4 })).toBe(1);
   });
+
+  it("keeps faces and NudeNet on the bar together and lets any other phase take over", () => {
+    let rows = mergeProgress([], { phase: "scoring", done: 4, total: 4 });
+    rows = mergeProgress(rows, { phase: "nsfw", done: 1, total: 5 });
+    expect(rows.map((row) => row.phase)).toEqual(["nsfw"]);
+    rows = mergeProgress(rows, { phase: "faces", done: 1, total: 3 });
+    expect(rows.map((row) => row.phase)).toEqual(["faces", "nsfw"]);
+    rows = mergeProgress(rows, { phase: "nsfw", done: 5, total: 5 });
+    expect(rows.map((row) => `${row.phase} ${row.done}`)).toEqual(["faces 1", "nsfw 5"]);
+    // A finished phase leaves once the next event lands.
+    rows = mergeProgress(rows, { phase: "faces", done: 2, total: 3 });
+    expect(rows.map((row) => row.phase)).toEqual(["faces"]);
+    rows = mergeProgress(rows, { phase: "scenes", done: 0, total: 5 });
+    expect(rows.map((row) => row.phase)).toEqual(["scenes"]);
+  });
 });
 
 describe("scan chunks", () => {
@@ -351,6 +366,22 @@ describe("scan chunks", () => {
     expect(shouldBlur({ primary_face_attributes: years(30), nsfw: { detections: [], labels: {}, exposed_score: 0.9 } }, ["guard"], shown)).toBe(false);
     expect(shouldBlur({}, ["faces", "nsfw"], shown)).toBe(true);
     expect(shouldBlur({ primary_face_attributes: years(16) }, ["nsfw"], shown)).toBe(true);
+    // Curator 0.6 runs NudeNet beside faces. With the ages still coming, a frame
+    // exposed enough for the under-18 rule waits; one under 0.2 cannot be hit by it.
+    const exposed = { nsfw: { detections: [], labels: {}, exposed_score: 0.2 } };
+    const faint = { nsfw: { detections: [], labels: { FACE_FEMALE: 0.9 }, exposed_score: 0.1 } };
+    expect(shouldBlur(exposed, ["faces"])).toBe(true);
+    expect(shouldBlur(exposed, ["faces"], shown)).toBe(true);
+    expect(shouldBlur(faint, ["faces"])).toBe(false);
+    expect(shouldBlur(faint, ["faces"], shown)).toBe(false);
+    expect(shouldBlur({ ...exposed, primary_face_attributes: years(30) }, ["faces"])).toBe(false);
+    expect(shouldBlur({ ...exposed, primary_face_attributes: years(16) }, ["faces"])).toBe(true);
+    expect(revealHeld(exposed, ["faces"])).toBe(true);
+    expect(revealHeld(exposed, ["guard"])).toBe(false);
+    expect(awaitingChecks({}, ["nsfw"])).toBe(true);
+    expect(awaitingChecks(faint, ["faces"])).toBe(true);
+    expect(awaitingChecks(faint, ["guard"])).toBe(false);
+    expect(awaitingChecks({ ...faint, primary_face_attributes: years(30) }, ["faces"])).toBe(false);
     expect(
       shouldBlur(
         { nsfw: { detections: [], labels: {}, exposed_score: 0 }, guard: { safe: false, rules: ["A"] }, primary_face_attributes: years(16) },
