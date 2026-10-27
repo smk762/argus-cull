@@ -3,7 +3,7 @@
 import { thumbUrl } from "@/lib/api";
 import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
-import { shieldState, shieldTitle } from "@/lib/policies";
+import { pathsByShield, SHIELD_PICK_LABELS, SHIELD_PICKS, shieldState, shieldTitle, type ShieldPick } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
@@ -52,6 +52,7 @@ export function PhotoGrid({
   onToggleSelected,
   onSelectAll,
   onSelectFlagged,
+  onSelectShield,
   onDeleteSelected,
   deleteConfirm,
   deleting,
@@ -96,6 +97,8 @@ export function PhotoGrid({
   onToggleSelected: (relPath: string) => void;
   onSelectAll: () => void;
   onSelectFlagged: () => void;
+  /** Select tiles whose shield matches: determined fail, a disagreement, or determined pass. */
+  onSelectShield?: (pick: ShieldPick) => void;
   onDeleteSelected: () => void;
   deleteConfirm: boolean;
   deleting: boolean;
@@ -115,6 +118,9 @@ export function PhotoGrid({
   const allSelected = images.length > 0 && images.every((image) => selected.has(image.rel_path));
   const deletableSelected = flagged.filter((image) => selected.has(image.rel_path)).length;
   const selectedHere = images.filter((image) => selected.has(image.rel_path)).length;
+  const shieldOverride = (rel: string) => labels?.get(rel)?.override ?? null;
+  const shieldCounts = Object.fromEntries(SHIELD_PICKS.map((pick) => [pick, pathsByShield(images, pick, shieldOverride).length])) as Record<ShieldPick, number>;
+  const anyShield = SHIELD_PICKS.some((pick) => shieldCounts[pick] > 0);
 
   if (unfilteredCount === 0) {
     return <p className="text-text-secondary">Nothing in this view.</p>;
@@ -227,10 +233,39 @@ export function PhotoGrid({
             {allSelected ? "Clear" : `Select all (${images.length})`}
           </button>
         ) : null}
+        {anyShield && onSelectShield ? (
+          <label className="flex items-center gap-2">
+            Policy
+            <select
+              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+              aria-label="Select by policy verdict"
+              title="Unsafe is a red shield: the official policy (or the override) flagged. A passing variant does not clear it. Split is an orange core: the policies disagreed, including official-safe with a flagging variant. Safe is a green shield."
+              value=""
+              onChange={(event) => {
+                const pick = event.target.value as ShieldPick | "";
+                if (pick) onSelectShield(pick);
+              }}
+            >
+              <option value="" disabled>
+                Select…
+              </option>
+              {SHIELD_PICKS.filter((pick) => shieldCounts[pick] > 0).map((pick) => (
+                <option key={pick} value={pick}>
+                  {SHIELD_PICK_LABELS[pick]} ({shieldCounts[pick]})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {flagged.length > 0 ? (
           <>
-            <button type="button" className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary" onClick={onSelectFlagged}>
-              {flaggedSelected ? "Clear flagged" : `Select flagged (${flagged.length})`}
+            <button
+              type="button"
+              className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary"
+              title="Frames MiVOLO (or the set age) puts under 18 with an exposed reading of at least 0.2. Delete only applies to these."
+              onClick={onSelectFlagged}
+            >
+              {flaggedSelected ? "Clear under-18" : `Select under-18 (${flagged.length})`}
             </button>
             <button
               type="button"
