@@ -4,7 +4,9 @@ The model writes a verdict on the first line and the matched rule inside an
 ``<answer>`` tag. In ``fast-slow`` mode the first line is the fast first-token
 signal and the tag is the final judgment after reasoning, so the two can
 disagree. The tag decides; the first line only stands in when the tag is
-missing. A generation with neither is a failed check, not a pass.
+missing. In ``slow`` mode there is no first line at all (see app.py), and the
+explanation starts at ``[Step 1]``. A generation with neither a verdict line
+nor a tag is a failed check, not a pass.
 """
 
 from __future__ import annotations
@@ -44,12 +46,11 @@ def parse_generation(text: str) -> tuple[bool, str, str, bool | None]:
     fast_safe = _first_line_verdict(raw)
     match = _ANSWER.search(raw)
     answer = match.group(1).strip() if match else ""
-    explanation = ""
-    if "\n" in raw:
-        body = raw.split("\n", 1)[1]
-        if match:
-            body = raw[: match.start()].split("\n", 1)[1] if "\n" in raw[: match.start()] else ""
-        explanation = body.strip()[:_EXPLANATION_MAX]
+    # The explanation is everything before the tag, less the verdict line when there is one.
+    body = raw[: match.start()] if match else raw
+    if fast_safe is not None:
+        body = body.split("\n", 1)[1] if "\n" in body else ""
+    explanation = body.strip()[:_EXPLANATION_MAX]
     if answer:
         safe = answer.lower() == "safe"
     elif fast_safe is not None:

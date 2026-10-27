@@ -1,9 +1,11 @@
 """SingGuard over HTTP, for the curator on this host.
 
 ``POST /api/guard/check`` accepts the body argus-curator already sends
-(``input``, ``image_base64``, optional ``policy``, ``thinking`` of ``fast`` or
-``fast-slow``) and returns the verdict the client records. Weights are
-``inclusionAI/Sing-Guard-4b`` unless ``SINGGUARD_MODEL`` says otherwise.
+(``input``, ``image_base64``, optional ``policy``, ``thinking`` of ``fast``,
+``fast-slow`` or this server's ``slow``) and returns the verdict the client
+records. Weights are ``inclusionAI/Sing-Guard-4b`` unless ``SINGGUARD_MODEL``
+says otherwise. ``SINGGUARD_MAX_NEW_TOKENS`` is the reasoning budget and
+``SINGGUARD_FORCE_THINKING`` judges every request in one mode.
 """
 
 from __future__ import annotations
@@ -31,8 +33,39 @@ _MODEL_NAME = os.environ.get("SINGGUARD_MODEL", "inclusionAI/Sing-Guard-4b")
 # A commit sha or tag. trust_remote_code runs code from the Hub, so pinning
 # this fixes what gets executed as well as which weights load.
 _MODEL_REVISION = os.environ.get("SINGGUARD_REVISION", "").strip() or None
-_THINKING = ("fast", "fast-slow")
-_MAX_NEW = {"fast": 256, "fast-slow": 1024}
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    try:
+        value = int(raw) if raw else default
+    except ValueError:
+        value = default
+    return value if value > 0 else default
+
+
+# "fast" is the verdict and rule; "fast-slow" is SingGuard's own mode, a fast
+# first-line verdict and then the reasoning; "slow" is this server's variant of
+# it with the first line left out. In fast-slow the model writes the verdict
+# before it has reasoned, and its reasoning then defers to that line ("the hint
+# says unsafe, so unsafe") even when its own Step 2 found no rule matched. Slow
+# prefills the assistant turn with the first step heading, so the first thing
+# the model decides is the <answer> at the end. The explanation starts at
+# [Step 1] and there is no first-line verdict for parse.py to fall back on.
+_THINKING = ("fast", "fast-slow", "slow")
+_SLOW_PREFILL = "[Step 1] Content Summary\n"
+# The adult policies' write-ups run to about a thousand tokens; a generation
+# cut off before its <answer> is a failed check, so the reasoning modes get room.
+_MAX_NEW = {
+    "fast": _int_env("SINGGUARD_MAX_NEW_TOKENS_FAST", 256),
+    "fast-slow": _int_env("SINGGUARD_MAX_NEW_TOKENS", 2048),
+    "slow": _int_env("SINGGUARD_MAX_NEW_TOKENS", 2048),
+}
+# Judge every request in this mode whatever it asks for. For trying "slow"
+# from a client that can only ask for fast or fast-slow (argus-curator 0.5).
+_FORCE_THINKING = os.environ.get("SINGGUARD_FORCE_THINKING", "").strip() or None
+if _FORCE_THINKING is not None and _FORCE_THINKING not in _THINKING:
+    raise SystemExit(f"SINGGUARD_FORCE_THINKING must be one of {', '.join(_THINKING)}, got {_FORCE_THINKING!r}")
 
 _model = None
 _processor = None
@@ -72,8 +105,8 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "model": _MODEL_NAME}
+def health() -> dict[str, str | None]:
+    return {"status": "ok", "model": _MODEL_NAME, "force_thinking": _FORCE_THINKING}
 
 
 def _image(encoded: str) -> Image.Image:
@@ -90,37 +123,52 @@ def _generate(image: Image.Image, text: str, policy: str | None, thinking: str) 
     content: list[dict] = [{"type": "image", "image": image}]
     if text.strip():
         content.append({"type": "text", "text": text})
-    template_kwargs: dict[str, str] = {"thinking_type": thinking}
+    messages = [{"role": "user", "content": content}]
+    # Slow is fast-slow's prompt with the assistant turn begun for the model.
+    template_kwargs: dict[str, str] = {"thinking_type": "fast-slow" if thinking == "slow" else thinking}
     if policy and policy.strip():
         template_kwargs["policy"] = policy
     assert _processor is not None and _model is not None
     # The curator sends two requests at a time. One lock around the whole pass
     # keeps the processor and the GPU to one request each.
     with _infer, torch.inference_mode():
-        inputs = _processor.apply_chat_template(
-            [{"role": "user", "content": content}],
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            **template_kwargs,
-        ).to(_model.device)
+        if thinking == "slow":
+            prompt = _processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True, **template_kwargs
+            )
+            inputs = _processor(text=[prompt + _SLOW_PREFILL], images=[image], return_tensors="pt")
+        else:
+            inputs = _processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
+                **template_kwargs,
+            )
+        inputs = inputs.to(_model.device)
         generated = _model.generate(**inputs, max_new_tokens=_MAX_NEW[thinking], do_sample=False)
         trimmed = generated[:, inputs["input_ids"].shape[-1] :]
-        return _processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        out = _processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        # Give the prefilled heading back so the recorded explanation is whole.
+        return _SLOW_PREFILL + out if thinking == "slow" else out
 
 
 @app.post("/api/guard/check")
 def guard_check(body: CheckRequest) -> dict:
     if body.thinking not in _THINKING:
-        raise HTTPException(status_code=400, detail="thinking must be fast or fast-slow")
+        raise HTTPException(status_code=400, detail=f"thinking must be one of {', '.join(_THINKING)}")
+    thinking = _FORCE_THINKING or body.thinking
     image = _image(body.image_base64)
     started = time.perf_counter()
     try:
-        text = _generate(image, body.input, body.policy, body.thinking)
-        return to_response(text, _MODEL_NAME, int((time.perf_counter() - started) * 1000))
+        text = _generate(image, body.input, body.policy, thinking)
+        response = to_response(text, _MODEL_NAME, int((time.perf_counter() - started) * 1000))
+        response["thinking"] = thinking
+        return response
     except NoVerdict as exc:
-        log.warning("no verdict: %s", exc)
+        # The tail says whether the budget ran out before the <answer> tag.
+        log.warning("no verdict (%s, %d chars): %s; tail: %r", thinking, len(text), exc, text[-160:])
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except HTTPException:
         raise
