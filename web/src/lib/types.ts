@@ -143,6 +143,8 @@ export interface Health {
   source_root: string | null;
   export_root: string | null;
   allow_move: boolean;
+  /** Curator 0.6: it can stop a running scan and purge the scan cache. */
+  scan_control?: boolean;
 }
 
 export interface Detectors {
@@ -357,6 +359,13 @@ export interface ActiveScan {
   done: number;
   total: number;
   pending_checks: string[];
+  /** Asked to stop; the slot frees once the checks in flight return. */
+  cancelling?: boolean;
+}
+
+export interface PurgeResult {
+  cancelled: string | null;
+  deleted: number;
 }
 
 export interface ScanListItem {
