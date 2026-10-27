@@ -1,4 +1,5 @@
-import { EXPOSED_LABELS, RACES, type FaceRace, type ImageResult, type ScanChunk, type ScanSummary } from "./types";
+import { effectiveUnsafe } from "./policies";
+import { EXPOSED_LABELS, RACES, type FaceRace, type GuardResult, type GuardVariants, type ImageResult, type ScanChunk, type ScanSummary } from "./types";
 
 /** MiVOLO ages under this, with any reported exposed detection, stay blurred and are never kept. */
 export const MINOR_AGE_YEARS = 18;
@@ -77,7 +78,8 @@ type AgedFace = { age_years?: number | null; age_source?: string | null } | null
 
 type AgeChecked = {
   nsfw?: { labels?: Record<string, number>; exposed_score?: number; detections?: unknown } | null;
-  guard?: { safe?: boolean; rules?: string[] } | null;
+  guard?: GuardResult | null;
+  guard_variants?: GuardVariants;
   primary_face_attributes?: AgedFace;
   faces?: { attributes?: AgedFace }[] | null;
 };
@@ -110,13 +112,14 @@ export function minorAwaitingNude(image: AgeChecked, pending: readonly string[])
 /**
  * Blur until NudeNet reports. A score under the line lifts it immediately, even
  * while policy is still running. An unsafe policy verdict puts it back, unless
- * that re-blur is opted out. An under-18 face with an exposed score stays blurred.
+ * that re-blur is opted out; the verdict is the union of every policy the scan
+ * ran, or the one policy an override names. An under-18 face with an exposed score stays blurred.
  * Unblur NSFW reveals NudeNet and policy blur on frames NudeNet has already
  * scored, and leaves every under-18 face blurred. A frame NudeNet has not
  * reached stays blurred either way: the scan delivers scoring batches before
  * MiVOLO runs, so an unchecked frame may still turn out to be an under-18 one.
  */
-export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: BlurPolicy = DEFAULT_BLUR): boolean {
+export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: BlurPolicy = DEFAULT_BLUR, policyOverride: string | null = null): boolean {
   if (isMinorExposed(image)) return true;
   if (minorAwaitingNude(image, pending)) return true;
   if (pending.includes("nsfw") && image.nsfw == null) return true;
@@ -124,7 +127,7 @@ export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: 
   if (blur.unblurNsfw && !hasMinorAge(image) && !ageStillComing) return false;
   const score = image.nsfw?.exposed_score;
   if (score != null && score >= blur.exposedScore) return true;
-  if (blur.policyBlur && image.guard?.safe === false) return true;
+  if (blur.policyBlur && effectiveUnsafe(image, policyOverride) === true) return true;
   return false;
 }
 
@@ -201,7 +204,10 @@ function compareScore(left: number | null | undefined, right: number | null | un
 }
 
 function comparePolicy(left: ImageResult, right: ImageResult, direction: SortDirection): number {
-  const rank = (image: ImageResult) => (image.guard == null ? null : image.guard.safe ? 0 : 1);
+  const rank = (image: ImageResult) => {
+    const unsafe = effectiveUnsafe(image);
+    return unsafe == null ? null : unsafe ? 1 : 0;
+  };
   return compareScore(rank(left), rank(right), direction);
 }
 

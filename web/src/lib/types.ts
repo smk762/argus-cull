@@ -148,10 +148,18 @@ export interface Detectors {
   nudenet?: boolean;
   /** A SingGuard server is configured (ARGUS_CURATOR_SINGGUARD_URL). */
   singguard?: boolean;
+  /** Policy names a scan can ask for, in the curator's order. Empty when SingGuard is off. */
+  singguard_policies?: string[];
 }
 
 export interface CheckConfig {
   enabled: boolean | null;
+}
+
+/** SingGuard on a scan: the official policy, plus variants run beside it for comparison. */
+export interface GuardConfig extends CheckConfig {
+  policy?: string;
+  variants?: string[];
 }
 
 export interface NsfwDetection {
@@ -173,6 +181,13 @@ export interface GuardResult {
   model?: string | null;
   policy?: string;
 }
+
+/**
+ * Verdicts from the variant policies a scan ran, by policy name. A variant
+ * whose check failed is left out and reads as unknown. Only `lib/policies.ts`
+ * reads this; `guard` stays the official verdict.
+ */
+export type GuardVariants = Record<string, GuardResult>;
 
 export interface FolderEntry {
   name: string;
@@ -254,6 +269,7 @@ export interface ImageResult {
   garments: GarmentDetection[] | null;
   nsfw?: NsfwResult | null;
   guard?: GuardResult | null;
+  guard_variants?: GuardVariants;
 }
 
 export interface FaceCluster {
@@ -294,7 +310,7 @@ export interface ScanSummary {
   garments_config: GarmentConfig;
   /** Present on curator 0.4 scans. `enabled` is whether that check actually ran. */
   nsfw_config?: CheckConfig;
-  guard_config?: CheckConfig;
+  guard_config?: GuardConfig;
   total: number;
   passed: number;
   rejected: number;
@@ -403,6 +419,8 @@ export interface SelectRequest {
   nsfw_exposed_labels?: NudeNetLabel[];
   guard_unsafe: boolean;
   guard_rules: string[] | null;
+  /** Policies the unsafe and rule filters read. Omitted means the official verdict only; listed means any of them. */
+  guard_policies?: string[];
 }
 
 export interface SelectRow {
