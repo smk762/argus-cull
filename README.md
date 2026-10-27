@@ -6,7 +6,7 @@ Lightbox is the demo for argus-lens. This is the demo for the curator. The suite
 
 ## Run
 
-Curator 0.6 publishes `POST /scan/{id}/select`, `GET /image`, NudeNet, SingGuard with named policies and variants, image batches on the scan stream, `GET /scans`, `POST /scan/{id}/delete`, `POST /scan/{id}/cancel`, and `POST /scans/purge`. The compose file runs the published `ghcr.io/smk762/argus-curator:0.6.0` image with a NudeNet server and a SingGuard server beside it:
+Curator 0.6 publishes `POST /scan/{id}/select`, `GET /image`, NudeNet, SingGuard with named policies and variants, image batches on the scan stream, `GET /scans`, `POST /scan/{id}/delete`, `POST /scan/{id}/cancel`, and `POST /scans/purge`. The compose file runs the published `ghcr.io/smk762/argus-curator:0.6.1` image with a NudeNet server and a SingGuard server beside it:
 
 ```bash
 cp .env.example .env
