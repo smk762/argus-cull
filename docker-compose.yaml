@@ -85,6 +85,12 @@ services:
       # Read at request time. A change needs the web container recreated, not a rebuild.
       - ARGUS_CULL_BLUR_EXPOSED_SCORE=${ARGUS_CULL_BLUR_EXPOSED_SCORE-0.25}
       - ARGUS_CULL_POLICY_BLUR=${ARGUS_CULL_POLICY_BLUR-1}
+      - CULL_LABELS_DIR=/labels
+    volumes:
+      # Verdict labels (hard, ambiguous, adult, other, safe) by folder and path.
+      # They are an evaluation record, not scan state, so they live here and
+      # outlive the browser and the scan cache.
+      - ${CULL_LABELS_PATH:-./labels}:/labels
     depends_on:
       - argus-curator
     restart: unless-stopped

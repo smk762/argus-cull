@@ -1,5 +1,7 @@
 import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
+import type { ImageLabel, LabelFile } from "./labels";
 import { exportBody } from "./paths";
+import type { PolicyChoice } from "./policies";
 import { scanBody } from "./select";
 import { parseSseFrames } from "./sse";
 
@@ -86,10 +88,28 @@ async function postSse<T>(
 export function scanFolder(
   folder: string,
   detectors: Detectors,
+  policies: PolicyChoice | null,
   onProgress: (progress: Progress) => void,
   onChunk: (chunk: ScanChunk) => void,
 ): Promise<ScanSummary> {
-  return postSse("/scan/folder/stream", scanBody(folder, detectors), onProgress, onChunk);
+  return postSse("/scan/folder/stream", scanBody(folder, detectors, policies), onProgress, onChunk);
+}
+
+/** Labels live on this page's server, not the curator. The folder is the one the scan reports. */
+export async function getLabels(folder: string): Promise<LabelFile> {
+  const response = await fetch(`/api/labels?${new URLSearchParams({ folder })}`);
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as LabelFile;
+}
+
+export async function putLabel(folder: string, relPath: string, label: Omit<ImageLabel, "updated_at"> | null): Promise<LabelFile> {
+  const response = await fetch("/api/labels", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder, rel_path: relPath, label }),
+  });
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as LabelFile;
 }
 
 export async function deleteImage(scanId: string, relPath: string): Promise<void> {
