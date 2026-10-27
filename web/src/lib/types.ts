@@ -143,7 +143,7 @@ export interface Health {
   source_root: string | null;
   export_root: string | null;
   allow_move: boolean;
-  /** Curator 0.7: it can stop a running scan and purge the scan cache. */
+  /** Curator 0.6: it can stop a running scan and purge the scan cache. */
   scan_control?: boolean;
 }
 
