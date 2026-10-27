@@ -81,7 +81,7 @@ type AgeChecked = {
   guard?: GuardResult | null;
   guard_variants?: GuardVariants;
   primary_face_attributes?: AgedFace;
-  faces?: { attributes?: AgedFace }[] | null;
+  faces?: { primary?: boolean; attributes?: AgedFace }[] | null;
   set_age?: { years: number } | null;
 };
 
@@ -93,11 +93,23 @@ type AgeChecked = {
  * delete mark, never lift one. The tile and the detail view show it as the
  * set's.
  */
-function mivoloAges(image: AgeChecked): number[] {
-  const ages = [mivoloYears(image.primary_face_attributes), ...(image.faces ?? []).map((face) => mivoloYears(face.attributes))];
-  const measured = ages.filter((age): age is number => age != null);
+export function mivoloAges(image: AgeChecked): number[] {
+  const measured = measuredAges(image);
   if (measured.length === 0 && image.set_age) return [image.set_age.years];
   return measured;
+}
+
+/**
+ * One MiVOLO reading per face. `faces` lists the primary face too when it
+ * marks one as primary, so the primary attributes are added only when the
+ * list does not; a record with no face list has the primary reading alone.
+ */
+export function measuredAges(image: Pick<AgeChecked, "primary_face_attributes" | "faces">): number[] {
+  const faces = image.faces ?? [];
+  const ages = faces.map((face) => mivoloYears(face.attributes)).filter((age): age is number => age != null);
+  const primary = mivoloYears(image.primary_face_attributes);
+  if (primary != null && !faces.some((face) => face.primary)) ages.unshift(primary);
+  return ages;
 }
 
 /** The set age stands in for a measurement: the frame has no face of its own and the scan gave it the set's age. */
@@ -189,6 +201,32 @@ export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: 
 export function youngestAge(image: AgeChecked): number | null {
   const years = mivoloAges(image);
   return years.length > 0 ? Math.min(...years) : null;
+}
+
+/**
+ * The age a tile or summary shows, and the line behind it. Always the
+ * youngest face: the under-18 rule reads the youngest, so the number on
+ * screen is the number the rule read, and a younger second face is never
+ * hidden behind an older primary one. A frame with no face shows the set's
+ * age when it has one; a FairFace bracket stands in when MiVOLO did not run.
+ * Null when there is no age at all; `ageMissing` says why.
+ */
+export function shownAge(image: AgeChecked & { primary_face_attributes?: { age?: string | null } | null }): { text: string; title: string } | null {
+  if (usesSetAge(image) && image.set_age) {
+    return { text: `≈${Math.round(image.set_age.years)}y set`, title: "No face in this frame; the set's median MiVOLO age stands in" };
+  }
+  const measured = measuredAges(image);
+  if (measured.length > 0) {
+    const youngest = Math.min(...measured);
+    const primary = mivoloYears(image.primary_face_attributes);
+    const text = `${Math.round(youngest)}y`;
+    if (measured.length > 1 && primary != null && primary > youngest) {
+      return { text, title: `Youngest of ${measured.length} faces, MiVOLO. The primary face reads ${Math.round(primary)}y.` };
+    }
+    return { text, title: measured.length > 1 ? `Youngest of ${measured.length} faces, MiVOLO` : "Apparent age, MiVOLO years" };
+  }
+  const bracket = image.primary_face_attributes?.age;
+  return bracket ? { text: bracket, title: "FairFace age bracket of the primary face" } : null;
 }
 
 /** Hide kept or left-out images. An unknown reason, or a missing selection, leaves the list unchanged. */

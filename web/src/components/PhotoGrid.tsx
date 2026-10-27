@@ -1,7 +1,7 @@
 "use client";
 
 import { thumbUrl } from "@/lib/api";
-import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, usesSetAge, youngestAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
 import { shieldState, shieldTitle } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
@@ -13,16 +13,12 @@ function baseName(relPath: string): string {
   return relPath.split("/").pop() || relPath;
 }
 
-/** Primary face age as MiVOLO years or a FairFace bracket, with a younger face beside it when one exists. With no age, why: see `ageMissing`. */
-function apparentAge(image: ImageResult, pending: readonly string[], faces: boolean): string {
-  if (usesSetAge(image) && image.set_age) return `≈${Math.round(image.set_age.years)}y set`;
-  const attrs = image.primary_face_attributes;
-  const primary = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? null;
-  const youngest = youngestAge(image);
-  if (youngest != null && (attrs?.age_years == null || youngest < attrs.age_years)) {
-    return primary ? `${primary} · ${Math.round(youngest)}y` : `${Math.round(youngest)}y`;
-  }
-  return primary ?? ageMissing(image, pending, faces);
+/** The youngest face's age (see `shownAge`), or, with no age, why: see `ageMissing`. */
+function apparentAge(image: ImageResult, pending: readonly string[], faces: boolean): { text: string; title: string } {
+  const shown = shownAge(image);
+  if (shown) return { ...shown, title: setAgeTitle(image) ?? shown.title };
+  const text = ageMissing(image, pending, faces);
+  return { text, title: text === "no face" ? "No face detected, so no age estimate. MiVOLO reads a face." : text === "…" ? "Face detection is still running" : "No age recorded" };
 }
 
 export function PhotoGrid({
@@ -308,8 +304,8 @@ export function PhotoGrid({
                     </span>
                     <span title="NudeNet exposed score">{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
                     <span className="text-text-muted">age</span>
-                    <span className={`truncate ${age === "no face" ? "text-text-muted" : ""}`} title={setAgeTitle(image) ?? (age === "no face" ? "No face detected, so no age estimate. MiVOLO reads a face." : "Apparent age, MiVOLO years or FairFace bracket")}>
-                      {age}
+                    <span className={`truncate ${age.text === "no face" ? "text-text-muted" : ""}`} title={age.title}>
+                      {age.text}
                     </span>
                     {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
                     <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reason}>

@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getFolders, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
+import { DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
 import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
-import { defaultPolicyChoice, policiesRun, policyStats, type PolicyChoice } from "@/lib/policies";
+import { policiesRun, policyStats } from "@/lib/policies";
+import { runStats, runStatsFilename } from "@/lib/runStats";
+import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
 import { availability, selectBody } from "@/lib/select";
 import { evaluateSubset } from "@/lib/subset";
 import {
@@ -17,7 +19,6 @@ import {
   type ExportMode,
   type FaceRace,
   type ExportResult,
-  type FolderListing,
   type Health,
   type Progress,
   type ScanList,
@@ -32,15 +33,14 @@ import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch 
 import { ExportDialog } from "./ExportDialog";
 import { SubsetDialog } from "./SubsetDialog";
 import { Filters } from "./Filters";
-import { FolderPicker } from "./FolderPicker";
 import { People } from "./People";
 import { PhotoDialog } from "./PhotoDialog";
 import { PhotoGrid } from "./PhotoGrid";
 import { PolicyDialog } from "./PolicyDialog";
-import { PolicyPicker } from "./PolicyPicker";
 import { ProgressBar } from "./ProgressBar";
-import { ScanChecks } from "./ScanChecks";
-import { ScanList as ScanListView } from "./ScanList";
+import { SetAgeOutcome } from "./ScanChecks";
+import { ScanDialog } from "./ScanDialog";
+import { ScansTable } from "./ScansTable";
 
 const LIGHTBOX_URL = "https://github.com/smk762/argus-lightbox";
 
@@ -69,13 +69,9 @@ export function CullApp() {
   const [captions, setCaptions] = useState<Map<string, Caption | null>>(() => new Map());
   const [captionError, setCaptionError] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
-  // The policy choice lives in the URL, so a shared link scans the same way.
-  const policyChoice = useMemo<PolicyChoice>(() => {
-    const base = defaultPolicyChoice(detectors?.singguard_policies);
-    return { policy: view.guardPolicy ?? base.policy, variants: view.guardVariants };
-  }, [detectors?.singguard_policies, view.guardPolicy, view.guardVariants]);
-  const [listing, setListing] = useState<FolderListing | null>(null);
-  const [listingError, setListingError] = useState<string | null>(null);
+  // The scan form, when open: what it starts filled with, and the scan it was filled from.
+  const [scanForm, setScanForm] = useState<{ template: ScanTemplate; from: string | null } | null>(null);
+  const [rerunning, setRerunning] = useState<string | null>(null);
   const [summary, setSummary] = useState<ScanSummary | null>(null);
   const [selection, setSelection] = useState<SelectResult | null>(null);
   const [progress, setProgress] = useState<Progress[] | null>(null);
@@ -215,24 +211,6 @@ export function CullApp() {
     setExportResult(null);
     setExportError(null);
   }, [hydrated, view.folder]);
-
-  useEffect(() => {
-    if (!hydrated || !sourceReady) return;
-    let cancel = false;
-    getFolders(view.folder)
-      .then((body) => {
-        if (cancel) return;
-        setListing(body);
-        setListingError(null);
-      })
-      .catch((err: unknown) => {
-        if (cancel) return;
-        setListingError(err instanceof Error ? err.message : "Could not list folders.");
-      });
-    return () => {
-      cancel = true;
-    };
-  }, [hydrated, sourceReady, view.folder]);
 
   // What the /scans poll below needs to know about the page, without restarting on every change.
   const latest = useRef({ scan: view.scan, scanning });
@@ -435,23 +413,26 @@ export function CullApp() {
   const liveScan = scanning || Boolean(scanList?.active && (!summary || summary.scan_id === scanList.active.scan_id));
   const canScan = sourceReady && !scanBusy;
 
-  const onScan = useCallback(async () => {
+  const onScan = useCallback(async (template: ScanTemplate) => {
     if (!sourceReady || scanning || scanList?.active) return;
+    setScanForm(null);
     setScanning(true);
     setError(null);
     setProgress([{ phase: "starting", done: 0, total: 0 }]);
     setPendingChecks([]);
     setSelection(null);
     setSummary(null);
+    // The form's choices go into the URL first, so the link shares the scan as it was asked for.
+    replaceView(viewWithTemplate(viewFromSearch(currentSearch()), template));
     let announced = false;
     try {
       const live = await getDetectors();
       setDetectors(live);
       const next = await scanFolder(
-        view.folder,
+        template.folder,
         live,
-        policyChoice,
-        { withGarments: view.withGarments, setAge: view.setAge },
+        template.policy,
+        { withGarments: template.withGarments, setAge: template.setAge },
         (event) => {
           setProgress((current) => mergeProgress(current ?? [], event));
           // Curator 0.5.1 says on every progress event which checks are still running.
@@ -495,7 +476,34 @@ export function CullApp() {
         if (body) setScanList(body);
       });
     }
-  }, [sourceReady, scanning, scanList?.active, view, policyChoice]);
+  }, [sourceReady, scanning, scanList?.active]);
+
+  const root = health?.source_root ?? null;
+
+  /** Open the form empty, filled from the URL: a shared link shows what it would scan. */
+  function openScanForm() {
+    setScanForm({ template: templateFromView(view, detectors), from: null });
+  }
+
+  /** Open the form filled the way a finished scan ran, so the next run differs only in what the viewer changes. */
+  async function openRerun(scanId: string) {
+    setRerunning(scanId);
+    setError(null);
+    try {
+      const body = summary?.scan_id === scanId ? summary : await getScan(scanId);
+      setScanForm({ template: templateFromSummary(body, root, detectors), from: folderLabel(body.folder, root).label });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not read that scan's parameters.");
+    } finally {
+      setRerunning(null);
+    }
+  }
+
+  function downloadRunStats() {
+    if (!summary) return;
+    const stats = runStats(summary, selection, labels, tags, cohorts, policyNames);
+    downloadText(runStatsFilename(summary), JSON.stringify(stats, null, 2), "application/json");
+  }
 
   const scanControl = Boolean(health?.scan_control);
   // The bar for our own scan, or for the one running in another tab when that is the scan on screen.
@@ -670,8 +678,8 @@ export function CullApp() {
   }
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[22rem_1fr]">
-      <aside className="space-y-6 overflow-y-auto border-base-700 p-4 lg:max-h-dvh lg:border-r">
+    <div className="grid min-h-dvh lg:grid-cols-[19rem_1fr]">
+      <aside className="space-y-5 overflow-y-auto border-base-700 p-4 lg:max-h-dvh lg:border-r">
         <div>
           <p className="font-display text-heading">Argus Cull</p>
           <p className="text-caption text-text-secondary">Which files would make the training set.</p>
@@ -685,40 +693,27 @@ export function CullApp() {
           ) : null}
           {health && !health.source_root ? <span className="text-warning"> No source root is configured.</span> : null}
         </p>
-        <FolderPicker
-          listing={listing}
-          error={listingError}
-          scanning={scanBusy}
-          canScan={canScan}
-          scanLabel={scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "Scan"}
-          onOpen={(folder) => replaceView(withoutScan(view, folder))}
-          onScan={() => void onScan()}
-        />
-        <PolicyPicker
-          available={detectors?.singguard_policies ?? []}
-          choice={policyChoice}
-          disabled={scanBusy}
-          onChange={(next) => replaceView({ ...view, guardPolicy: next.policy, guardVariants: next.variants })}
-        />
-        <ScanChecks
-          detectors={detectors}
-          health={health}
-          summary={summary}
-          withGarments={view.withGarments}
-          setAge={view.setAge}
-          disabled={scanBusy}
-          onWithGarments={(on) => replaceView({ ...view, withGarments: on })}
-          onSetAge={(on) => replaceView({ ...view, setAge: on })}
-        />
-        <ScanListView
+        <button
+          type="button"
+          className="w-full rounded-md bg-interactive px-3 py-2 text-small font-medium disabled:opacity-40"
+          disabled={!sourceReady}
+          title={scanBusy ? "A scan is running. The form opens; Scan waits for it to finish." : "Choose a folder, policy and checks"}
+          onClick={openScanForm}
+        >
+          {scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "New scan"}
+        </button>
+        <ScansTable
           scans={scanList}
-          root={health?.source_root ?? null}
+          root={root}
           current={view.scan}
           canPurge={scanControl}
           purging={purging}
+          rerunning={rerunning}
           onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
+          onRerun={(scanId) => void openRerun(scanId)}
           onPurge={() => void onPurge()}
         />
+        <SetAgeOutcome summary={summary} />
         <Filters
           filter={view.filter}
           detectors={detectors}
@@ -767,6 +762,15 @@ export function CullApp() {
             </button>
             <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!selection} onClick={downloadPaths}>
               Download paths
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40"
+              disabled={!summary || liveScan}
+              title="A JSON file of this run: pass and fail counts, the ages read, NudeNet bands, each policy's flag rate, and the setting, wardrobe and prop tags that moved it"
+              onClick={downloadRunStats}
+            >
+              Run stats
             </button>
             <button
               type="button"
@@ -949,6 +953,18 @@ export function CullApp() {
             await deleteImages(scanId, [rel]);
             dropDeleted(scanId, [rel]);
           }}
+        />
+      ) : null}
+      {scanForm ? (
+        <ScanDialog
+          initial={scanForm.template}
+          from={scanForm.from}
+          detectors={detectors}
+          health={health}
+          canScan={canScan}
+          busyLabel={!sourceReady ? "The curator is not ready." : scanBusy ? "A scan is running. Scan is available once it finishes, or stop it from the progress bar." : null}
+          onClose={() => setScanForm(null)}
+          onScan={(template) => void onScan(template)}
         />
       ) : null}
       {subsetOpen && subset ? <SubsetDialog report={subset} onClose={() => setSubsetOpen(false)} /> : null}

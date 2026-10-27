@@ -19,7 +19,7 @@ export function PolicyPicker({
   const extra = choice.variants.filter((name) => variants.includes(name)).length;
   return (
     <section className="space-y-2">
-      <h2 className="font-display text-small font-semibold">SingGuard policy</h2>
+      <h3 className="font-display text-small font-semibold">SingGuard policy</h3>
       <label className="flex items-center justify-between gap-2 text-small">
         Official
         <select

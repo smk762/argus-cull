@@ -14,12 +14,11 @@ import type { Detectors, Health, ScanSummary } from "@/lib/types";
  * set those are often the most explicit frames. With curator 0.7's
  * `faces.set_age`, when one identity holds the scan's faces, those frames
  * take the set's median age. The curator withholds it in a mixed folder and
- * says why; the last scan's outcome is shown under the box.
+ * says why; `SetAgeOutcome` shows what the scan on screen did.
  */
 export function ScanChecks({
   detectors,
   health,
-  summary,
   withGarments,
   setAge,
   disabled,
@@ -28,7 +27,6 @@ export function ScanChecks({
 }: {
   detectors: Detectors | null;
   health: Health | null;
-  summary: ScanSummary | null;
   withGarments: boolean;
   setAge: boolean;
   disabled: boolean;
@@ -40,14 +38,14 @@ export function ScanChecks({
   if (!garments && !set) return null;
   return (
     <section className="space-y-2">
-      <h2 className="font-display text-small font-semibold">Scan checks</h2>
+      <h3 className="font-display text-small font-semibold">Checks</h3>
       {garments ? (
         <>
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={withGarments} disabled={disabled} onChange={(event) => onWithGarments(event.target.checked)} />
             Garments (Fashionpedia)
           </label>
-          <p className="text-caption text-text-muted">{withGarments ? "The next scan reads garments, so the wardrobe filters work for it. This is the slowest local check." : "Off by default: the slowest local check, and nothing else waits on it. Turn it on when the wardrobe filters are needed."}</p>
+          <p className="text-caption text-text-muted">{withGarments ? "This scan reads garments, so the wardrobe filters work for it. This is the slowest local check." : "Off by default: the slowest local check, and nothing else waits on it. Turn it on when the wardrobe filters are needed."}</p>
         </>
       ) : null}
       {set ? (
@@ -61,7 +59,6 @@ export function ScanChecks({
               ? "Frames with no face take the set's median MiVOLO age, shown as ≈ set, when one identity holds at least 90% of the scan's faces. A mixed folder gets nothing."
               : "For a folder that is one set of one person: frames with no face take the set's age, so the under-18 check has something to go on."}
           </p>
-          <SetAgeOutcome summary={summary} />
         </>
       ) : null}
     </section>
@@ -69,17 +66,17 @@ export function ScanChecks({
 }
 
 /** What the scan on screen did with the set age, when it was asked for. */
-function SetAgeOutcome({ summary }: { summary: ScanSummary | null }) {
+export function SetAgeOutcome({ summary }: { summary: ScanSummary | null }) {
   if (!summary) return null;
   if (summary.set_age) {
     const { years, faces, cluster_id, share } = summary.set_age;
     const frames = summary.results.filter((image) => image.set_age).length;
     return (
       <p className="text-caption text-text-secondary">
-        This scan: ≈{Math.round(years)}y from {faces} faces in {cluster_id} ({Math.round(share * 100)}%), on {frames} {frames === 1 ? "frame" : "frames"} with no face.
+        Set age ≈{Math.round(years)}y from {faces} faces in {cluster_id} ({Math.round(share * 100)}%), on {frames} {frames === 1 ? "frame" : "frames"} with no face.
       </p>
     );
   }
-  if (summary.set_age_skipped) return <p className="text-caption text-warning">This scan gave no set age: {summary.set_age_skipped}.</p>;
+  if (summary.set_age_skipped) return <p className="text-caption text-warning">No set age: {summary.set_age_skipped}.</p>;
   return null;
 }
