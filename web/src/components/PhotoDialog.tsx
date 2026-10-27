@@ -5,8 +5,11 @@ import { useEffect, useState } from "react";
 import { attributeLine } from "@/lib/attributes";
 import { imageUrl, thumbUrl } from "@/lib/api";
 import { DEFAULT_BLUR, isMinorExposed, shouldBlur, type BlurPolicy } from "@/lib/chunks";
+import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { splitGuardExplanation } from "@/lib/guardText";
+import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { nudeNetLabel } from "@/lib/moderation";
+import { dissentingPolicies, effectiveUnsafe, policyVerdicts } from "@/lib/policies";
 import { NUDENET_LABELS, slugLabel, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 const SCORE_PARTS: [string, string][] = [
@@ -46,12 +49,7 @@ function NudeNetReport({ nsfw }: { nsfw: NsfwResult }) {
 function GuardReport({ guard }: { guard: GuardResult }) {
   const steps = splitGuardExplanation(guard.explanation ?? "", guard.rules);
   return (
-    <section className="border-t border-base-700 pt-3">
-      <h3 className="text-caption text-text-muted">SingGuard</h3>
-      <p className={guard.safe ? "text-success" : "text-warning"}>
-        {guard.safe ? "Safe" : "Unsafe"}
-        {guard.policy ? ` · ${guard.policy}` : ""}
-      </p>
+    <>
       {guard.rules.length > 0 ? <p className="mt-1">{guard.rules.join(", ")}</p> : null}
       <div className="mt-3 space-y-3">
         {steps.map((step) => (
@@ -77,6 +75,198 @@ function GuardReport({ guard }: { guard: GuardResult }) {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+/** One collapsible section per policy that judged the image. The official one and any that disagree with it start open. */
+function PolicyReports({ image, override }: { image: ImageResult; override: string | null }) {
+  const verdicts = policyVerdicts(image);
+  if (verdicts.length === 0) return null;
+  const union = effectiveUnsafe(image);
+  const followed = effectiveUnsafe(image, override);
+  const dissent = new Set(dissentingPolicies(image));
+  return (
+    <section className="border-t border-base-700 pt-3">
+      <h3 className="text-caption text-text-muted">SingGuard</h3>
+      {verdicts.length > 1 ? (
+        <p className={followed ? "text-warning" : "text-success"}>
+          {followed ? "Unsafe" : "Safe"}
+          {override ? ` · following ${override}` : union ? ` · ${verdicts.filter((verdict) => !verdict.result.safe).map((verdict) => verdict.policy).join(", ")} flagged` : " · every policy passed"}
+        </p>
+      ) : null}
+      <div className="mt-2 space-y-2">
+        {verdicts.map((verdict) => (
+          <details key={verdict.policy} open={verdict.official || dissent.has(verdict.policy) || override === verdict.policy} className="rounded-md border border-base-700 px-3 py-2">
+            <summary className="cursor-pointer text-small">
+              <span className={verdict.result.safe ? "text-success" : "text-warning"}>{verdict.result.safe ? "Safe" : "Unsafe"}</span>
+              {` · ${verdict.policy}`}
+              {verdict.official ? <span className="text-text-muted"> · official</span> : null}
+              {dissent.has(verdict.policy) ? <span className="text-warning"> · differs</span> : null}
+              {override === verdict.policy ? <span className="text-accent-tertiary"> · shield follows this</span> : null}
+            </summary>
+            <GuardReport guard={verdict.result} />
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** The saved fields of a label, so a change to one keeps the others, tags included. */
+function labelFields(label: ImageLabel | null): Omit<ImageLabel, "updated_at"> {
+  return {
+    expect: label?.expect ?? null,
+    proxy: label?.proxy ?? false,
+    override: label?.override ?? null,
+    note: label?.note ?? "",
+    ...(label?.tags ? { tags: label.tags } : {}),
+  };
+}
+
+/** What a correct verdict is for this image, kept on this page's server. Scored against every policy in the Policies panel. */
+function LabelControl({
+  label,
+  policies,
+  saving,
+  error,
+  onChange,
+}: {
+  label: ImageLabel | null;
+  policies: string[];
+  saving: boolean;
+  error: string | null;
+  onChange: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+}) {
+  const current = labelFields(label);
+  const update = (patch: Partial<typeof current>) => onChange({ ...current, ...patch });
+  const canProxy = current.expect === "hard" || current.expect === "ambiguous";
+  return (
+    <section className="border-t border-base-700 pt-3">
+      <h3 className="text-caption text-text-muted">Label{saving ? " · saving" : ""}</h3>
+      <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Correct verdict">
+        {EXPECTS.map((expect) => (
+          <button
+            key={expect}
+            type="button"
+            title={EXPECT_LABELS[expect].detail}
+            aria-pressed={current.expect === expect}
+            className={`rounded-md border px-2 py-1 text-small ${current.expect === expect ? "border-accent-primary text-text-primary" : "border-base-600 text-text-secondary"}`}
+            onClick={() => update({ expect: current.expect === expect ? null : expect, proxy: expect === "hard" || expect === "ambiguous" ? current.proxy : false })}
+          >
+            {EXPECT_LABELS[expect].label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-caption text-text-muted">{current.expect ? EXPECT_LABELS[current.expect].detail : "Hard, ambiguous, and other count as positives; adult and safe as negatives."}</p>
+      {canProxy ? (
+        <label className="mt-2 flex items-center gap-2 text-small">
+          <input type="checkbox" checked={Boolean(current.proxy)} onChange={(event) => update({ proxy: event.target.checked })} />
+          Proxy: verified 18+, standing in for a hard case
+        </label>
+      ) : null}
+      {policies.length > 1 ? (
+        <label className="mt-2 flex items-center gap-2 text-small">
+          Shield follows
+          <select
+            className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+            value={current.override ?? ""}
+            onChange={(event) => update({ override: event.target.value || null })}
+          >
+            <option value="">any policy that flags</option>
+            {policies.map((policy) => (
+              <option key={policy} value={policy}>
+                {policy} only
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      <input
+        className="mt-2 w-full rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+        type="text"
+        placeholder="Note"
+        aria-label="Label note"
+        defaultValue={current.note ?? ""}
+        onBlur={(event) => {
+          if (event.target.value !== (current.note ?? "")) update({ note: event.target.value });
+        }}
+      />
+      {error ? <p className="mt-1 text-caption text-warning">{error}</p> : null}
+    </section>
+  );
+}
+
+/**
+ * Setting and wardrobe tags. The automatic set comes from cohorts.json over the
+ * scene and caption; a click makes the list the image's own, and Automatic
+ * hands it back.
+ */
+function TagControl({
+  cohorts,
+  auto,
+  label,
+  caption,
+  saving,
+  onChange,
+}: {
+  cohorts: CohortConfig;
+  auto: readonly string[];
+  label: ImageLabel | null;
+  caption: Caption | null;
+  saving: boolean;
+  onChange: (tags: string[] | undefined) => void;
+}) {
+  if (cohorts.tags.length === 0) return null;
+  const byHand = label?.tags != null;
+  const current = effectiveTags(auto, label);
+  const groups = new Map<string, CohortRule[]>();
+  for (const rule of cohorts.tags) groups.set(rule.group, [...(groups.get(rule.group) ?? []), rule]);
+  const toggle = (tag: string) => {
+    const next = current.includes(tag) ? current.filter((name) => name !== tag) : [...current, tag];
+    onChange(next);
+  };
+  const excerpt = caption ? [caption.text, caption.keywords.join(", ")].filter(Boolean).join(" · ") : "";
+  return (
+    <section className="border-t border-base-700 pt-3">
+      <h3 className="text-caption text-text-muted">
+        Setting and wardrobe{byHand ? " · set by hand" : auto.length > 0 ? " · automatic" : ""}
+        {saving ? " · saving" : ""}
+      </h3>
+      {[...groups.entries()].map(([group, rules]) => (
+        <div key={group} className="mt-2 flex flex-wrap items-center gap-2" role="group" aria-label={`${group} tags`}>
+          <span className="w-16 text-caption text-text-muted">{group}</span>
+          {rules.map((rule) => {
+            const on = current.includes(rule.tag);
+            const automatic = auto.includes(rule.tag);
+            return (
+              <button
+                key={rule.tag}
+                type="button"
+                aria-pressed={on}
+                title={[rule.scenes.length > 0 ? `Places365: ${rule.scenes.join(", ")}` : "", rule.captions.length > 0 ? `Caption: ${rule.captions.join(", ")}` : ""].filter(Boolean).join("\n")}
+                className={`rounded-md border px-2 py-1 text-small ${on ? "border-accent-primary text-text-primary" : "border-base-600 text-text-secondary"}`}
+                onClick={() => toggle(rule.tag)}
+              >
+                {rule.tag}
+                {on && automatic && !byHand ? <span className="text-text-muted"> · auto</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+      {byHand ? (
+        <button type="button" className="mt-2 rounded-md border border-base-600 px-2 py-1 text-small text-text-secondary" onClick={() => onChange(undefined)}>
+          Automatic ({auto.length === 0 ? "none" : auto.join(", ")})
+        </button>
+      ) : null}
+      {excerpt ? (
+        <p className="mt-2 text-caption leading-relaxed text-text-muted">
+          Caption: <span className="text-text-secondary">{excerpt.length > 400 ? `${excerpt.slice(0, 400)}…` : excerpt}</span>
+        </p>
+      ) : cohorts.tags.some((rule) => rule.captions.length > 0) ? (
+        <p className="mt-2 text-caption text-text-muted">No caption sidecar next to this image, so wardrobe and prop tags are by hand only.</p>
+      ) : null}
     </section>
   );
 }
@@ -102,6 +292,14 @@ export function PhotoDialog({
   onPrevious,
   onNext,
   position,
+  label = null,
+  policies = [],
+  labelSaving = false,
+  labelError = null,
+  onLabel,
+  cohorts = EMPTY_COHORTS,
+  autoTags = [],
+  caption = null,
 }: {
   image: ImageResult;
   scanId: string;
@@ -113,6 +311,16 @@ export function PhotoDialog({
   onPrevious: (() => void) | null;
   onNext: (() => void) | null;
   position: string | null;
+  label?: ImageLabel | null;
+  /** Policies the scan ran, official first. */
+  policies?: string[];
+  labelSaving?: boolean;
+  labelError?: string | null;
+  onLabel?: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+  /** Cohort rules, the tags they derive for this image, and the caption sidecar they read. */
+  cohorts?: CohortConfig;
+  autoTags?: readonly string[];
+  caption?: Caption | null;
 }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -142,7 +350,8 @@ export function PhotoDialog({
   const blocked = isMinorExposed(image);
   // No reveal until NudeNet has reported: MiVOLO may still read a face as under 18.
   const holdReveal = blocked || (pending.includes("nsfw") && image.nsfw == null);
-  const obscured = shouldBlur(image, pending, blur);
+  const override = label?.override ?? null;
+  const obscured = shouldBlur(image, pending, blur, override);
   const blurred = blocked || (obscured && !shown);
 
   async function remove() {
@@ -294,12 +503,27 @@ export function PhotoDialog({
             </section>
           ) : null}
           {image.nsfw ? <NudeNetReport nsfw={image.nsfw} /> : null}
-          {image.nsfw && image.guard && image.nsfw.exposed_score < 0.2 && !image.guard.safe ? (
+          {image.nsfw && image.nsfw.exposed_score < 0.2 && effectiveUnsafe(image, override) ? (
             <p className="text-caption leading-relaxed text-text-secondary">
               NudeNet scored no exposed class. SingGuard still marked the image unsafe under its policy.
             </p>
           ) : null}
-          {image.guard ? <GuardReport guard={image.guard} /> : null}
+          <PolicyReports image={image} override={override} />
+          {onLabel ? (
+            <TagControl
+              cohorts={cohorts}
+              auto={autoTags}
+              label={label}
+              caption={caption}
+              saving={labelSaving}
+              onChange={(tags) => {
+                const fields = labelFields(label);
+                delete fields.tags;
+                onLabel(tags ? { ...fields, tags } : fields);
+              }}
+            />
+          ) : null}
+          {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}
         </div>
       </div>
     </div>

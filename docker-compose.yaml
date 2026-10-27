@@ -85,6 +85,19 @@ services:
       # Read at request time. A change needs the web container recreated, not a rebuild.
       - ARGUS_CULL_BLUR_EXPOSED_SCORE=${ARGUS_CULL_BLUR_EXPOSED_SCORE-0.25}
       - ARGUS_CULL_POLICY_BLUR=${ARGUS_CULL_POLICY_BLUR-1}
+      - CULL_LABELS_DIR=/labels
+      - CULL_COHORTS_FILE=/config/cohorts.json
+      - CULL_SOURCE_DIR=/data/images
+    volumes:
+      # Verdict labels (hard, ambiguous, adult, other, safe) by folder and path.
+      # They are an evaluation record, not scan state, so they live here and
+      # outlive the browser and the scan cache.
+      - ${CULL_LABELS_PATH:-./labels}:/labels
+      # Setting and wardrobe cohort rules. Edit the file and reload the page.
+      - ${CULL_COHORTS_PATH:-./cohorts.json}:/config/cohorts.json:ro
+      # The curator's source folder, read-only and at the same path, so the
+      # page can read argus-lens caption sidecars (<image>.txt, <image>.xmp).
+      - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images:ro
     depends_on:
       - argus-curator
     restart: unless-stopped

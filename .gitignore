@@ -6,3 +6,4 @@ out
 __pycache__
 .venv
 out/
+/labels/

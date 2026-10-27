@@ -3,6 +3,8 @@
 import { attributeLine } from "@/lib/attributes";
 import { thumbUrl } from "@/lib/api";
 import { DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { EXPECT_LABELS, type ImageLabel } from "@/lib/labels";
+import { dissentingPolicies, effectiveUnsafe } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
 
 export function PhotoGrid({
@@ -36,6 +38,11 @@ export function PhotoGrid({
   deleteConfirm,
   deleting,
   deleteError,
+  labels = null,
+  tag = null,
+  tagOptions = [],
+  onTag,
+  tags = null,
 }: {
   images: ImageResult[];
   reasons: Map<string, string> | null;
@@ -69,6 +76,14 @@ export function PhotoGrid({
   deleteConfirm: boolean;
   deleting: boolean;
   deleteError: string | null;
+  /** Labels by rel_path. An override on a label picks the policy the blur follows for that image. */
+  labels?: ReadonlyMap<string, ImageLabel> | null;
+  /** Cohort tag the gallery is narrowed to, and the tags present in this view. */
+  tag?: string | null;
+  tagOptions?: readonly string[];
+  onTag?: (tag: string | null) => void;
+  /** Effective cohort tags by rel_path. */
+  tags?: ReadonlyMap<string, readonly string[]> | null;
 }) {
   const pages = Math.max(1, Math.ceil(images.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -151,6 +166,25 @@ export function PhotoGrid({
             ))}
           </select>
         </label>
+        {onTag && (tagOptions.length > 0 || tag) ? (
+          <label className="flex items-center gap-2">
+            Cohort
+            <select
+              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+              aria-label="Cohort tag"
+              value={tag ?? ""}
+              onChange={(event) => onTag(event.target.value === "" ? null : event.target.value)}
+            >
+              <option value="">All</option>
+              {tag && !tagOptions.includes(tag) ? <option value={tag}>{tag}</option> : null}
+              {tagOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {images.length > 0 ? (
           <button type="button" className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary" onClick={onSelectAll}>
             {allSelected ? "Clear" : `Select all (${images.length})`}
@@ -174,14 +208,18 @@ export function PhotoGrid({
       </div>
       {selectedHere > deletableSelected ? <p className="text-caption text-text-muted">Only under-18 exposed images can be deleted.</p> : null}
       {deleteError ? <p className="text-caption text-warning">{deleteError}</p> : null}
-      {images.length === 0 ? <p className="text-text-secondary">{emptyView(keepView, race, ageFrom, ageTo)}</p> : null}
+      {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, race, ageFrom, ageTo)}</p> : null}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {slice.map((image) => {
           const reason = reasons?.get(image.rel_path);
           const attrs = attributeLine(image.primary_face_attributes);
           const youngest = youngestAge(image);
           const kept = reason === "";
-          const blurred = shouldBlur(image, pending, blur);
+          const label = labels?.get(image.rel_path) ?? null;
+          const imageTags = tags?.get(image.rel_path) ?? [];
+          const blurred = shouldBlur(image, pending, blur, label?.override ?? null);
+          const unsafe = effectiveUnsafe(image, label?.override ?? null);
+          const dissent = dissentingPolicies(image);
           const checking = pending.includes("nsfw") && image.nsfw == null;
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
@@ -215,11 +253,19 @@ export function PhotoGrid({
                   {image.nsfw ? (
                     <span className="block text-caption text-text-muted">NudeNet {image.nsfw.exposed_score.toFixed(2)}</span>
                   ) : null}
-                  {image.guard ? (
-                    <span className={`block text-caption ${image.guard.safe ? "text-text-muted" : "text-warning"}`}>
-                      {image.guard.safe ? "policy safe" : "policy issue"}
+                  {unsafe != null ? (
+                    <span className={`block text-caption ${unsafe ? "text-warning" : "text-text-muted"}`}>
+                      {unsafe ? "policy issue" : "policy safe"}
+                      {dissent.length > 0 ? ` · ${dissent.join(", ")}` : ""}
                     </span>
                   ) : null}
+                  {label?.expect ? (
+                    <span className="block text-caption text-accent-tertiary">
+                      label {EXPECT_LABELS[label.expect].label.toLowerCase()}
+                      {label.proxy ? " · proxy" : ""}
+                    </span>
+                  ) : null}
+                  {imageTags.length > 0 ? <span className="block truncate text-caption text-text-muted">{imageTags.join(", ")}</span> : null}
                   {checking ? <span className="block text-caption text-text-muted">Checking</span> : null}
                   {blurred && !checking ? <span className="block text-caption text-text-muted">Blurred</span> : null}
                   {reasons ? (

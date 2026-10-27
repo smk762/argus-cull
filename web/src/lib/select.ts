@@ -1,17 +1,6 @@
-import { policyOffered } from "./detectors";
 import { exposedLabelsForRequest } from "./moderation";
-import type {
-  CheckConfig,
-  Detectors,
-  FaceConfig,
-  FilterState,
-  GarmentConfig,
-  GuardConfig,
-  GuardPolicy,
-  ScanSummary,
-  SceneConfig,
-  SelectRequest,
-} from "./types";
+import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
+import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -62,10 +51,22 @@ function listed<T>(active: boolean, values: readonly T[]): T[] | null {
   return active && values.length > 0 ? [...values] : null;
 }
 
+/**
+ * Policies the unsafe and rule filters read. Every policy the scan ran, so the
+ * curator drops an image when any of them flags it, the way the shield does.
+ * Omitted when only the official policy ran, which is what the curator assumes.
+ */
+export function guardPoliciesForRequest(summary: ScanSummary | null, active: boolean): string[] | undefined {
+  if (!active) return undefined;
+  const run = policiesRun(summary);
+  return run.length > 1 ? run : undefined;
+}
+
 /** Export-filter fields only. No dest, mode, max_keep, or diversify flags. */
-export function selectBody(filter: FilterState, gates: FilterAvailability): SelectRequest {
+export function selectBody(filter: FilterState, gates: FilterAvailability, summary: ScanSummary | null = null): SelectRequest {
   const gender = gates.fairface || gates.mivolo;
   const threshold = gates.nsfw && filter.nsfwThreshold != null && filter.nsfwExposedLabels.length > 0 ? filter.nsfwThreshold : null;
+  const guardActive = gates.guard && (filter.guardUnsafe || filter.guardRules.length > 0);
   return {
     min_score: filter.minScore,
     include_rejected: filter.includeRejected,
@@ -90,6 +91,7 @@ export function selectBody(filter: FilterState, gates: FilterAvailability): Sele
     nsfw_exposed_labels: exposedLabelsForRequest(filter, threshold != null),
     guard_unsafe: gates.guard ? filter.guardUnsafe : false,
     guard_rules: filter.guardUnsafe ? null : listed(gates.guard, filter.guardRules),
+    guard_policies: guardPoliciesForRequest(summary, guardActive),
   };
 }
 
@@ -102,8 +104,21 @@ export interface ScanBody {
   guard: GuardConfig;
 }
 
+/**
+ * SingGuard config for a scan. Names are sent only when the curator lists
+ * them: an older curator ignores the field and would judge the scan under its
+ * default policy without saying so, so it sees `{ enabled }` only.
+ */
+export function guardBody(detectors: Detectors, choice: PolicyChoice | null): GuardConfig {
+  const enabled = Boolean(detectors.singguard);
+  const available = detectors.singguard_policies ?? [];
+  if (!enabled || !choice || available.length === 0) return { enabled };
+  const { policy, variants } = normalisePolicyChoice(choice, available);
+  return variants.length > 0 ? { enabled, policy, variants } : { enabled, policy };
+}
+
 /** Turn a detector on only when /detectors says its weights are loaded. */
-export function scanBody(folder: string, detectors: Detectors, policy: GuardPolicy = "default"): ScanBody {
+export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null): ScanBody {
   const fairface = detectors.fairface;
   const mivolo = detectors.mivolo;
   return {
@@ -117,12 +132,7 @@ export function scanBody(folder: string, detectors: Detectors, policy: GuardPoli
     garments: { enabled: detectors.garments, min_conf: 0.3 },
     // NudeNet and SingGuard are remote servers. Ask only when /detectors says the URL is set.
     nsfw: { enabled: Boolean(detectors.nudenet) },
-    // Name a policy only when the server lists it: an older curator ignores the
-    // field and would judge the scan under its default policy without saying so.
-    guard:
-      policy !== "default" && policyOffered(detectors, policy)
-        ? { enabled: true, policy }
-        : { enabled: Boolean(detectors.singguard) },
+    guard: guardBody(detectors, policies),
   };
 }
 

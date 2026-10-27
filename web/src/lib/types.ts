@@ -123,12 +123,12 @@ export const GUARD_RULES = [
 ] as const;
 
 /**
- * SingGuard policies a scan can name. `adult` is curator's built-in policy:
- * rule A covers only apparent minors, non-consent and sexual violence, and
- * consensual adult nudity is safe. The letters match the default policy.
+ * A SingGuard policy name the curator lists in `singguard_policies`: `default`,
+ * `adult` (rule A covers only apparent minors, non-consent and sexual violence,
+ * and consensual adult nudity is safe), and the variants under evaluation.
+ * Letters B to G mean the same thing under every policy.
  */
-export const GUARD_POLICIES = ["default", "adult"] as const;
-export type GuardPolicy = (typeof GUARD_POLICIES)[number];
+export type GuardPolicy = string;
 
 /** Rule A under the adult policy; B to G keep the default names. */
 export const ADULT_RULE_A = "A. Illegal or Extreme Sexual Content";
@@ -159,7 +159,7 @@ export interface Detectors {
   nudenet?: boolean;
   /** A SingGuard server is configured (ARGUS_CURATOR_SINGGUARD_URL). */
   singguard?: boolean;
-  /** Policies a scan can pass as `guard.policy` (curator 0.5+; empty without SingGuard). */
+  /** Policies a scan can pass as `guard.policy`, in the curator's order (curator 0.5+; empty without SingGuard). */
   singguard_policies?: string[];
 }
 
@@ -167,8 +167,10 @@ export interface CheckConfig {
   enabled: boolean | null;
 }
 
+/** SingGuard on a scan: the official policy, plus variants run beside it for comparison. */
 export interface GuardConfig extends CheckConfig {
   policy?: GuardPolicy;
+  variants?: GuardPolicy[];
 }
 
 export interface NsfwDetection {
@@ -190,6 +192,13 @@ export interface GuardResult {
   model?: string | null;
   policy?: string;
 }
+
+/**
+ * Verdicts from the variant policies a scan ran, by policy name. A variant
+ * whose check failed is left out and reads as unknown. Only `lib/policies.ts`
+ * reads this; `guard` stays the official verdict.
+ */
+export type GuardVariants = Record<string, GuardResult>;
 
 export interface FolderEntry {
   name: string;
@@ -271,6 +280,7 @@ export interface ImageResult {
   garments: GarmentDetection[] | null;
   nsfw?: NsfwResult | null;
   guard?: GuardResult | null;
+  guard_variants?: GuardVariants;
 }
 
 export interface FaceCluster {
@@ -392,8 +402,10 @@ export interface ViewState {
   photo: string | null;
   view: "grid" | "people";
   cluster: string | null;
-  /** The SingGuard policy the next scan asks for. */
-  guardPolicy: GuardPolicy;
+  /** The official SingGuard policy the next scan asks for. Null takes the curator's `adult` when offered, else its first. */
+  guardPolicy: GuardPolicy | null;
+  /** Policies run beside the official one, for comparison. */
+  guardVariants: GuardPolicy[];
   filter: FilterState;
 }
 
@@ -422,6 +434,8 @@ export interface SelectRequest {
   nsfw_exposed_labels?: NudeNetLabel[];
   guard_unsafe: boolean;
   guard_rules: string[] | null;
+  /** Policies the unsafe and rule filters read. Omitted means the official verdict only; listed means any of them. */
+  guard_policies?: string[];
 }
 
 export interface SelectRow {
@@ -481,7 +495,8 @@ export const DEFAULT_VIEW: ViewState = {
   photo: null,
   view: "grid",
   cluster: null,
-  guardPolicy: "default",
+  guardPolicy: null,
+  guardVariants: [],
   filter: DEFAULT_FILTER,
 };
 

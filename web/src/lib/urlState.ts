@@ -8,7 +8,6 @@ import {
   NUDENET_LABELS,
   GARMENTS,
   GENDERS,
-  GUARD_POLICIES,
   POSES,
   RACES,
   type ExposedLabel,
@@ -60,6 +59,12 @@ function readOptional(params: URLSearchParams, key: string): number | null {
 function readFlag(params: URLSearchParams, key: string): boolean {
   const raw = params.get(key);
   return raw === "1" || raw === "true";
+}
+
+/** A SingGuard policy name as the curator spells them. The scan body drops any the curator does not list. */
+function policyName(value: string | null): string | null {
+  const name = (value ?? "").trim();
+  return /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(name) ? name : null;
 }
 
 export function parseView(params: URLSearchParams): ViewState {
@@ -132,7 +137,8 @@ export function parseView(params: URLSearchParams): ViewState {
     photo: params.get("photo") || null,
     view,
     cluster: params.get("cluster") || null,
-    guardPolicy: take(params.get("policy") ?? "", GUARD_POLICIES) ?? "default",
+    guardPolicy: policyName(params.get("policy")),
+    guardVariants: (params.get("variants") ?? "").split(",").map((name) => policyName(name)).filter((name): name is string => name != null),
     filter,
   };
 }
@@ -150,7 +156,8 @@ export function serializeView(view: ViewState): string {
   if (view.photo) params.set("photo", view.photo);
   if (view.view === "people") params.set("view", "people");
   if (view.cluster) params.set("cluster", view.cluster);
-  if (view.guardPolicy !== "default") params.set("policy", view.guardPolicy);
+  if (view.guardPolicy) params.set("policy", view.guardPolicy);
+  if (view.guardVariants.length > 0) params.set("variants", view.guardVariants.join(","));
   if (filter.minScore !== DEFAULT_FILTER.minScore) params.set("min_score", String(filter.minScore));
   if (filter.includeRejected) params.set("include_rejected", "1");
   if (filter.keepSimilar) params.set("keep_similar", "1");
