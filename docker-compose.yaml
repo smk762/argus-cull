@@ -1,11 +1,9 @@
 services:
   argus-curator:
-    # Published 0.4.0 image with the local scan-batch overlay. The sibling
-    # argus-curator checkout has to be next to this repo.
-    image: argus-cull-curator:local
-    build:
-      context: ../argus-curator
-      dockerfile: Dockerfile.overlay
+    # Published 0.5.0: scan batches over the stream, GET /scans, delete of
+    # under-18 exposed frames, and the adult SingGuard policies. No sibling
+    # checkout is needed; docker-compose.local-curator.yaml builds one instead.
+    image: ghcr.io/smk762/argus-curator:0.5.0
     ports:
       - "${CURATOR_PORT:-8101}:8101"
     environment:
