@@ -2,10 +2,11 @@
 
 ``POST /api/guard/check`` accepts the body argus-curator already sends
 (``input``, ``image_base64``, optional ``policy``, ``thinking`` of ``fast``,
-``fast-slow`` or this server's ``slow``) and returns the verdict the client
-records. Weights are ``inclusionAI/Sing-Guard-4b`` unless ``SINGGUARD_MODEL``
-says otherwise. ``SINGGUARD_MAX_NEW_TOKENS`` is the reasoning budget and
-``SINGGUARD_FORCE_THINKING`` judges every request in one mode.
+``fast-slow`` or this server's ``slow`` and ``cascade``) and returns the
+verdict the client records. Weights are ``inclusionAI/Sing-Guard-4b`` unless
+``SINGGUARD_MODEL`` says otherwise. ``SINGGUARD_MAX_NEW_TOKENS`` is the
+reasoning budget and ``SINGGUARD_FORCE_THINKING`` judges every request in one
+mode.
 """
 
 from __future__ import annotations
@@ -52,7 +53,11 @@ def _int_env(name: str, default: int) -> int:
 # prefills the assistant turn with the first step heading, so the first thing
 # the model decides is the <answer> at the end. The explanation starts at
 # [Step 1] and there is no first-line verdict for parse.py to fall back on.
-_THINKING = ("fast", "fast-slow", "slow")
+# "cascade" is fast, then slow for the frames fast flagged, and slow's verdict
+# stands. Fast over-flags rather than under-flags (its verdict is the same
+# first token fast-slow writes before reasoning), so it is a cheap screen;
+# a frame it passes is not looked at again.
+_THINKING = ("fast", "fast-slow", "slow", "cascade")
 _SLOW_PREFILL = "[Step 1] Content Summary\n"
 # The adult policies' write-ups run to about a thousand tokens; a generation
 # cut off before its <answer> is a failed check, so the reasoning modes get room.
@@ -61,8 +66,8 @@ _MAX_NEW = {
     "fast-slow": _int_env("SINGGUARD_MAX_NEW_TOKENS", 2048),
     "slow": _int_env("SINGGUARD_MAX_NEW_TOKENS", 2048),
 }
-# Judge every request in this mode whatever it asks for. For trying "slow"
-# from a client that can only ask for fast or fast-slow (argus-curator 0.5).
+# Judge every request in this mode whatever it asks for. For trying "slow" or
+# "cascade" from a client that can only ask for fast or fast-slow (argus-curator 0.5).
 _FORCE_THINKING = os.environ.get("SINGGUARD_FORCE_THINKING", "").strip() or None
 if _FORCE_THINKING is not None and _FORCE_THINKING not in _THINKING:
     raise SystemExit(f"SINGGUARD_FORCE_THINKING must be one of {', '.join(_THINKING)}, got {_FORCE_THINKING!r}")
@@ -154,21 +159,50 @@ def _generate(image: Image.Image, text: str, policy: str | None, thinking: str) 
         return _SLOW_PREFILL + out if thinking == "slow" else out
 
 
+def _judge(image: Image.Image, text: str, policy: str | None, thinking: str) -> dict:
+    """One generation in *thinking*, parsed. Raises :class:`NoVerdict`."""
+    started = time.perf_counter()
+    generated = _generate(image, text, policy, thinking)
+    try:
+        response = to_response(generated, _MODEL_NAME, int((time.perf_counter() - started) * 1000))
+    except NoVerdict:
+        # The tail says whether the budget ran out before the <answer> tag.
+        log.warning("no verdict (%s, %d chars); tail: %r", thinking, len(generated), generated[-160:])
+        raise
+    response["thinking"] = thinking
+    return response
+
+
+def _cascade(image: Image.Image, text: str, policy: str | None) -> dict:
+    """Fast, then slow for a frame fast flagged; slow's verdict stands.
+
+    The response is slow's, with ``fast_verdict`` ``unsafe`` and ``fast_rule``
+    the rule fast named, so a reader sees what the screen said. A frame fast
+    passed is returned as fast's own response.
+    """
+    fast = _judge(image, text, policy, "fast")
+    if fast["safe"]:
+        return fast
+    slow = _judge(image, text, policy, "slow")
+    slow["fast_verdict"] = "unsafe"
+    slow["fast_rule"] = fast["rule"]
+    slow["elapsed_ms"] += fast["elapsed_ms"]
+    if slow["safe"]:
+        log.info("cascade: fast flagged %r, slow passed", fast["rule"])
+    return slow
+
+
 @app.post("/api/guard/check")
 def guard_check(body: CheckRequest) -> dict:
     if body.thinking not in _THINKING:
         raise HTTPException(status_code=400, detail=f"thinking must be one of {', '.join(_THINKING)}")
     thinking = _FORCE_THINKING or body.thinking
     image = _image(body.image_base64)
-    started = time.perf_counter()
     try:
-        text = _generate(image, body.input, body.policy, thinking)
-        response = to_response(text, _MODEL_NAME, int((time.perf_counter() - started) * 1000))
-        response["thinking"] = thinking
-        return response
+        if thinking == "cascade":
+            return _cascade(image, body.input, body.policy)
+        return _judge(image, body.input, body.policy, thinking)
     except NoVerdict as exc:
-        # The tail says whether the budget ran out before the <answer> tag.
-        log.warning("no verdict (%s, %d chars): %s; tail: %r", thinking, len(text), exc, text[-160:])
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except HTTPException:
         raise
