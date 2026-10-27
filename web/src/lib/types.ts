@@ -122,6 +122,17 @@ export const GUARD_RULES = [
   { id: "G", label: "G. Animal Abuse" },
 ] as const;
 
+/**
+ * SingGuard policies a scan can name. `adult` is curator's built-in policy:
+ * rule A covers only apparent minors, non-consent and sexual violence, and
+ * consensual adult nudity is safe. The letters match the default policy.
+ */
+export const GUARD_POLICIES = ["default", "adult"] as const;
+export type GuardPolicy = (typeof GUARD_POLICIES)[number];
+
+/** Rule A under the adult policy; B to G keep the default names. */
+export const ADULT_RULE_A = "A. Illegal or Extreme Sexual Content";
+
 export type ExportMode = "copy" | "symlink" | "move";
 
 export interface Health {
@@ -148,10 +159,16 @@ export interface Detectors {
   nudenet?: boolean;
   /** A SingGuard server is configured (ARGUS_CURATOR_SINGGUARD_URL). */
   singguard?: boolean;
+  /** Policies a scan can pass as `guard.policy` (curator 0.5+; empty without SingGuard). */
+  singguard_policies?: string[];
 }
 
 export interface CheckConfig {
   enabled: boolean | null;
+}
+
+export interface GuardConfig extends CheckConfig {
+  policy?: GuardPolicy;
 }
 
 export interface NsfwDetection {
@@ -294,7 +311,7 @@ export interface ScanSummary {
   garments_config: GarmentConfig;
   /** Present on curator 0.4 scans. `enabled` is whether that check actually ran. */
   nsfw_config?: CheckConfig;
-  guard_config?: CheckConfig;
+  guard_config?: GuardConfig;
   total: number;
   passed: number;
   rejected: number;
@@ -375,6 +392,8 @@ export interface ViewState {
   photo: string | null;
   view: "grid" | "people";
   cluster: string | null;
+  /** The SingGuard policy the next scan asks for. */
+  guardPolicy: GuardPolicy;
   filter: FilterState;
 }
 
@@ -462,6 +481,7 @@ export const DEFAULT_VIEW: ViewState = {
   photo: null,
   view: "grid",
   cluster: null,
+  guardPolicy: "default",
   filter: DEFAULT_FILTER,
 };
 

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
-import { nudeNetLabel, recordedGuardRules } from "@/lib/moderation";
+import { guardRuleLabel, nudeNetLabel, recordedGuardRules } from "@/lib/moderation";
 import { recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
   AGE_BRACKETS,
@@ -352,7 +352,7 @@ export function Filters({
           <CheckList
             options={[...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))]}
             selected={filter.guardRules}
-            label={(id) => GUARD_RULES.find((rule) => rule.id === id)?.label ?? id}
+            label={(id) => guardRuleLabel(id, summary)}
             onToggle={(rule) => onChange({ guardUnsafe: false, guardRules: toggleValue(filter.guardRules, rule) })}
           />
         </Group>

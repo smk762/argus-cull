@@ -1,4 +1,4 @@
-import { EXPOSED_LABELS, type FilterState, type ImageResult, type NudeNetLabel, type ScanSummary } from "./types";
+import { ADULT_RULE_A, EXPOSED_LABELS, GUARD_RULES, type FilterState, type ImageResult, type NudeNetLabel, type ScanSummary } from "./types";
 
 export function sameMembers(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false;
@@ -34,4 +34,10 @@ export function recordedGuardRules(summary: ScanSummary | null, known: readonly 
     }
   }
   return [...extra].sort();
+}
+
+/** The name a rule letter has under the policy *summary* was judged by. */
+export function guardRuleLabel(id: string, summary: ScanSummary | null): string {
+  if (id === "A" && summary?.guard_config?.policy === "adult") return ADULT_RULE_A;
+  return GUARD_RULES.find((rule) => rule.id === id)?.label ?? id;
 }

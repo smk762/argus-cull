@@ -50,7 +50,7 @@ Download paths writes two files in the browser and does not touch the export roo
 
 People lists the clusters the scan already computed. The shared URL holds the scan id and the filter.
 
-NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold or a rule list is sent on the select and export bodies the server already accepts. Flagged frames stay blurred until you show the image. This page does not invent a score.
+NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold or a rule list is sent on the select and export bodies the server already accepts. Flagged frames stay blurred until you show the image. This page does not invent a score. When `/detectors` lists the `adult` SingGuard policy (curator 0.5 and later), an **Adult content allowed** box under Scan judges the next scan under it. Consensual adult nudity then passes SingGuard, while apparent minors, non-consent and sexual violence are still rule A. The choice is kept in the URL as `policy=adult`. It does not change NudeNet scores, the blur, or the rule that a MiVOLO age under 18 with exposure is never kept.
 
 ## Fixture
 

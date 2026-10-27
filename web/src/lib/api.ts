@@ -1,4 +1,4 @@
-import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
+import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type GuardPolicy, type Health, type Progress, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
 import { exportBody } from "./paths";
 import { scanBody } from "./select";
 import { parseSseFrames } from "./sse";
@@ -86,10 +86,11 @@ async function postSse<T>(
 export function scanFolder(
   folder: string,
   detectors: Detectors,
+  policy: GuardPolicy,
   onProgress: (progress: Progress) => void,
   onChunk: (chunk: ScanChunk) => void,
 ): Promise<ScanSummary> {
-  return postSse("/scan/folder/stream", scanBody(folder, detectors), onProgress, onChunk);
+  return postSse("/scan/folder/stream", scanBody(folder, detectors, policy), onProgress, onChunk);
 }
 
 export async function deleteImage(scanId: string, relPath: string): Promise<void> {
