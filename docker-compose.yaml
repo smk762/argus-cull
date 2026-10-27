@@ -55,9 +55,10 @@ services:
       # fast. A generation cut off before its <answer> tag is a failed check.
       - SINGGUARD_MAX_NEW_TOKENS=${SINGGUARD_MAX_NEW_TOKENS:-2048}
       - SINGGUARD_MAX_NEW_TOKENS_FAST=${SINGGUARD_MAX_NEW_TOKENS_FAST:-256}
-      # fast, fast-slow or slow: judge every request in this mode whatever the
-      # client asked for. Curator 0.5 can only ask for fast or fast-slow, so
-      # this is how it gets slow. Empty honours the request.
+      # fast, fast-slow, slow or cascade: judge every request in this mode
+      # whatever the client asked for. Curator 0.5 can only ask for fast or
+      # fast-slow, so this is how it gets slow or cascade (fast for every
+      # frame, slow for the ones fast flags). Empty honours the request.
       - SINGGUARD_FORCE_THINKING=${SINGGUARD_FORCE_THINKING:-}
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
