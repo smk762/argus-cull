@@ -334,7 +334,7 @@ export interface Progress {
   phase: string;
   done: number;
   total: number;
-  /** Checks still running (curator 0.6 and later): faces, nsfw, guard. */
+  /** Checks still running (curator 0.5.1 and later): faces, nsfw, guard. */
   pending_checks?: string[];
 }
 

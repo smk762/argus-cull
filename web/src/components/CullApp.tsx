@@ -431,7 +431,7 @@ export function CullApp() {
         policyChoice,
         (event) => {
           setProgress((current) => mergeProgress(current ?? [], event));
-          // Curator 0.6 says on every progress event which checks are still running.
+          // Curator 0.5.1 says on every progress event which checks are still running.
           if (event.pending_checks) setPendingChecks(event.pending_checks);
         },
         (chunk) => {
