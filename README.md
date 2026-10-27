@@ -46,7 +46,7 @@ Scan streams progress from `POST /scan/folder/stream`. Image batches arrive whil
 
 Changing a filter calls `POST /scan/{id}/select`. Counts and `keep_reason` update without another scan. Rejected images stay on the grid.
 
-A *Scan checks* section in the sidebar leaves Fashionpedia out of the next scan (`garments=off` in the URL, so a shared link scans the same way). It is the slowest local check and nothing else waits on it; the wardrobe filters stay empty for a scan that skipped it.
+Fashionpedia is off unless asked for: it is the slowest local check and nothing else waits on it. A *Scan checks* section in the sidebar turns it on for the next scan (`garments=on` in the URL, so a shared link scans the same way); the wardrobe filters stay empty for a scan that ran without it.
 
 A frame with no detected face has no MiVOLO age, and the tile's age cell says *no face* rather than *–* once face detection has reported. The *Faces* control beside the age range narrows the grid to those frames, or to the frames with a face, since the frames with the least to go on for the under-18 check are often the most explicit ones.
 

@@ -439,8 +439,8 @@ export interface ViewState {
   guardPolicy: GuardPolicy | null;
   /** Policies run beside the official one, for comparison. */
   guardVariants: GuardPolicy[];
-  /** Leave Fashionpedia out of the next scan. It is the slowest local check and nothing else waits on it. */
-  skipGarments: boolean;
+  /** Run Fashionpedia on the next scan. Off unless asked for: it is the slowest local check and nothing else waits on it. */
+  withGarments: boolean;
   /** The folder is one set of one person: frames with no face may take the set's age. */
   setAge: boolean;
   filter: FilterState;
@@ -534,7 +534,7 @@ export const DEFAULT_VIEW: ViewState = {
   cluster: null,
   guardPolicy: null,
   guardVariants: [],
-  skipGarments: false,
+  withGarments: false,
   setAge: false,
   filter: DEFAULT_FILTER,
 };
