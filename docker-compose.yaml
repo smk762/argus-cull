@@ -3,7 +3,7 @@ services:
     # Published 0.5.1: scan batches over the stream, GET /scans, delete of
     # under-18 exposed frames, and the adult SingGuard policies. No sibling
     # checkout is needed; docker-compose.local-curator.yaml builds one instead.
-    image: ghcr.io/smk762/argus-curator:0.5.1
+    image: ghcr.io/smk762/argus-curator:0.6.0
     ports:
       - "${CURATOR_PORT:-8101}:8101"
     environment:
@@ -18,7 +18,14 @@ services:
       # Both checks are on unless .env sets the URL empty.
       - ARGUS_CURATOR_NUDENET_URL=${ARGUS_CURATOR_NUDENET_URL-http://nudenet:8080}
       - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://singguard:9150}
-      - ARGUS_CURATOR_SINGGUARD_THINKING=${ARGUS_CURATOR_SINGGUARD_THINKING-fast}
+      # cascade: fast on every frame (about a second), slow only on the frames
+      # fast flags, slow's verdict stands. fast is a verdict and rule only;
+      # fast-slow and slow also write why.
+      - ARGUS_CURATOR_SINGGUARD_THINKING=${ARGUS_CURATOR_SINGGUARD_THINKING-cascade}
+      # What the scan already knows, sent to SingGuard as recorded context:
+      # age (MiVOLO estimate per face), folder, caption (a lens sidecar).
+      # Empty sends the image alone.
+      - ARGUS_CURATOR_SINGGUARD_CONTEXT=${ARGUS_CURATOR_SINGGUARD_CONTEXT-age,folder}
       # Empty keeps the curator's localhost:3000 allow-list. A set value replaces
       # that list, so name every origin the page is opened as.
       - CURATOR_CORS_ORIGINS=${CURATOR_CORS_ORIGINS-}
