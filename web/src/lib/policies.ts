@@ -78,6 +78,41 @@ export function dissentingPolicies(image: Guarded): string[] {
   return verdicts.filter((verdict) => !verdict.official && !verdict.result.safe).map((verdict) => verdict.policy);
 }
 
+/**
+ * What the shield on a tile shows. `none` is grey: no verdict yet. `unsafe` is
+ * red: the verdict the shield follows flagged the image. `dissent` is orange:
+ * the followed verdict passed but another policy flagged. `safe` is green.
+ */
+export type ShieldState = "none" | "safe" | "dissent" | "unsafe";
+
+export function shieldState(image: Guarded, override?: string | null): ShieldState {
+  const verdicts = policyVerdicts(image);
+  if (verdicts.length === 0) return "none";
+  const followed = (override && verdicts.find((verdict) => verdict.policy === override)) || verdicts.find((verdict) => verdict.official) || verdicts[0];
+  if (!followed.result.safe) return "unsafe";
+  return verdicts.some((verdict) => !verdict.result.safe) ? "dissent" : "safe";
+}
+
+/** One line for a tooltip: the followed verdict, then who disagreed. */
+export function shieldTitle(image: Guarded, override?: string | null): string {
+  const state = shieldState(image, override);
+  if (state === "none") return "No policy verdict yet";
+  const verdicts = policyVerdicts(image);
+  const flagged = verdicts.filter((verdict) => !verdict.result.safe).map((verdict) => verdict.policy);
+  if (state === "safe") return verdicts.length > 1 ? `Safe under ${verdicts.map((verdict) => verdict.policy).join(", ")}` : `Safe under ${verdicts[0].policy}`;
+  if (state === "unsafe") return `Unsafe: ${flagged.join(", ")} flagged`;
+  return `Followed verdict safe; ${flagged.join(", ")} flagged`;
+}
+
+/**
+ * A verdict recorded as unsafe whose only rule is "Safe". SingGuard's fast
+ * first-line signal said unsafe and its reasoned answer said Safe; a server
+ * before this fix kept the first line. The scan needs re-running to settle it.
+ */
+export function verdictConflict(guard: GuardResult): boolean {
+  return !guard.safe && guard.rules.length > 0 && guard.rules.every((rule) => rule.trim().toLowerCase() === "safe");
+}
+
 export interface PolicyStats {
   policy: string;
   official: boolean;

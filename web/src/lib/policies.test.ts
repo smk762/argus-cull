@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, normalisePolicyChoice, policiesRun, policyStats, policyVerdicts } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, normalisePolicyChoice, policiesRun, policyStats, policyVerdicts, shieldState, shieldTitle, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -59,6 +59,31 @@ describe("policy verdicts", () => {
     expect(effectiveUnsafe(unchecked)).toBeNull();
     expect(dissentingPolicies(split)).toEqual(["adult-granular"]);
     expect(dissentingPolicies(agreed)).toEqual([]);
+  });
+
+  it("colours the shield by the followed verdict, then by dissent", () => {
+    expect(shieldState(unchecked)).toBe("none");
+    expect(shieldState(clean)).toBe("safe");
+    expect(shieldState(agreed)).toBe("unsafe");
+    expect(shieldState(single)).toBe("unsafe");
+    // Official passes, a variant flags: orange, and the union still blurs.
+    expect(shieldState(split)).toBe("dissent");
+    // Following the flagging variant makes it red; following the official one keeps the dissent visible.
+    expect(shieldState(split, "adult-granular")).toBe("unsafe");
+    expect(shieldState(split, "adult")).toBe("dissent");
+    expect(shieldState(split, "not-run")).toBe("dissent");
+    expect(shieldTitle(unchecked)).toBe("No policy verdict yet");
+    expect(shieldTitle(split)).toBe("Followed verdict safe; adult-granular flagged");
+    expect(shieldTitle(agreed)).toContain("Unsafe");
+    expect(shieldTitle(clean)).toBe("Safe under adult, adult-granular");
+  });
+
+  it("spots a recorded unsafe whose only rule is Safe", () => {
+    expect(verdictConflict({ safe: false, rules: ["Safe"] })).toBe(true);
+    expect(verdictConflict({ safe: false, rules: ["safe "] })).toBe(true);
+    expect(verdictConflict({ safe: false, rules: ["A. Sexual Content Risk"] })).toBe(false);
+    expect(verdictConflict({ safe: false, rules: [] })).toBe(false);
+    expect(verdictConflict({ safe: true, rules: ["Safe"] })).toBe(false);
   });
 
   it("blurs and sorts on the union, and lets an override lift it", () => {
