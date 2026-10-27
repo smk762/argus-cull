@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { attributeLine } from "@/lib/attributes";
 import { imageUrl, thumbUrl } from "@/lib/api";
-import { DEFAULT_BLUR, isMinorExposed, shouldBlur, type BlurPolicy } from "@/lib/chunks";
+import { DEFAULT_BLUR, isMinorExposed, revealHeld, shouldBlur, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
@@ -286,6 +286,7 @@ export function PhotoDialog({
   scanId,
   reason,
   pending,
+  scanning = false,
   blur = DEFAULT_BLUR,
   onClose,
   onDelete,
@@ -305,6 +306,8 @@ export function PhotoDialog({
   scanId: string;
   reason: string | undefined;
   pending: readonly string[];
+  /** The scan is still running, so there is no keep set to report yet. */
+  scanning?: boolean;
   blur?: BlurPolicy;
   onClose: () => void;
   onDelete: () => Promise<void>;
@@ -348,8 +351,8 @@ export function PhotoDialog({
     .map((face) => slugLabel(face.attributes?.race ?? ""));
   const worn = (image.garments ?? []).map((garment) => `${slugLabel(garment.label)} ${garment.conf.toFixed(2)}`);
   const blocked = isMinorExposed(image);
-  // No reveal until NudeNet has reported: MiVOLO may still read a face as under 18.
-  const holdReveal = blocked || (pending.includes("nsfw") && image.nsfw == null);
+  // No reveal while the under-18 rule could still apply: NudeNet has not reported, or the ages are still coming.
+  const holdReveal = revealHeld(image, pending);
   const override = label?.override ?? null;
   const obscured = shouldBlur(image, pending, blur, override);
   const blurred = blocked || (obscured && !shown);
@@ -427,7 +430,7 @@ export function PhotoDialog({
             </button>
           ) : null}
           {holdReveal && !blocked ? (
-            <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Checking</p>
+            <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Scanning…</p>
           ) : null}
           {blocked ? (
             <p className="absolute inset-x-4 bottom-4 rounded-md bg-base-800 px-3 py-2 text-caption text-text-secondary">
@@ -449,7 +452,7 @@ export function PhotoDialog({
             </div>
             <div>
               <dt className="text-caption text-text-muted">Selection</dt>
-              <dd className={reason ? "text-warning" : "text-success"}>{reason === undefined ? "Selecting…" : reason || "keep"}</dd>
+              <dd className={reason ? "text-warning" : "text-success"}>{reason === undefined ? (scanning ? "after the scan" : "Selecting…") : reason || "keep"}</dd>
             </div>
             {image.primary_face_pose ? (
               <div>

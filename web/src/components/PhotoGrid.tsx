@@ -2,7 +2,7 @@
 
 import { attributeLine } from "@/lib/attributes";
 import { thumbUrl } from "@/lib/api";
-import { DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { EXPECT_LABELS, type ImageLabel } from "@/lib/labels";
 import { dissentingPolicies, effectiveUnsafe } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
@@ -13,6 +13,7 @@ export function PhotoGrid({
   scanId,
   page,
   pending,
+  scanning = false,
   blur = DEFAULT_BLUR,
   sort,
   direction,
@@ -49,6 +50,8 @@ export function PhotoGrid({
   scanId: string;
   page: number;
   pending: readonly string[];
+  /** The scan on screen is still running, so no keep set exists yet. */
+  scanning?: boolean;
   blur?: BlurPolicy;
   sort: GridSort;
   direction: SortDirection;
@@ -220,7 +223,7 @@ export function PhotoGrid({
           const blurred = shouldBlur(image, pending, blur, label?.override ?? null);
           const unsafe = effectiveUnsafe(image, label?.override ?? null);
           const dissent = dissentingPolicies(image);
-          const checking = pending.includes("nsfw") && image.nsfw == null;
+          const checking = awaitingChecks(image, pending);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
           return (
@@ -240,13 +243,20 @@ export function PhotoGrid({
                 className={`w-full overflow-hidden rounded-lg border bg-base-800 text-left hover:border-accent-primary ${isSelected && deletable ? "border-warning" : isSelected ? "border-accent-primary" : "border-base-700"}`}
                 onClick={() => onOpen(image.rel_path)}
               >
-                {/* Thumbnails are already resized by the curator. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbUrl(scanId, image.rel_path)}
-                  alt=""
-                  className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
-                />
+                <span className="relative block">
+                  {/* Thumbnails are already resized by the curator. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={thumbUrl(scanId, image.rel_path)}
+                    alt=""
+                    className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
+                  />
+                  {checking || blurred ? (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">{checking ? "Scanning…" : "Blurred"}</span>
+                    </span>
+                  ) : null}
+                </span>
                 <span className="block space-y-1 p-2">
                   <span className="block truncate text-caption text-text-secondary">{image.rel_path}</span>
                   <span className="block text-caption text-text-muted">quality {image.score.toFixed(2)}</span>
@@ -266,11 +276,9 @@ export function PhotoGrid({
                     </span>
                   ) : null}
                   {imageTags.length > 0 ? <span className="block truncate text-caption text-text-muted">{imageTags.join(", ")}</span> : null}
-                  {checking ? <span className="block text-caption text-text-muted">Checking</span> : null}
-                  {blurred && !checking ? <span className="block text-caption text-text-muted">Blurred</span> : null}
                   {reasons ? (
                     <span className={`block text-caption ${kept ? "text-success" : "text-warning"}`}>{kept ? "keep" : reason}</span>
-                  ) : (
+                  ) : scanning ? null : (
                     <span className="block text-caption text-text-muted">Selecting…</span>
                   )}
                   {attrs ? <span className="block truncate text-caption text-text-muted">{attrs}</span> : null}
