@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { attributeLine } from "@/lib/attributes";
 import { imageUrl, thumbUrl } from "@/lib/api";
 import { DEFAULT_BLUR, isMinorExposed, shouldBlur, type BlurPolicy } from "@/lib/chunks";
+import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { nudeNetLabel } from "@/lib/moderation";
@@ -112,6 +113,17 @@ function PolicyReports({ image, override }: { image: ImageResult; override: stri
   );
 }
 
+/** The saved fields of a label, so a change to one keeps the others, tags included. */
+function labelFields(label: ImageLabel | null): Omit<ImageLabel, "updated_at"> {
+  return {
+    expect: label?.expect ?? null,
+    proxy: label?.proxy ?? false,
+    override: label?.override ?? null,
+    note: label?.note ?? "",
+    ...(label?.tags ? { tags: label.tags } : {}),
+  };
+}
+
 /** What a correct verdict is for this image, kept on this page's server. Scored against every policy in the Policies panel. */
 function LabelControl({
   label,
@@ -126,7 +138,7 @@ function LabelControl({
   error: string | null;
   onChange: (next: Omit<ImageLabel, "updated_at"> | null) => void;
 }) {
-  const current: Omit<ImageLabel, "updated_at"> = { expect: label?.expect ?? null, proxy: label?.proxy ?? false, override: label?.override ?? null, note: label?.note ?? "" };
+  const current = labelFields(label);
   const update = (patch: Partial<typeof current>) => onChange({ ...current, ...patch });
   const canProxy = current.expect === "hard" || current.expect === "ambiguous";
   return (
@@ -185,6 +197,80 @@ function LabelControl({
   );
 }
 
+/**
+ * Setting and wardrobe tags. The automatic set comes from cohorts.json over the
+ * scene and caption; a click makes the list the image's own, and Automatic
+ * hands it back.
+ */
+function TagControl({
+  cohorts,
+  auto,
+  label,
+  caption,
+  saving,
+  onChange,
+}: {
+  cohorts: CohortConfig;
+  auto: readonly string[];
+  label: ImageLabel | null;
+  caption: Caption | null;
+  saving: boolean;
+  onChange: (tags: string[] | undefined) => void;
+}) {
+  if (cohorts.tags.length === 0) return null;
+  const byHand = label?.tags != null;
+  const current = effectiveTags(auto, label);
+  const groups = new Map<string, CohortRule[]>();
+  for (const rule of cohorts.tags) groups.set(rule.group, [...(groups.get(rule.group) ?? []), rule]);
+  const toggle = (tag: string) => {
+    const next = current.includes(tag) ? current.filter((name) => name !== tag) : [...current, tag];
+    onChange(next);
+  };
+  const excerpt = caption ? [caption.text, caption.keywords.join(", ")].filter(Boolean).join(" · ") : "";
+  return (
+    <section className="border-t border-base-700 pt-3">
+      <h3 className="text-caption text-text-muted">
+        Setting and wardrobe{byHand ? " · set by hand" : auto.length > 0 ? " · automatic" : ""}
+        {saving ? " · saving" : ""}
+      </h3>
+      {[...groups.entries()].map(([group, rules]) => (
+        <div key={group} className="mt-2 flex flex-wrap items-center gap-2" role="group" aria-label={`${group} tags`}>
+          <span className="w-16 text-caption text-text-muted">{group}</span>
+          {rules.map((rule) => {
+            const on = current.includes(rule.tag);
+            const automatic = auto.includes(rule.tag);
+            return (
+              <button
+                key={rule.tag}
+                type="button"
+                aria-pressed={on}
+                title={[rule.scenes.length > 0 ? `Places365: ${rule.scenes.join(", ")}` : "", rule.captions.length > 0 ? `Caption: ${rule.captions.join(", ")}` : ""].filter(Boolean).join("\n")}
+                className={`rounded-md border px-2 py-1 text-small ${on ? "border-accent-primary text-text-primary" : "border-base-600 text-text-secondary"}`}
+                onClick={() => toggle(rule.tag)}
+              >
+                {rule.tag}
+                {on && automatic && !byHand ? <span className="text-text-muted"> · auto</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+      {byHand ? (
+        <button type="button" className="mt-2 rounded-md border border-base-600 px-2 py-1 text-small text-text-secondary" onClick={() => onChange(undefined)}>
+          Automatic ({auto.length === 0 ? "none" : auto.join(", ")})
+        </button>
+      ) : null}
+      {excerpt ? (
+        <p className="mt-2 text-caption leading-relaxed text-text-muted">
+          Caption: <span className="text-text-secondary">{excerpt.length > 400 ? `${excerpt.slice(0, 400)}…` : excerpt}</span>
+        </p>
+      ) : cohorts.tags.some((rule) => rule.captions.length > 0) ? (
+        <p className="mt-2 text-caption text-text-muted">No caption sidecar next to this image, so wardrobe and prop tags are by hand only.</p>
+      ) : null}
+    </section>
+  );
+}
+
 function scoreLines(breakdown: Record<string, number> | undefined): string[] {
   if (!breakdown) return [];
   const known = new Set(SCORE_PARTS.map(([key]) => key));
@@ -211,6 +297,9 @@ export function PhotoDialog({
   labelSaving = false,
   labelError = null,
   onLabel,
+  cohorts = EMPTY_COHORTS,
+  autoTags = [],
+  caption = null,
 }: {
   image: ImageResult;
   scanId: string;
@@ -228,6 +317,10 @@ export function PhotoDialog({
   labelSaving?: boolean;
   labelError?: string | null;
   onLabel?: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+  /** Cohort rules, the tags they derive for this image, and the caption sidecar they read. */
+  cohorts?: CohortConfig;
+  autoTags?: readonly string[];
+  caption?: Caption | null;
 }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -416,6 +509,20 @@ export function PhotoDialog({
             </p>
           ) : null}
           <PolicyReports image={image} override={override} />
+          {onLabel ? (
+            <TagControl
+              cohorts={cohorts}
+              auto={autoTags}
+              label={label}
+              caption={caption}
+              saving={labelSaving}
+              onChange={(tags) => {
+                const fields = labelFields(label);
+                delete fields.tags;
+                onLabel(tags ? { ...fields, tags } : fields);
+              }}
+            />
+          ) : null}
           {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}
         </div>
       </div>

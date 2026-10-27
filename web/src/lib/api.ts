@@ -1,4 +1,5 @@
 import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
+import type { Caption, CohortConfig } from "./cohorts";
 import type { ImageLabel, LabelFile } from "./labels";
 import { exportBody } from "./paths";
 import type { PolicyChoice } from "./policies";
@@ -110,6 +111,24 @@ export async function putLabel(folder: string, relPath: string, label: Omit<Imag
   });
   if (!response.ok) throw new ApiError(await readError(response));
   return (await response.json()) as LabelFile;
+}
+
+/** The setting and wardrobe rules from cohorts.json, as this page's server read them. */
+export async function getCohorts(): Promise<CohortConfig & { source: string | null; error: string | null }> {
+  const response = await fetch("/api/cohorts");
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as CohortConfig & { source: string | null; error: string | null };
+}
+
+/** Caption sidecars for these image paths (`abs_path`). A path with no sidecar maps to null. */
+export async function getCaptions(paths: string[]): Promise<Record<string, Caption | null>> {
+  const response = await fetch("/api/captions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths }),
+  });
+  if (!response.ok) throw new ApiError(await readError(response));
+  return ((await response.json()) as { captions: Record<string, Caption | null> }).captions;
 }
 
 export async function deleteImage(scanId: string, relPath: string): Promise<void> {

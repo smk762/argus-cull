@@ -1,3 +1,4 @@
+import { TAG_PATTERN } from "@/lib/cohorts";
 import { isExpect, type ImageLabel } from "@/lib/labels";
 import { readLabels, writeLabel } from "@/lib/labelStore";
 
@@ -5,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 const LABELS_DIR = process.env.CULL_LABELS_DIR || "/labels";
 const MAX_NOTE = 2000;
+const MAX_TAGS = 32;
 
 function bad(detail: string, status = 400): Response {
   return Response.json({ detail }, { status });
@@ -44,11 +46,15 @@ export async function PUT(request: Request): Promise<Response> {
     if (raw.expect != null && !isExpect(raw.expect)) return bad("expect must be hard, ambiguous, adult, other, or safe");
     if (raw.override != null && typeof raw.override !== "string") return bad("override must be a policy name");
     if (raw.note != null && typeof raw.note !== "string") return bad("note must be text");
+    if (raw.tags != null && (!Array.isArray(raw.tags) || raw.tags.length > MAX_TAGS || raw.tags.some((tag) => typeof tag !== "string" || !TAG_PATTERN.test(tag)))) {
+      return bad(`tags must be a list of up to ${MAX_TAGS} short names`);
+    }
     label = {
       expect: isExpect(raw.expect) ? raw.expect : null,
       proxy: raw.proxy === true,
       override: typeof raw.override === "string" && raw.override.trim() ? raw.override.trim() : null,
       note: typeof raw.note === "string" ? raw.note.slice(0, MAX_NOTE) : undefined,
+      ...(Array.isArray(raw.tags) ? { tags: [...new Set(raw.tags as string[])] } : {}),
     };
   }
   try {

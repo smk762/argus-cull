@@ -29,6 +29,12 @@ export interface ImageLabel {
   /** Follow this policy's verdict for the shield on this image, instead of the union. */
   override?: string | null;
   note?: string;
+  /**
+   * Setting and wardrobe tags set by hand. Absent, the image carries the tags
+   * cohorts.json derives from its scene and caption; present, this list
+   * replaces them, so an empty list clears a wrong automatic tag.
+   */
+  tags?: string[];
   updated_at: string;
 }
 
@@ -42,12 +48,20 @@ export function isExpect(value: unknown): value is Expect {
 }
 
 /** True when a label carries nothing worth keeping. */
-export function emptyLabel(label: Pick<ImageLabel, "expect" | "proxy" | "override" | "note">): boolean {
-  return label.expect == null && !label.proxy && !label.override && !(label.note && label.note.trim());
+export function emptyLabel(label: Pick<ImageLabel, "expect" | "proxy" | "override" | "note" | "tags">): boolean {
+  return label.expect == null && !label.proxy && !label.override && !(label.note && label.note.trim()) && label.tags == null;
 }
 
-/** One JSONL row per labelled image, in the shape guard_eval reads plus the path. */
-export function labelsJsonl(folder: string, labels: ReadonlyMap<string, ImageLabel>, absPaths: ReadonlyMap<string, string> = new Map()): string {
+/**
+ * One JSONL row per labelled image, in the shape guard_eval reads plus the
+ * path and the cohort tags the image carries (`tags`), automatic or by hand.
+ */
+export function labelsJsonl(
+  folder: string,
+  labels: ReadonlyMap<string, ImageLabel>,
+  absPaths: ReadonlyMap<string, string> = new Map(),
+  tags: ReadonlyMap<string, readonly string[]> = new Map(),
+): string {
   const rows: string[] = [];
   for (const [rel, label] of [...labels.entries()].sort(([left], [right]) => left.localeCompare(right))) {
     if (label.expect == null) continue;
@@ -61,6 +75,7 @@ export function labelsJsonl(folder: string, labels: ReadonlyMap<string, ImageLab
         folder,
         override: label.override ?? null,
         note: label.note ?? "",
+        tags: tags.get(rel) ?? label.tags ?? [],
         updated_at: label.updated_at,
       }),
     );
