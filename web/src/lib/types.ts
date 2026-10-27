@@ -145,6 +145,8 @@ export interface Health {
   allow_move: boolean;
   /** Curator 0.6: it can stop a running scan and purge the scan cache. */
   scan_control?: boolean;
+  /** Curator 0.7: frames with no face can take the set's age (`faces.set_age`). */
+  set_age?: boolean;
 }
 
 export interface Detectors {
@@ -278,6 +280,8 @@ export interface ImageResult {
   primary_face_cluster: string | null;
   primary_face_pose: FacePose | null;
   primary_face_attributes: FaceAttributes | null;
+  /** Only on a passing frame with no face, when the scan asked for `faces.set_age` and found one subject. */
+  set_age?: SetAge | null;
   scene: SceneTags | null;
   garments: GarmentDetection[] | null;
   nsfw?: NsfwResult | null;
@@ -297,6 +301,21 @@ export interface FaceConfig {
   enabled: boolean;
   fairface: boolean;
   mivolo: boolean;
+  /** Curator 0.7: give frames with no face the set's age when one identity holds the scan. */
+  set_age?: boolean;
+}
+
+/**
+ * An age for a frame with no face, read off the set it belongs to: the median
+ * MiVOLO age of the scan's dominant identity. An inference about the set, not
+ * a reading of the frame; shown as such, and counted where a wrong age would
+ * be the costlier mistake (the under-18 hold and the delete mark).
+ */
+export interface SetAge {
+  years: number;
+  cluster_id: string;
+  faces: number;
+  share: number;
 }
 
 export interface SceneConfig {
@@ -329,6 +348,9 @@ export interface ScanSummary {
   rejected: number;
   duplicates: number;
   face_clusters: FaceCluster[];
+  /** When `faces.set_age` was asked: the set age given to the faceless frames, or why none was. */
+  set_age?: SetAge | null;
+  set_age_skipped?: string | null;
   results: ImageResult[];
 }
 
@@ -419,6 +441,8 @@ export interface ViewState {
   guardVariants: GuardPolicy[];
   /** Leave Fashionpedia out of the next scan. It is the slowest local check and nothing else waits on it. */
   skipGarments: boolean;
+  /** The folder is one set of one person: frames with no face may take the set's age. */
+  setAge: boolean;
   filter: FilterState;
 }
 
@@ -511,6 +535,7 @@ export const DEFAULT_VIEW: ViewState = {
   guardPolicy: null,
   guardVariants: [],
   skipGarments: false,
+  setAge: false,
   filter: DEFAULT_FILTER,
 };
 

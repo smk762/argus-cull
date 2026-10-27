@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { imageUrl, thumbUrl } from "@/lib/api";
-import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, revealHeld, shouldBlur, youngestAge, type BlurPolicy } from "@/lib/chunks";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, revealHeld, shouldBlur, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
@@ -98,12 +98,20 @@ function AppearanceTable({ image }: { image: ImageResult }) {
     .map((face) => slugLabel(face.attributes?.race ?? ""));
   const youngest = youngestAge(image);
   const faceCount = image.faces?.length ?? 0;
-  if (!attrs && !image.primary_face_pose && faceCount === 0) return null;
+  const setAge = usesSetAge(image) ? image.set_age : null;
+  if (!attrs && !image.primary_face_pose && faceCount === 0 && !setAge) return null;
   const age = attrs?.age_years != null ? `${Math.round(attrs.age_years)} years` : attrs?.age ?? null;
   return (
     <StatTable
       title="Appearance guess"
       rows={[
+        setAge
+          ? [
+              "Age of the set",
+              `about ${Math.round(setAge.years)} years`,
+              `no face in this frame; median of ${setAge.faces} MiVOLO faces in ${setAge.cluster_id} (${Math.round(setAge.share * 100)}% of the scan's faces)`,
+            ]
+          : null,
         attrs?.gender ? ["Gender", attrs.gender, [attrs.gender_source, attrs.gender_conf != null ? attrs.gender_conf.toFixed(2) : null].filter(Boolean).join(" · ")] : null,
         age ? ["Age", age, [attrs?.age_source, attrs?.age_conf != null ? attrs.age_conf.toFixed(2) : null].filter(Boolean).join(" · ")] : null,
         youngest != null && attrs?.age_years != null && youngest < attrs.age_years ? ["Youngest face", `${Math.round(youngest)} years`, "mivolo"] : null,
@@ -446,7 +454,7 @@ function Summary({
   facesRan: boolean;
 }) {
   const attrs = image.primary_face_attributes;
-  const age = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? ageMissing(image, pending, facesRan);
+  const age = usesSetAge(image) && image.set_age ? `≈${Math.round(image.set_age.years)}y set` : attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? ageMissing(image, pending, facesRan);
   const state = shieldState(image, override);
   const cells: [string, ReactNode][] = [
     [

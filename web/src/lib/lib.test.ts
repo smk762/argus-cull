@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { exposedLabelsForRequest, guardRuleLabel, isSensitive, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
-import { ageMissing, awaitingChecks, blurFromEnv, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages } from "./chunks";
+import { ageMissing, awaitingChecks, blurFromEnv, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { splitGuardExplanation } from "./guardText";
 import { mergeProgress, phaseLabel, progressRatio } from "./progress";
@@ -128,6 +128,8 @@ describe("url state", () => {
     expect(parseView(new URLSearchParams("garments=on")).skipGarments).toBe(false);
     expect(parseView(new URLSearchParams("")).skipGarments).toBe(false);
     expect(serializeView({ ...DEFAULT_VIEW, skipGarments: true })).toBe("?garments=off");
+    expect(parseView(new URLSearchParams("set=1")).setAge).toBe(true);
+    expect(serializeView({ ...DEFAULT_VIEW, setAge: true })).toBe("?set=1");
   });
 
   it("drops an unknown pose and omits the default filter", () => {
@@ -164,9 +166,13 @@ describe("select body", () => {
     expect(scanBody("shoots", { ...NONE, fairface: true }).faces.enabled).toBe(true);
     expect(scanBody("", DETECTORS).garments.enabled).toBe(true);
     // The viewer can leave Fashionpedia out; nothing else in the scan waits on it.
-    expect(scanBody("", DETECTORS, null, { skipGarments: true }).garments.enabled).toBe(false);
-    expect(scanBody("", DETECTORS, null, { skipGarments: true }).scenes.enabled).toBe(true);
-    expect(scanBody("", NONE, null, { skipGarments: false }).garments.enabled).toBe(false);
+    expect(scanBody("", DETECTORS, null, { skipGarments: true, setAge: false }).garments.enabled).toBe(false);
+    expect(scanBody("", DETECTORS, null, { skipGarments: true, setAge: false }).scenes.enabled).toBe(true);
+    expect(scanBody("", NONE, null, { skipGarments: false, setAge: false }).garments.enabled).toBe(false);
+    // The set age is asked for only with MiVOLO loaded; the field is absent otherwise so an older curator sees nothing new.
+    expect(scanBody("", DETECTORS, null, { skipGarments: false, setAge: true }).faces.set_age).toBe(true);
+    expect(scanBody("", DETECTORS, null, { skipGarments: false, setAge: false }).faces).not.toHaveProperty("set_age");
+    expect(scanBody("", { ...DETECTORS, mivolo: false }, null, { skipGarments: false, setAge: true }).faces).not.toHaveProperty("set_age");
     expect(scanBody("shoots", NONE).nsfw).toEqual({ enabled: false });
     expect(scanBody("shoots", NONE).guard).toEqual({ enabled: false });
     expect(scanBody("shoots", { ...NONE, nudenet: true, singguard: true }).nsfw.enabled).toBe(true);
@@ -582,5 +588,28 @@ describe("age cell with no age", () => {
     expect(facesRan(summary({ enabled: false }))).toBe(false);
     // A live scan's batches carry no config; a face in a batch is proof enough.
     expect(facesRan({ ...summary({ enabled: false }), results: [faced] })).toBe(true);
+  });
+});
+
+describe("set age", () => {
+  const set = { years: 16.4, cluster_id: "face_1", faces: 20, share: 0.95 };
+  const exposed = { labels: { FEMALE_BREAST_EXPOSED: 0.8 }, exposed_score: 0.8 };
+  it("stands in for a measurement on a frame with no face, and only there", () => {
+    const body = { face_count: 0, faces: [], primary_face_attributes: null, set_age: set, nsfw: exposed } as unknown as ImageResult;
+    const faced = { face_count: 1, faces: [{ attributes: { age_years: 31, age_source: "mivolo" } }], primary_face_attributes: { age_years: 31, age_source: "mivolo" }, set_age: set, nsfw: exposed } as unknown as ImageResult;
+    expect(usesSetAge(body)).toBe(true);
+    expect(youngestAge(body)).toBe(16.4);
+    // Under 18 by the set's age with exposure: held blurred and marked for delete, like a measured face.
+    expect(isMinorExposed(body)).toBe(true);
+    expect(revealHeld(body, [])).toBe(true);
+    expect(shouldBlur(body, [], { exposedScore: 0.25, policyBlur: true, unblurNsfw: true })).toBe(true);
+    // A frame with its own face keeps its own age.
+    expect(usesSetAge(faced)).toBe(false);
+    expect(youngestAge(faced)).toBe(31);
+    expect(isMinorExposed(faced)).toBe(false);
+    // An adult set age adds no hold.
+    const adult = { ...body, set_age: { ...set, years: 24 } } as unknown as ImageResult;
+    expect(isMinorExposed(adult)).toBe(false);
+    expect(filterByAge([body, adult], 18, null).map((image) => image.set_age?.years)).toEqual([24]);
   });
 });

@@ -82,11 +82,28 @@ type AgeChecked = {
   guard_variants?: GuardVariants;
   primary_face_attributes?: AgedFace;
   faces?: { attributes?: AgedFace }[] | null;
+  set_age?: { years: number } | null;
 };
 
+/**
+ * The ages the under-18 rules read: every face's MiVOLO years, and, on a
+ * frame with no face, the set's age when the scan gave it one. The set age
+ * is an inference about the set, not a reading of the frame, but a frame
+ * with no face had no age at all, so counting it can only add a hold or a
+ * delete mark, never lift one. The tile and the detail view show it as the
+ * set's.
+ */
 function mivoloAges(image: AgeChecked): number[] {
   const ages = [mivoloYears(image.primary_face_attributes), ...(image.faces ?? []).map((face) => mivoloYears(face.attributes))];
-  return ages.filter((age): age is number => age != null);
+  const measured = ages.filter((age): age is number => age != null);
+  if (measured.length === 0 && image.set_age) return [image.set_age.years];
+  return measured;
+}
+
+/** The set age stands in for a measurement: the frame has no face of its own and the scan gave it the set's age. */
+export function usesSetAge(image: AgeChecked): boolean {
+  if (!image.set_age) return false;
+  return mivoloYears(image.primary_face_attributes) == null && !(image.faces ?? []).some((face) => mivoloYears(face.attributes) != null);
 }
 
 function hasMinorAge(image: AgeChecked): boolean {
@@ -200,6 +217,7 @@ export function facesRan(summary: Pick<ScanSummary, "faces_config" | "results"> 
  * the frames with the least to go on are often the most explicit ones.
  */
 export function ageMissing(image: Pick<ImageResult, "face_count">, pending: readonly string[], ran: boolean): "…" | "no face" | "–" {
+  // A frame with a set age is not missing one; callers show that first.
   if (pending.includes("faces")) return "…";
   if (ran && image.face_count === 0) return "no face";
   return "–";
