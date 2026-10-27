@@ -48,7 +48,7 @@ Changing a filter calls `POST /scan/{id}/select`. Counts and `keep_reason` updat
 
 ### SingGuard policies
 
-When `GET /detectors` lists `singguard_policies`, the sidebar offers the official policy for the next scan (`adult` by default) and the variants to run beside it for comparison. Each variant is another SingGuard pass per image. The official verdict drives the keep set, but a variant that flags where the official policy passes blurs the frame, marks the tile, and opens in the detail view, and the unsafe and rule filters send `guard_policies` so "Show left out" and export drop the same images. The detail view shows each policy's verdict and reasoning in its own section.
+When `GET /detectors` lists `singguard_policies` (curator 0.5 and later), the sidebar offers the official policy for the next scan (`adult` by default) and the variants to run beside it for comparison. Each variant is another SingGuard pass per image. The official verdict drives the keep set, but a variant that flags where the official policy passes blurs the frame, marks the tile, and opens in the detail view, and the unsafe and rule filters send `guard_policies` so "Show left out" and export drop the same images. The detail view shows each policy's verdict and reasoning in its own section.
 
 The detail view also takes a label: what a correct verdict is, using argus-curator's `guard_eval` values (`hard`, `ambiguous`, `adult`, `other`, `safe`), a *proxy* flag for a verified 18+ image standing in for a hard case, a per-image choice of which policy the shield follows, and a note. Labels are keyed by folder and path, so they survive a rescan under other policies, and are written as JSON under `CULL_LABELS_PATH` (default `./labels`). The *Policies* button shows each policy's flag rate, how often it disagrees with the official one, and its precision and recall against the labels, and downloads the labels as JSONL in the shape `scripts/guard_eval.py` reads.
 
@@ -56,7 +56,7 @@ Download paths writes two files in the browser and does not touch the export roo
 
 People lists the clusters the scan already computed. The shared URL holds the scan id and the filter.
 
-NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold or a rule list is sent on the select and export bodies the server already accepts. Flagged frames stay blurred until you show the image. This page does not invent a score.
+NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold or a rule list is sent on the select and export bodies the server already accepts. Flagged frames stay blurred until you show the image. This page does not invent a score. The SingGuard policy a scan is judged under is picked in the sidebar (below) and kept in the URL as `policy=` and `variants=`. Under `adult`, consensual adult nudity passes SingGuard while apparent minors, non-consent and sexual violence are still rule A, and the rule list names it that way. The policy does not change NudeNet scores, the blur line, or the rule that a MiVOLO age under 18 with exposure is never kept.
 
 ## Fixture
 

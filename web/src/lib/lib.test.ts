@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
-import { exposedLabelsForRequest, isSensitive, recordedGuardRules } from "./moderation";
+import { exposedLabelsForRequest, guardRuleLabel, isSensitive, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
 import { blurFromEnv, filterByAge, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages } from "./chunks";
 import { evaluateSubset } from "./subset";
@@ -160,6 +160,32 @@ describe("select body", () => {
     expect(scanBody("shoots", NONE).guard).toEqual({ enabled: false });
     expect(scanBody("shoots", { ...NONE, nudenet: true, singguard: true }).nsfw.enabled).toBe(true);
     expect(scanBody("shoots", { ...NONE, nudenet: true, singguard: true }).guard.enabled).toBe(true);
+  });
+
+  it("names the adult policy only when the server offers it", () => {
+    const offered = { ...NONE, singguard: true, singguard_policies: ["default", "adult"] };
+    const adult = { policy: "adult", variants: [] };
+    expect(scanBody("shoots", offered, adult).guard).toEqual({ enabled: true, policy: "adult" });
+    expect(scanBody("shoots", offered).guard).toEqual({ enabled: true });
+    // curator 0.4 has no singguard_policies and would ignore the field.
+    expect(scanBody("shoots", { ...NONE, singguard: true }, adult).guard).toEqual({ enabled: true });
+    expect(scanBody("shoots", NONE, adult).guard).toEqual({ enabled: false });
+  });
+
+  it("keeps the policy choice in the URL and names rule A by the scan's policy", () => {
+    const view = parseView(new URLSearchParams("policy=adult&variants=adult-granular,adult-cautious"));
+    expect(view.guardPolicy).toBe("adult");
+    expect(view.guardVariants).toEqual(["adult-granular", "adult-cautious"]);
+    expect(serializeView(view)).toContain("policy=adult&variants=adult-granular%2Cadult-cautious");
+    expect(parseView(new URLSearchParams("")).guardPolicy).toBeNull();
+    expect(serializeView(parseView(new URLSearchParams("")))).not.toContain("policy=");
+    // A name is kept as spelled; the scan body drops any the curator does not list.
+    expect(parseView(new URLSearchParams("policy=anything&variants=,bad%20name,ok")).guardPolicy).toBe("anything");
+    expect(parseView(new URLSearchParams("variants=,bad%20name,ok")).guardVariants).toEqual(["ok"]);
+    const adult = { guard_config: { enabled: true, policy: "adult" } } as unknown as ScanSummary;
+    expect(guardRuleLabel("A", adult)).toBe("A. Illegal or Extreme Sexual Content");
+    expect(guardRuleLabel("A", null)).toBe("A. Sexual Content Risk");
+    expect(guardRuleLabel("B", adult)).toBe("B. Real-World Crimes & Public Safety");
   });
 
   it("sends NudeNet and SingGuard filters only for a scan that ran them", () => {

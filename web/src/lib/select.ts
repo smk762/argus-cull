@@ -104,7 +104,11 @@ export interface ScanBody {
   guard: GuardConfig;
 }
 
-/** SingGuard config for a scan. Names are sent only when the curator lists them, so an older curator sees `{ enabled }`. */
+/**
+ * SingGuard config for a scan. Names are sent only when the curator lists
+ * them: an older curator ignores the field and would judge the scan under its
+ * default policy without saying so, so it sees `{ enabled }` only.
+ */
 export function guardBody(detectors: Detectors, choice: PolicyChoice | null): GuardConfig {
   const enabled = Boolean(detectors.singguard);
   const available = detectors.singguard_policies ?? [];

@@ -1,4 +1,4 @@
-import type { Detectors } from "./types";
+import type { Detectors, GuardPolicy } from "./types";
 
 export interface DetectorGroup {
   id: "insightface" | "fairface" | "mivolo" | "places365" | "garments";
@@ -50,4 +50,9 @@ export function contentRatingAvailable(detectors: Detectors): boolean {
 /** The SingGuard group stays absent until the server reports a SingGuard URL. */
 export function policyAvailable(detectors: Detectors): boolean {
   return detectors.singguard === true;
+}
+
+/** The server runs SingGuard and lists *policy* among the ones a scan can name. */
+export function policyOffered(detectors: Detectors | null, policy: GuardPolicy): boolean {
+  return detectors?.singguard === true && (detectors.singguard_policies ?? []).includes(policy);
 }

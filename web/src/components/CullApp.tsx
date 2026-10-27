@@ -56,12 +56,16 @@ export function CullApp() {
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [detectors, setDetectors] = useState<Detectors | null>(null);
-  const [policyChoice, setPolicyChoice] = useState<PolicyChoice | null>(null);
   const [labels, setLabels] = useState<Map<string, ImageLabel>>(() => new Map());
   const [labelsFolder, setLabelsFolder] = useState<string | null>(null);
   const [labelSaving, setLabelSaving] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
+  // The policy choice lives in the URL, so a shared link scans the same way.
+  const policyChoice = useMemo<PolicyChoice>(() => {
+    const base = defaultPolicyChoice(detectors?.singguard_policies);
+    return { policy: view.guardPolicy ?? base.policy, variants: view.guardVariants };
+  }, [detectors?.singguard_policies, view.guardPolicy, view.guardVariants]);
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [listingError, setListingError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ScanSummary | null>(null);
@@ -339,7 +343,7 @@ export function CullApp() {
       const next = await scanFolder(
         view.folder,
         live,
-        policyChoice ?? defaultPolicyChoice(live.singguard_policies),
+        policyChoice,
         setProgress,
         (chunk) => {
           setProgress({ phase: chunk.phase, done: chunk.done, total: chunk.total });
@@ -522,9 +526,9 @@ export function CullApp() {
         />
         <PolicyPicker
           available={detectors?.singguard_policies ?? []}
-          choice={policyChoice ?? defaultPolicyChoice(detectors?.singguard_policies)}
+          choice={policyChoice}
           disabled={scanBusy}
-          onChange={setPolicyChoice}
+          onChange={(next) => replaceView({ ...view, guardPolicy: next.policy, guardVariants: next.variants })}
         />
         <ScanListView
           scans={scanList}
