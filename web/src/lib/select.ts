@@ -121,9 +121,11 @@ export function guardBody(detectors: Detectors, choice: PolicyChoice | null): Gu
 /** What the viewer chose to leave out of a scan. Every check the curator has loaded runs unless named here. */
 export interface ScanChecks {
   skipGarments: boolean;
+  /** Ask for the set's age on frames with no face. Sent only when MiVOLO is loaded; an older curator ignores it. */
+  setAge: boolean;
 }
 
-export const ALL_CHECKS: ScanChecks = { skipGarments: false };
+export const ALL_CHECKS: ScanChecks = { skipGarments: false, setAge: false };
 
 export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null, checks: ScanChecks = ALL_CHECKS): ScanBody {
   const fairface = detectors.fairface;
@@ -134,6 +136,7 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
       enabled: detectors.insightface || fairface || mivolo,
       fairface,
       mivolo,
+      ...(checks.setAge && mivolo ? { set_age: true } : {}),
     },
     scenes: { enabled: detectors.places365 },
     garments: { enabled: detectors.garments && !checks.skipGarments, min_conf: 0.3 },

@@ -1,7 +1,7 @@
 "use client";
 
 import { thumbUrl } from "@/lib/api";
-import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, usesSetAge, youngestAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
 import { shieldState, shieldTitle } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
@@ -15,6 +15,7 @@ function baseName(relPath: string): string {
 
 /** Primary face age as MiVOLO years or a FairFace bracket, with a younger face beside it when one exists. With no age, why: see `ageMissing`. */
 function apparentAge(image: ImageResult, pending: readonly string[], faces: boolean): string {
+  if (usesSetAge(image) && image.set_age) return `≈${Math.round(image.set_age.years)}y set`;
   const attrs = image.primary_face_attributes;
   const primary = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? null;
   const youngest = youngestAge(image);
@@ -307,7 +308,7 @@ export function PhotoGrid({
                     </span>
                     <span title="NudeNet exposed score">{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
                     <span className="text-text-muted">age</span>
-                    <span className={`truncate ${age === "no face" ? "text-text-muted" : ""}`} title={age === "no face" ? "No face detected, so no age estimate. MiVOLO reads a face." : "Apparent age, MiVOLO years or FairFace bracket"}>
+                    <span className={`truncate ${age === "no face" ? "text-text-muted" : ""}`} title={setAgeTitle(image) ?? (age === "no face" ? "No face detected, so no age estimate. MiVOLO reads a face." : "Apparent age, MiVOLO years or FairFace bracket")}>
                       {age}
                     </span>
                     {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
@@ -370,6 +371,13 @@ function emptyView(keepView: KeepView, race: FaceRace | null, ageFrom: number | 
   if (race) return `No ${which} of this race.`;
   if (ageFrom != null || ageTo != null || keepView !== "all") return keepView === "all" ? "No image in this age range." : `No ${which} in this view.`;
   return "No image in this age range.";
+}
+
+/** Why the tile says "set": no face of its own, and the scan found one subject across the folder. */
+export function setAgeTitle(image: Pick<ImageResult, "set_age" | "primary_face_attributes" | "faces">): string | null {
+  if (!usesSetAge(image) || !image.set_age) return null;
+  const { years, faces, cluster_id, share } = image.set_age;
+  return `No face in this frame. The set's age: median ${years.toFixed(1)} years over ${faces} MiVOLO faces in ${cluster_id} (${Math.round(share * 100)}% of the scan's faces). An inference about the set, not a reading of this frame.`;
 }
 
 function readAge(value: string): number | null {

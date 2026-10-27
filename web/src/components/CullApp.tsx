@@ -451,7 +451,7 @@ export function CullApp() {
         view.folder,
         live,
         policyChoice,
-        { skipGarments: view.skipGarments },
+        { skipGarments: view.skipGarments, setAge: view.setAge },
         (event) => {
           setProgress((current) => mergeProgress(current ?? [], event));
           // Curator 0.5.1 says on every progress event which checks are still running.
@@ -700,7 +700,16 @@ export function CullApp() {
           disabled={scanBusy}
           onChange={(next) => replaceView({ ...view, guardPolicy: next.policy, guardVariants: next.variants })}
         />
-        <ScanChecks detectors={detectors} skipGarments={view.skipGarments} disabled={scanBusy} onSkipGarments={(skip) => replaceView({ ...view, skipGarments: skip })} />
+        <ScanChecks
+          detectors={detectors}
+          health={health}
+          summary={summary}
+          skipGarments={view.skipGarments}
+          setAge={view.setAge}
+          disabled={scanBusy}
+          onSkipGarments={(skip) => replaceView({ ...view, skipGarments: skip })}
+          onSetAge={(on) => replaceView({ ...view, setAge: on })}
+        />
         <ScanListView
           scans={scanList}
           root={health?.source_root ?? null}

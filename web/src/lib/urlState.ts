@@ -140,6 +140,7 @@ export function parseView(params: URLSearchParams): ViewState {
     guardPolicy: policyName(params.get("policy")),
     guardVariants: (params.get("variants") ?? "").split(",").map((name) => policyName(name)).filter((name): name is string => name != null),
     skipGarments: params.get("garments") === "off",
+    setAge: params.get("set") === "1",
     filter,
   };
 }
@@ -160,6 +161,7 @@ export function serializeView(view: ViewState): string {
   if (view.guardPolicy) params.set("policy", view.guardPolicy);
   if (view.guardVariants.length > 0) params.set("variants", view.guardVariants.join(","));
   if (view.skipGarments) params.set("garments", "off");
+  if (view.setAge) params.set("set", "1");
   if (filter.minScore !== DEFAULT_FILTER.minScore) params.set("min_score", String(filter.minScore));
   if (filter.includeRejected) params.set("include_rejected", "1");
   if (filter.keepSimilar) params.set("keep_similar", "1");
