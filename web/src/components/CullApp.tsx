@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getFolders, getHealth, getLabels, getScan, getScans, putLabel, scanFolder, selectScan } from "@/lib/api";
+import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getFolders, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
 import { DEFAULT_BLUR, filterByAge, filterByKeep, filterByRace, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
@@ -80,6 +80,8 @@ export function CullApp() {
   const [progress, setProgress] = useState<Progress[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanList, setScanList] = useState<ScanList | null>(null);
+  const [stopping, setStopping] = useState(false);
+  const [purging, setPurging] = useState(false);
   const [pendingChecks, setPendingChecks] = useState<string[]>([]);
   const [blur, setBlur] = useState<BlurPolicy>(DEFAULT_BLUR);
   const [unblurNsfw, setUnblurNsfw] = useState(false);
@@ -231,13 +233,30 @@ export function CullApp() {
     };
   }, [hydrated, sourceReady, view.folder]);
 
+  // What the /scans poll below needs to know about the page, without restarting on every change.
+  const latest = useRef({ scan: view.scan, scanning });
+  useEffect(() => {
+    latest.current = { scan: view.scan, scanning };
+  }, [view.scan, scanning]);
+
   useEffect(() => {
     if (!hydrated || !sourceReady) return;
     let cancel = false;
     const load = () => {
       getScans()
         .then((body) => {
-          if (!cancel && body) setScanList(body);
+          if (cancel || !body) return;
+          setScanList(body);
+          // A scan stopped or purged from another tab is gone from the curator:
+          // let go of it here too, instead of asking for it and showing "unknown scan_id".
+          const { scan, scanning: busy } = latest.current;
+          if (!scan || busy) return;
+          const known = body.active?.scan_id === scan || body.scans.some((row) => row.scan_id === scan);
+          if (known) return;
+          setSummary(null);
+          setSelection(null);
+          setPendingChecks([]);
+          replaceView(withoutScan(viewFromSearch(currentSearch())));
         })
         .catch(() => {
           // The list is an aid. A curator that predates it leaves the page usable.
@@ -454,15 +473,71 @@ export function CullApp() {
       const current = viewFromSearch(currentSearch());
       replaceView({ ...current, scan: next.scan_id, page: announced ? current.page : 1, photo: announced ? current.photo : null });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Scan failed.");
+      if (err instanceof ScanStopped) {
+        // Stopped on purpose, here or from another tab: the curator dropped
+        // the partial summary, so the page lets go of it too.
+        setSummary(null);
+        setSelection(null);
+        setPendingChecks([]);
+        replaceView(withoutScan(viewFromSearch(currentSearch())));
+      } else {
+        setError(err instanceof Error ? err.message : "Scan failed.");
+      }
     } finally {
       setScanning(false);
+      setStopping(false);
       setProgress(null);
       void getScans().then((body) => {
         if (body) setScanList(body);
       });
     }
   }, [sourceReady, scanning, scanList?.active, view, policyChoice]);
+
+  const scanControl = Boolean(health?.scan_control);
+  // The bar for our own scan, or for the one running in another tab when that is the scan on screen.
+  const liveProgress: Progress | readonly Progress[] | null =
+    progress ?? (scanList?.active && (!summary || summary.scan_id === scanList.active.scan_id) ? scanList.active : null);
+
+  // The id of our own scan is only known once the first chunk lands, so ask
+  // the curator which scan is running rather than guessing.
+  const onStop = useCallback(async () => {
+    setStopping(true);
+    setError(null);
+    try {
+      const list = await getScans();
+      const id = list?.active?.scan_id;
+      if (!id) return;
+      await cancelScan(id);
+      if (list?.active) setScanList({ ...list, active: { ...list.active, cancelling: true } });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not stop the scan.");
+    } finally {
+      // Our own stream ends with the stop; another tab's shows up on the next /scans poll.
+      if (!scanning) setStopping(false);
+    }
+  }, [scanning]);
+
+  const onPurge = useCallback(async () => {
+    setPurging(true);
+    setError(null);
+    try {
+      await purgeScans();
+      // Our own scan's stream, if one was running, ends with ScanStopped and
+      // clears the summary; a cached scan on screen goes here.
+      if (!scanning) {
+        setSummary(null);
+        setSelection(null);
+        setPendingChecks([]);
+        replaceView(withoutScan(viewFromSearch(currentSearch())));
+      }
+      const body = await getScans();
+      if (body) setScanList(body);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not purge the scans.");
+    } finally {
+      setPurging(false);
+    }
+  }, [scanning]);
 
   const photo = summary?.results.find((image) => image.rel_path === view.photo) ?? null;
   const photoIndex = photo ? gallery.findIndex((image) => image.rel_path === photo.rel_path) : -1;
@@ -624,7 +699,10 @@ export function CullApp() {
           scans={scanList}
           root={health?.source_root ?? null}
           current={view.scan}
+          canPurge={scanControl}
+          purging={purging}
           onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
+          onPurge={() => void onPurge()}
         />
         <Filters
           filter={view.filter}
@@ -690,10 +768,23 @@ export function CullApp() {
             </button>
           </div>
           </div>
-          {progress ? (
-            <ProgressBar progress={progress} />
-          ) : scanList?.active && (!summary || summary.scan_id === scanList.active.scan_id) ? (
-            <ProgressBar progress={scanList.active} />
+          {liveProgress ? (
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <ProgressBar progress={liveProgress} />
+              </div>
+              {scanControl ? (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md border border-base-600 px-3 py-1.5 text-small hover:border-warning hover:text-warning disabled:opacity-40"
+                  disabled={stopping || Boolean(scanList?.active?.cancelling)}
+                  title="Stop the running scan. Checks already in flight finish; the partial scan is dropped."
+                  onClick={() => void onStop()}
+                >
+                  {stopping || scanList?.active?.cancelling ? "Stopping…" : "Stop"}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </header>
         {error ? <p className="text-small text-error">{error}</p> : null}

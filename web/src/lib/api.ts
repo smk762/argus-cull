@@ -1,4 +1,4 @@
-import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
+import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type PurgeResult, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
 import type { Caption, CohortConfig } from "./cohorts";
 import type { ImageLabel, LabelFile } from "./labels";
 import { exportBody } from "./paths";
@@ -7,6 +7,9 @@ import { scanBody } from "./select";
 import { parseSseFrames } from "./sse";
 
 export class ApiError extends Error {}
+
+/** The scan stream ended because someone stopped the scan. Not a failure. */
+export class ScanStopped extends ApiError {}
 
 export async function readError(response: Response): Promise<string> {
   try {
@@ -75,15 +78,31 @@ async function postSse<T>(
   if (!response.ok) throw new ApiError(await readError(response));
   let result: T | null = null;
   let failure: string | null = null;
+  let stopped = false;
   await readSse(response, (event, data) => {
     if (event === "progress") onProgress(data as Progress);
     else if (event === "chunk") onChunk?.(data as ScanChunk);
     else if (event === "complete") result = data as T;
+    else if (event === "cancelled") stopped = true;
     else if (event === "error") failure = (data as { detail?: string }).detail || "The curator reported an error.";
   });
+  if (stopped) throw new ScanStopped("The scan was stopped.");
   if (failure) throw new ApiError(failure);
   if (result == null) throw new ApiError("The curator ended the stream without a result.");
   return result;
+}
+
+/** Stop the running scan (curator 0.7). The curator drops its partial summary. */
+export async function cancelScan(scanId: string): Promise<void> {
+  const response = await fetch(`${curatorUrl()}/scan/${encodeURIComponent(scanId)}/cancel`, { method: "POST" });
+  if (!response.ok) throw new ApiError(await readError(response));
+}
+
+/** Stop the running scan, if any, and delete every cached scan (curator 0.7). Source images stay. */
+export async function purgeScans(): Promise<PurgeResult> {
+  const response = await fetch(`${curatorUrl()}/scans/purge`, { method: "POST" });
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as PurgeResult;
 }
 
 export function scanFolder(
