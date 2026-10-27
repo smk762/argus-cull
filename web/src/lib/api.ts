@@ -3,7 +3,7 @@ import type { Caption, CohortConfig } from "./cohorts";
 import type { ImageLabel, LabelFile } from "./labels";
 import { exportBody } from "./paths";
 import type { PolicyChoice } from "./policies";
-import { scanBody } from "./select";
+import { scanBody, type ScanChecks } from "./select";
 import { parseSseFrames } from "./sse";
 
 export class ApiError extends Error {}
@@ -109,10 +109,11 @@ export function scanFolder(
   folder: string,
   detectors: Detectors,
   policies: PolicyChoice | null,
+  checks: ScanChecks,
   onProgress: (progress: Progress) => void,
   onChunk: (chunk: ScanChunk) => void,
 ): Promise<ScanSummary> {
-  return postSse("/scan/folder/stream", scanBody(folder, detectors, policies), onProgress, onChunk);
+  return postSse("/scan/folder/stream", scanBody(folder, detectors, policies, checks), onProgress, onChunk);
 }
 
 /** Labels live on this page's server, not the curator. The folder is the one the scan reports. */

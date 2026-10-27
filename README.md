@@ -46,6 +46,10 @@ Scan streams progress from `POST /scan/folder/stream`. Image batches arrive whil
 
 Changing a filter calls `POST /scan/{id}/select`. Counts and `keep_reason` update without another scan. Rejected images stay on the grid.
 
+A *Scan checks* section in the sidebar leaves Fashionpedia out of the next scan (`garments=off` in the URL, so a shared link scans the same way). It is the slowest local check and nothing else waits on it; the wardrobe filters stay empty for a scan that skipped it.
+
+A frame with no detected face has no MiVOLO age, and the tile's age cell says *no face* rather than *–* once face detection has reported. The *Faces* control beside the age range narrows the grid to those frames, or to the frames with a face, since the frames with the least to go on for the under-18 check are often the most explicit ones.
+
 ### SingGuard policies
 
 When `GET /detectors` lists `singguard_policies` (curator 0.5 and later), the sidebar offers the official policy for the next scan (`adult` by default) and the variants to run beside it for comparison. Each variant is another SingGuard pass per image. The official verdict drives the keep set, but a variant that flags where the official policy passes blurs the frame, puts an orange core in the tile's shield, and opens in the detail view, and the unsafe and rule filters send `guard_policies` so "Show left out" and export drop the same images. Each tile carries the file name, the quality score, the NudeNet exposed score, the apparent age, the keep reason, and a shield coloured by the verdict the shield follows: grey before a verdict, green passed, red flagged. An orange core in a green or red shield means another policy disagreed with that verdict. The detail view opens with those numbers in one strip, then the quality, appearance, Places365, Fashionpedia, and NudeNet tables, then a table of every policy's verdict with the reasoning folded under it.

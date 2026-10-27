@@ -1,7 +1,7 @@
 "use client";
 
 import { thumbUrl } from "@/lib/api";
-import { awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
 import { shieldState, shieldTitle } from "@/lib/policies";
 import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
@@ -13,15 +13,15 @@ function baseName(relPath: string): string {
   return relPath.split("/").pop() || relPath;
 }
 
-/** Primary face age as MiVOLO years or a FairFace bracket, with a younger face beside it when one exists. */
-function apparentAge(image: ImageResult): string {
+/** Primary face age as MiVOLO years or a FairFace bracket, with a younger face beside it when one exists. With no age, why: see `ageMissing`. */
+function apparentAge(image: ImageResult, pending: readonly string[], faces: boolean): string {
   const attrs = image.primary_face_attributes;
   const primary = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? null;
   const youngest = youngestAge(image);
   if (youngest != null && (attrs?.age_years == null || youngest < attrs.age_years)) {
     return primary ? `${primary} · ${Math.round(youngest)}y` : `${Math.round(youngest)}y`;
   }
-  return primary ?? "–";
+  return primary ?? ageMissing(image, pending, faces);
 }
 
 export function PhotoGrid({
@@ -37,6 +37,8 @@ export function PhotoGrid({
   ageFrom,
   ageTo,
   race,
+  faceView = "all",
+  facesRan = false,
   keepView,
   keptCount,
   leftOutCount,
@@ -45,6 +47,7 @@ export function PhotoGrid({
   onDirection,
   onAge,
   onRace,
+  onFaceView,
   onKeepView,
   onPage,
   onOpen,
@@ -74,6 +77,10 @@ export function PhotoGrid({
   ageFrom: number | null;
   ageTo: number | null;
   race: FaceRace | null;
+  /** Only the images with no detected face, or only those with one. */
+  faceView?: FaceView;
+  /** Face detection reported on this scan, so a frame with none says "no face" rather than "–". */
+  facesRan?: boolean;
   keepView: KeepView;
   /** Null until the keep set has been calculated. */
   keptCount: number | null;
@@ -84,6 +91,7 @@ export function PhotoGrid({
   onDirection: (direction: SortDirection) => void;
   onAge: (ageFrom: number | null, ageTo: number | null) => void;
   onRace: (race: FaceRace | null) => void;
+  onFaceView?: (view: FaceView) => void;
   onKeepView: (view: KeepView) => void;
   onPage: (page: number) => void;
   onOpen: (relPath: string) => void;
@@ -183,6 +191,21 @@ export function PhotoGrid({
             ))}
           </select>
         </label>
+        {onFaceView ? (
+          <label className="flex items-center gap-2">
+            Faces
+            <select
+              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+              aria-label="Faces"
+              value={faceView}
+              onChange={(event) => onFaceView(event.target.value as FaceView)}
+            >
+              <option value="all">All</option>
+              <option value="none">No face</option>
+              <option value="some">With a face</option>
+            </select>
+          </label>
+        ) : null}
         {onTag && (tagOptions.length > 0 || tag) ? (
           <label className="flex items-center gap-2">
             Cohort
@@ -225,7 +248,7 @@ export function PhotoGrid({
       </div>
       {selectedHere > deletableSelected ? <p className="text-caption text-text-muted">Only under-18 exposed images can be deleted.</p> : null}
       {deleteError ? <p className="text-caption text-warning">{deleteError}</p> : null}
-      {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, race, ageFrom, ageTo)}</p> : null}
+      {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, race, ageFrom, ageTo, faceView)}</p> : null}
       {/* Tiles are at least 12rem wide, whatever the sidebar leaves, so the quality · nude · age row never gets cut. Phones keep two across. */}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]">
         {slice.map((image) => {
@@ -234,7 +257,7 @@ export function PhotoGrid({
           const override = labels?.get(image.rel_path)?.override ?? null;
           const blurred = shouldBlur(image, pending, blur, override);
           const checking = awaitingChecks(image, pending);
-          const age = apparentAge(image);
+          const age = apparentAge(image, pending, facesRan);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
           return (
@@ -284,7 +307,7 @@ export function PhotoGrid({
                     </span>
                     <span title="NudeNet exposed score">{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
                     <span className="text-text-muted">age</span>
-                    <span className="truncate" title="Apparent age, MiVOLO years or FairFace bracket">
+                    <span className={`truncate ${age === "no face" ? "text-text-muted" : ""}`} title={age === "no face" ? "No face detected, so no age estimate. MiVOLO reads a face." : "Apparent age, MiVOLO years or FairFace bracket"}>
                       {age}
                     </span>
                     {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
@@ -339,8 +362,10 @@ function ShowButton({
   );
 }
 
-function emptyView(keepView: KeepView, race: FaceRace | null, ageFrom: number | null, ageTo: number | null): string {
+function emptyView(keepView: KeepView, race: FaceRace | null, ageFrom: number | null, ageTo: number | null, faceView: FaceView = "all"): string {
   const which = keepView === "kept" ? "kept image" : keepView === "left-out" ? "left-out image" : "image";
+  if (faceView === "none") return `No ${which} without a face in this view.`;
+  if (faceView === "some") return `No ${which} with a face in this view.`;
   if (race && (ageFrom != null || ageTo != null)) return `No ${which} matches this race and age range.`;
   if (race) return `No ${which} of this race.`;
   if (ageFrom != null || ageTo != null || keepView !== "all") return keepView === "all" ? "No image in this age range." : `No ${which} in this view.`;

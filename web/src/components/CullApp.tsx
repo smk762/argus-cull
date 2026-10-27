@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getFolders, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { DEFAULT_BLUR, filterByAge, filterByKeep, filterByRace, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
@@ -39,6 +39,7 @@ import { PhotoGrid } from "./PhotoGrid";
 import { PolicyDialog } from "./PolicyDialog";
 import { PolicyPicker } from "./PolicyPicker";
 import { ProgressBar } from "./ProgressBar";
+import { ScanChecks } from "./ScanChecks";
 import { ScanList as ScanListView } from "./ScanList";
 
 const LIGHTBOX_URL = "https://github.com/smk762/argus-lightbox";
@@ -337,6 +338,7 @@ export function CullApp() {
   const [ageFrom, setAgeFrom] = useState<number | null>(null);
   const [ageTo, setAgeTo] = useState<number | null>(null);
   const [race, setRace] = useState<FaceRace | null>(null);
+  const [faceView, setFaceView] = useState<FaceView>("all");
   const [keepView, setKeepView] = useState<KeepView>("all");
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -364,7 +366,8 @@ export function CullApp() {
     return out;
   }, [auto, labels]);
   const tagOptions = useMemo(() => cohorts.tags.map((rule) => rule.tag).filter((name) => visible.some((image) => (tags.get(image.rel_path) ?? []).includes(name))), [cohorts, visible, tags]);
-  const viewed = useMemo(() => filterByTag(filterByRace(filterByAge(visible, ageFrom, ageTo), race), tags, tag), [visible, ageFrom, ageTo, race, tags, tag]);
+  const viewed = useMemo(() => filterByTag(filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), tags, tag), [visible, ageFrom, ageTo, race, faceView, tags, tag]);
+  const facesKnown = useMemo(() => facesRan(summary), [summary]);
   const gallery = useMemo(() => sortImages(filterByKeep(viewed, reasons, keepView), sort, sortDirection), [viewed, reasons, keepView, sort, sortDirection]);
   const keepCounts = useMemo(() => {
     if (!reasons) return null;
@@ -376,7 +379,7 @@ export function CullApp() {
   const policyNames = useMemo(() => policiesRun(summary), [summary]);
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
-  const cohortBase = useMemo(() => filterByRace(filterByAge(visible, ageFrom, ageTo), race), [visible, ageFrom, ageTo, race]);
+  const cohortBase = useMemo(() => filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), [visible, ageFrom, ageTo, race, faceView]);
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
 
@@ -448,6 +451,7 @@ export function CullApp() {
         view.folder,
         live,
         policyChoice,
+        { skipGarments: view.skipGarments },
         (event) => {
           setProgress((current) => mergeProgress(current ?? [], event));
           // Curator 0.5.1 says on every progress event which checks are still running.
@@ -618,12 +622,13 @@ export function CullApp() {
     }
   }
 
-  function changeGallery(patch: { sort?: GridSort; direction?: SortDirection; ageFrom?: number | null; ageTo?: number | null; race?: FaceRace | null; tag?: string | null }) {
+  function changeGallery(patch: { sort?: GridSort; direction?: SortDirection; ageFrom?: number | null; ageTo?: number | null; race?: FaceRace | null; faceView?: FaceView; tag?: string | null }) {
     if (patch.sort != null) setSort(patch.sort);
     if (patch.direction != null) setSortDirection(patch.direction);
     if ("ageFrom" in patch) setAgeFrom(patch.ageFrom ?? null);
     if ("ageTo" in patch) setAgeTo(patch.ageTo ?? null);
     if ("race" in patch) setRace(patch.race ?? null);
+    if (patch.faceView != null) setFaceView(patch.faceView);
     if ("tag" in patch) setTag(patch.tag ?? null);
     if (view.page !== 1) replaceView({ ...view, page: 1 });
   }
@@ -695,6 +700,7 @@ export function CullApp() {
           disabled={scanBusy}
           onChange={(next) => replaceView({ ...view, guardPolicy: next.policy, guardVariants: next.variants })}
         />
+        <ScanChecks detectors={detectors} skipGarments={view.skipGarments} disabled={scanBusy} onSkipGarments={(skip) => replaceView({ ...view, skipGarments: skip })} />
         <ScanListView
           scans={scanList}
           root={health?.source_root ?? null}
@@ -826,6 +832,9 @@ export function CullApp() {
             onAge={(from, to) => changeGallery({ ageFrom: from, ageTo: to })}
             race={race}
             onRace={(next) => changeGallery({ race: next })}
+            faceView={faceView}
+            onFaceView={(next) => changeGallery({ faceView: next })}
+            facesRan={facesKnown}
             tag={tag}
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
@@ -868,6 +877,9 @@ export function CullApp() {
             onAge={(from, to) => changeGallery({ ageFrom: from, ageTo: to })}
             race={race}
             onRace={(next) => changeGallery({ race: next })}
+            faceView={faceView}
+            onFaceView={(next) => changeGallery({ faceView: next })}
+            facesRan={facesKnown}
             tag={tag}
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
@@ -906,6 +918,7 @@ export function CullApp() {
           scanId={summary.scan_id}
           reason={reasons?.get(photo.rel_path)}
           pending={pending}
+          facesRan={facesKnown}
           scanning={liveScan}
           blur={displayBlur}
           onClose={() => replaceView({ ...view, photo: null })}
