@@ -18,7 +18,7 @@ export function ScanList({
   scans: ScanListData | null;
   root: string | null;
   current: string | null;
-  /** The curator can stop a scan and purge its cache (0.7 and later). */
+  /** The curator can stop a scan and purge its cache (0.6 and later). */
   canPurge?: boolean;
   purging?: boolean;
   onOpen: (scanId: string, folder: string) => void;

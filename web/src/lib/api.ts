@@ -92,13 +92,13 @@ async function postSse<T>(
   return result;
 }
 
-/** Stop the running scan (curator 0.7). The curator drops its partial summary. */
+/** Stop the running scan (curator 0.6). The curator drops its partial summary. */
 export async function cancelScan(scanId: string): Promise<void> {
   const response = await fetch(`${curatorUrl()}/scan/${encodeURIComponent(scanId)}/cancel`, { method: "POST" });
   if (!response.ok) throw new ApiError(await readError(response));
 }
 
-/** Stop the running scan, if any, and delete every cached scan (curator 0.7). Source images stay. */
+/** Stop the running scan, if any, and delete every cached scan (curator 0.6). Source images stay. */
 export async function purgeScans(): Promise<PurgeResult> {
   const response = await fetch(`${curatorUrl()}/scans/purge`, { method: "POST" });
   if (!response.ok) throw new ApiError(await readError(response));
