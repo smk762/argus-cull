@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { imageUrl, thumbUrl } from "@/lib/api";
-import { awaitingChecks, DEFAULT_BLUR, isMinorExposed, revealHeld, shouldBlur, youngestAge, type BlurPolicy } from "@/lib/chunks";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, revealHeld, shouldBlur, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
@@ -433,6 +433,8 @@ function Summary({
   override,
   checking,
   scanning,
+  pending,
+  facesRan,
 }: {
   image: ImageResult;
   reason: string | undefined;
@@ -440,9 +442,11 @@ function Summary({
   checking: boolean;
   /** The scan is still running, so there is no keep set to report yet. */
   scanning: boolean;
+  pending: readonly string[];
+  facesRan: boolean;
 }) {
   const attrs = image.primary_face_attributes;
-  const age = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? "–";
+  const age = attrs?.age_years != null ? `${Math.round(attrs.age_years)}y` : attrs?.age ?? ageMissing(image, pending, facesRan);
   const state = shieldState(image, override);
   const cells: [string, ReactNode][] = [
     [
@@ -479,6 +483,7 @@ export function PhotoDialog({
   scanId,
   reason,
   pending,
+  facesRan = false,
   scanning = false,
   blur = DEFAULT_BLUR,
   onClose,
@@ -499,6 +504,8 @@ export function PhotoDialog({
   scanId: string;
   reason: string | undefined;
   pending: readonly string[];
+  /** Face detection reported on this scan, so a frame with none says "no face" rather than "–". */
+  facesRan?: boolean;
   /** The scan is still running, so there is no keep set to report yet. */
   scanning?: boolean;
   blur?: BlurPolicy;
@@ -628,7 +635,7 @@ export function PhotoDialog({
           ) : null}
         </div>
         <div className="mt-4 space-y-4 text-small">
-          <Summary image={image} reason={reason} override={override} checking={checking} scanning={scanning} />
+          <Summary image={image} reason={reason} override={override} checking={checking} scanning={scanning} pending={pending} facesRan={facesRan} />
           {blocked ? (
             <p className="text-caption text-warning">
               {deleteError ?? "Delete removes this file from the source folder. Review the ages and scores in this panel first."}

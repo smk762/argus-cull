@@ -118,7 +118,14 @@ export function guardBody(detectors: Detectors, choice: PolicyChoice | null): Gu
 }
 
 /** Turn a detector on only when /detectors says its weights are loaded. */
-export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null): ScanBody {
+/** What the viewer chose to leave out of a scan. Every check the curator has loaded runs unless named here. */
+export interface ScanChecks {
+  skipGarments: boolean;
+}
+
+export const ALL_CHECKS: ScanChecks = { skipGarments: false };
+
+export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null, checks: ScanChecks = ALL_CHECKS): ScanBody {
   const fairface = detectors.fairface;
   const mivolo = detectors.mivolo;
   return {
@@ -129,7 +136,7 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
       mivolo,
     },
     scenes: { enabled: detectors.places365 },
-    garments: { enabled: detectors.garments, min_conf: 0.3 },
+    garments: { enabled: detectors.garments && !checks.skipGarments, min_conf: 0.3 },
     // NudeNet and SingGuard are remote servers. Ask only when /detectors says the URL is set.
     nsfw: { enabled: Boolean(detectors.nudenet) },
     guard: guardBody(detectors, policies),

@@ -183,6 +183,36 @@ export function filterByKeep(images: ImageResult[], reasons: ReadonlyMap<string,
   });
 }
 
+/**
+ * Face detection has reported on this scan: the summary says it ran, or a
+ * batch already carries a face. A live scan's batches do not carry the
+ * config, so the faces found so far stand in for it.
+ */
+export function facesRan(summary: Pick<ScanSummary, "faces_config" | "results"> | null): boolean {
+  if (!summary) return false;
+  return summary.faces_config.enabled || summary.results.some((image) => image.face_count > 0);
+}
+
+/**
+ * What the age cell says when there is no age: "…" while the faces are still
+ * coming, "no face" when detection ran and found none, "–" when it did not run.
+ * A frame with no face has no MiVOLO estimate, which is worth seeing as such:
+ * the frames with the least to go on are often the most explicit ones.
+ */
+export function ageMissing(image: Pick<ImageResult, "face_count">, pending: readonly string[], ran: boolean): "…" | "no face" | "–" {
+  if (pending.includes("faces")) return "…";
+  if (ran && image.face_count === 0) return "no face";
+  return "–";
+}
+
+export type FaceView = "all" | "none" | "some";
+
+/** Keep only images with no detected face, or only those with one. */
+export function filterByFaces(images: ImageResult[], view: FaceView): ImageResult[] {
+  if (view === "all") return images;
+  return images.filter((image) => (view === "none" ? image.face_count === 0 : image.face_count > 0));
+}
+
 /** Hide images whose primary face is not this FairFace race. No selection shows every image. Images with no race drop out once a race is selected. */
 export function filterByRace(images: ImageResult[], race: FaceRace | null): ImageResult[] {
   if (race == null) return images;

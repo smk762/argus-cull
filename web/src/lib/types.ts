@@ -417,6 +417,8 @@ export interface ViewState {
   guardPolicy: GuardPolicy | null;
   /** Policies run beside the official one, for comparison. */
   guardVariants: GuardPolicy[];
+  /** Leave Fashionpedia out of the next scan. It is the slowest local check and nothing else waits on it. */
+  skipGarments: boolean;
   filter: FilterState;
 }
 
@@ -508,6 +510,7 @@ export const DEFAULT_VIEW: ViewState = {
   cluster: null,
   guardPolicy: null,
   guardVariants: [],
+  skipGarments: false,
   filter: DEFAULT_FILTER,
 };
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { exposedLabelsForRequest, guardRuleLabel, isSensitive, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
-import { awaitingChecks, blurFromEnv, filterByAge, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages } from "./chunks";
+import { ageMissing, awaitingChecks, blurFromEnv, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { splitGuardExplanation } from "./guardText";
 import { mergeProgress, phaseLabel, progressRatio } from "./progress";
@@ -123,6 +123,13 @@ describe("url state", () => {
     expect(parseView(new URLSearchParams("nsfw=0.1")).filter.nsfwThreshold).toBeNull();
   });
 
+  it("keeps the garment skip in the URL", () => {
+    expect(parseView(new URLSearchParams("garments=off")).skipGarments).toBe(true);
+    expect(parseView(new URLSearchParams("garments=on")).skipGarments).toBe(false);
+    expect(parseView(new URLSearchParams("")).skipGarments).toBe(false);
+    expect(serializeView({ ...DEFAULT_VIEW, skipGarments: true })).toBe("?garments=off");
+  });
+
   it("drops an unknown pose and omits the default filter", () => {
     expect(parseView(new URLSearchParams("f=pose:sideways")).filter.facePoses).toEqual([]);
     expect(serializeView(DEFAULT_VIEW)).toBe("");
@@ -156,6 +163,10 @@ describe("select body", () => {
     expect(scanBody("shoots", NONE).scenes).toEqual({ enabled: false });
     expect(scanBody("shoots", { ...NONE, fairface: true }).faces.enabled).toBe(true);
     expect(scanBody("", DETECTORS).garments.enabled).toBe(true);
+    // The viewer can leave Fashionpedia out; nothing else in the scan waits on it.
+    expect(scanBody("", DETECTORS, null, { skipGarments: true }).garments.enabled).toBe(false);
+    expect(scanBody("", DETECTORS, null, { skipGarments: true }).scenes.enabled).toBe(true);
+    expect(scanBody("", NONE, null, { skipGarments: false }).garments.enabled).toBe(false);
     expect(scanBody("shoots", NONE).nsfw).toEqual({ enabled: false });
     expect(scanBody("shoots", NONE).guard).toEqual({ enabled: false });
     expect(scanBody("shoots", { ...NONE, nudenet: true, singguard: true }).nsfw.enabled).toBe(true);
@@ -443,6 +454,11 @@ describe("scan chunks", () => {
     expect(sortImages([waiting, white, indian], "race", "asc").map((image) => image.rel_path)).toEqual(["white.jpg", "indian.jpg", "wait.jpg"]);
     expect(filterByRace([white, indian, waiting], "white").map((image) => image.rel_path)).toEqual(["white.jpg"]);
     expect(filterByRace([white, indian], null)).toHaveLength(2);
+    const faceless = { rel_path: "body.jpg", face_count: 0, faces: [] } as unknown as ImageResult;
+    const faced = { rel_path: "face.jpg", face_count: 1 } as unknown as ImageResult;
+    expect(filterByFaces([faceless, faced], "none").map((image) => image.rel_path)).toEqual(["body.jpg"]);
+    expect(filterByFaces([faceless, faced], "some").map((image) => image.rel_path)).toEqual(["face.jpg"]);
+    expect(filterByFaces([faceless, faced], "all")).toHaveLength(2);
     const reasons = new Map([
       ["white.jpg", ""],
       ["indian.jpg", "below-score"],
@@ -547,5 +563,24 @@ describe("sse", () => {
     const parsed = parseSseFrames(chunk);
     expect(parsed.events).toEqual([{ event: "progress", data: { phase: "scoring", done: 1, total: 4 } }]);
     expect(parsed.rest.startsWith("event: comp")).toBe(true);
+  });
+});
+
+describe("age cell with no age", () => {
+  const faceless = { face_count: 0 } as ImageResult;
+  const faced = { face_count: 1 } as ImageResult;
+  it("says why the age is missing", () => {
+    // Faces still coming: wait. Detection ran and found none: say so. Detection did not run: nothing to say.
+    expect(ageMissing(faceless, ["faces"], true)).toBe("…");
+    expect(ageMissing(faceless, [], true)).toBe("no face");
+    expect(ageMissing(faceless, [], false)).toBe("–");
+    expect(ageMissing(faced, [], true)).toBe("–");
+  });
+  it("knows face detection ran from the summary or from a face already found", () => {
+    expect(facesRan(null)).toBe(false);
+    expect(facesRan(summary({ enabled: true }))).toBe(true);
+    expect(facesRan(summary({ enabled: false }))).toBe(false);
+    // A live scan's batches carry no config; a face in a batch is proof enough.
+    expect(facesRan({ ...summary({ enabled: false }), results: [faced] })).toBe(true);
   });
 });
