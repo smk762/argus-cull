@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -94,6 +94,10 @@ describe("policy verdicts", () => {
     expect(matchesShieldPick("unsafe-split", "unsafe")).toBe(true);
     expect(matchesShieldPick("safe-split", "unsafe")).toBe(false);
     expect(matchesShieldPick("none", "unsafe")).toBe(false);
+    // The same queries hide tiles. All keeps frames with no verdict; Unsafe does not.
+    expect(filterByShield(images, "all")).toHaveLength(6);
+    expect(filterByShield(images, "unsafe").map((image) => image.rel_path)).toEqual(["agreed.jpg", "single.jpg", "dissent.jpg"]);
+    expect(filterByShield(images, "unsafe")).not.toContainEqual(expect.objectContaining({ rel_path: "unchecked.jpg" }));
   });
 
   it("spots a recorded unsafe whose only rule is Safe", () => {

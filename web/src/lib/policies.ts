@@ -128,7 +128,15 @@ export function matchesShieldPick(state: ShieldState, pick: ShieldPick): boolean
 
 /** Paths whose shield matches the pick. An override names the policy the shield follows, the way the tile does. */
 export function pathsByShield(images: readonly (Guarded & { rel_path: string })[], pick: ShieldPick, override: (relPath: string) => string | null = () => null): string[] {
-  return images.filter((image) => matchesShieldPick(shieldState(image, override(image.rel_path)), pick)).map((image) => image.rel_path);
+  return filterByShield(images, pick, override).map((image) => image.rel_path);
+}
+
+export type ShieldView = "all" | ShieldPick;
+
+/** Keep only images whose shield matches the pick. `all` leaves the list unchanged, including frames with no verdict. */
+export function filterByShield<T extends Guarded & { rel_path: string }>(images: readonly T[], view: ShieldView, override: (relPath: string) => string | null = () => null): T[] {
+  if (view === "all") return [...images];
+  return images.filter((image) => matchesShieldPick(shieldState(image, override(image.rel_path)), view));
 }
 
 /** Short word for the state, as the detail view's summary strip shows it. */
