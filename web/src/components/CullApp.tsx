@@ -24,6 +24,7 @@ import {
   type ScanSummary,
   type SelectResult,
 } from "@/lib/types";
+import { mergeProgress } from "@/lib/progress";
 import { withoutScan } from "@/lib/purge";
 import { withFilter } from "@/lib/urlState";
 import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch } from "@/lib/urlStore";
@@ -76,7 +77,7 @@ export function CullApp() {
   const [listingError, setListingError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ScanSummary | null>(null);
   const [selection, setSelection] = useState<SelectResult | null>(null);
-  const [progress, setProgress] = useState<Progress | null>(null);
+  const [progress, setProgress] = useState<Progress[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanList, setScanList] = useState<ScanList | null>(null);
   const [pendingChecks, setPendingChecks] = useState<string[]>([]);
@@ -408,13 +409,15 @@ export function CullApp() {
   const page = Math.min(view.page, pages);
 
   const scanBusy = scanning || Boolean(scanList?.active);
+  // The scan on screen is the one still running, here or in another tab.
+  const liveScan = scanning || Boolean(scanList?.active && (!summary || summary.scan_id === scanList.active.scan_id));
   const canScan = sourceReady && !scanBusy;
 
   const onScan = useCallback(async () => {
     if (!sourceReady || scanning || scanList?.active) return;
     setScanning(true);
     setError(null);
-    setProgress({ phase: "starting", done: 0, total: 0 });
+    setProgress([{ phase: "starting", done: 0, total: 0 }]);
     setPendingChecks([]);
     setSelection(null);
     setSummary(null);
@@ -426,9 +429,13 @@ export function CullApp() {
         view.folder,
         live,
         policyChoice,
-        setProgress,
+        (event) => {
+          setProgress((current) => mergeProgress(current ?? [], event));
+          // Curator 0.6 says on every progress event which checks are still running.
+          if (event.pending_checks) setPendingChecks(event.pending_checks);
+        },
         (chunk) => {
-          setProgress({ phase: chunk.phase, done: chunk.done, total: chunk.total });
+          setProgress((current) => mergeProgress(current ?? [], { phase: chunk.phase, done: chunk.done, total: chunk.total }));
           setPendingChecks(chunk.pending_checks ?? []);
           setSummary((current) => mergeChunk(current, chunk));
           if (!announced) {
@@ -716,6 +723,7 @@ export function CullApp() {
             scanId={summary.scan_id}
             page={page}
             pending={pending}
+            scanning={liveScan}
             blur={displayBlur}
             sort={sort}
             direction={sortDirection}
@@ -757,6 +765,7 @@ export function CullApp() {
             scanId={summary.scan_id}
             page={page}
             pending={pending}
+            scanning={liveScan}
             blur={displayBlur}
             sort={sort}
             direction={sortDirection}
@@ -806,6 +815,7 @@ export function CullApp() {
           scanId={summary.scan_id}
           reason={reasons?.get(photo.rel_path)}
           pending={pending}
+          scanning={liveScan}
           blur={displayBlur}
           onClose={() => replaceView({ ...view, photo: null })}
           onPrevious={previousPhoto ? () => openPhoto(previousPhoto.rel_path) : null}
