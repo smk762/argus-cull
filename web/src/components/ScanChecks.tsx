@@ -7,8 +7,8 @@ import type { Detectors, Health, ScanSummary } from "@/lib/types";
  * the URL like the policy, so a shared link scans the same way.
  *
  * Garments: Fashionpedia is the slowest local model and nothing else in the
- * scan waits on it, so a scan that does not need the wardrobe filters runs
- * faster without it.
+ * scan waits on it, so it is off unless asked for. Tick it when the wardrobe
+ * filters are wanted for the scan.
  *
  * Set: MiVOLO reads a face, so a frame that shows none has no age, and in a
  * set those are often the most explicit frames. With curator 0.7's
@@ -20,19 +20,19 @@ export function ScanChecks({
   detectors,
   health,
   summary,
-  skipGarments,
+  withGarments,
   setAge,
   disabled,
-  onSkipGarments,
+  onWithGarments,
   onSetAge,
 }: {
   detectors: Detectors | null;
   health: Health | null;
   summary: ScanSummary | null;
-  skipGarments: boolean;
+  withGarments: boolean;
   setAge: boolean;
   disabled: boolean;
-  onSkipGarments: (skip: boolean) => void;
+  onWithGarments: (on: boolean) => void;
   onSetAge: (on: boolean) => void;
 }) {
   const garments = Boolean(detectors?.garments);
@@ -44,10 +44,10 @@ export function ScanChecks({
       {garments ? (
         <>
           <label className="flex items-center gap-2 text-small">
-            <input type="checkbox" checked={!skipGarments} disabled={disabled} onChange={(event) => onSkipGarments(!event.target.checked)} />
+            <input type="checkbox" checked={withGarments} disabled={disabled} onChange={(event) => onWithGarments(event.target.checked)} />
             Garments (Fashionpedia)
           </label>
-          <p className="text-caption text-text-muted">{skipGarments ? "The next scan skips garment detection, so the wardrobe filters stay empty for it." : "The slowest local check. Turn it off when the wardrobe filters are not needed."}</p>
+          <p className="text-caption text-text-muted">{withGarments ? "The next scan reads garments, so the wardrobe filters work for it. This is the slowest local check." : "Off by default: the slowest local check, and nothing else waits on it. Turn it on when the wardrobe filters are needed."}</p>
         </>
       ) : null}
       {set ? (

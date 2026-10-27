@@ -123,11 +123,12 @@ describe("url state", () => {
     expect(parseView(new URLSearchParams("nsfw=0.1")).filter.nsfwThreshold).toBeNull();
   });
 
-  it("keeps the garment skip in the URL", () => {
-    expect(parseView(new URLSearchParams("garments=off")).skipGarments).toBe(true);
-    expect(parseView(new URLSearchParams("garments=on")).skipGarments).toBe(false);
-    expect(parseView(new URLSearchParams("")).skipGarments).toBe(false);
-    expect(serializeView({ ...DEFAULT_VIEW, skipGarments: true })).toBe("?garments=off");
+  it("keeps the garment opt-in in the URL", () => {
+    expect(parseView(new URLSearchParams("garments=on")).withGarments).toBe(true);
+    expect(parseView(new URLSearchParams("garments=off")).withGarments).toBe(false);
+    expect(parseView(new URLSearchParams("")).withGarments).toBe(false);
+    expect(serializeView({ ...DEFAULT_VIEW, withGarments: true })).toBe("?garments=on");
+    expect(serializeView({ ...DEFAULT_VIEW, withGarments: false })).toBe("");
     expect(parseView(new URLSearchParams("set=1")).setAge).toBe(true);
     expect(serializeView({ ...DEFAULT_VIEW, setAge: true })).toBe("?set=1");
   });
@@ -164,15 +165,16 @@ describe("select body", () => {
     expect(scanBody("shoots", NONE).faces).toEqual({ enabled: false, fairface: false, mivolo: false });
     expect(scanBody("shoots", NONE).scenes).toEqual({ enabled: false });
     expect(scanBody("shoots", { ...NONE, fairface: true }).faces.enabled).toBe(true);
-    expect(scanBody("", DETECTORS).garments.enabled).toBe(true);
-    // The viewer can leave Fashionpedia out; nothing else in the scan waits on it.
-    expect(scanBody("", DETECTORS, null, { skipGarments: true, setAge: false }).garments.enabled).toBe(false);
-    expect(scanBody("", DETECTORS, null, { skipGarments: true, setAge: false }).scenes.enabled).toBe(true);
-    expect(scanBody("", NONE, null, { skipGarments: false, setAge: false }).garments.enabled).toBe(false);
+    // Fashionpedia is opt in: the slowest local check, and nothing else in the scan waits on it.
+    expect(scanBody("", DETECTORS).garments.enabled).toBe(false);
+    expect(scanBody("", DETECTORS, null, { withGarments: true, setAge: false }).garments.enabled).toBe(true);
+    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: false }).scenes.enabled).toBe(true);
+    // Asking for it does nothing when the weights are not loaded.
+    expect(scanBody("", NONE, null, { withGarments: true, setAge: false }).garments.enabled).toBe(false);
     // The set age is asked for only with MiVOLO loaded; the field is absent otherwise so an older curator sees nothing new.
-    expect(scanBody("", DETECTORS, null, { skipGarments: false, setAge: true }).faces.set_age).toBe(true);
-    expect(scanBody("", DETECTORS, null, { skipGarments: false, setAge: false }).faces).not.toHaveProperty("set_age");
-    expect(scanBody("", { ...DETECTORS, mivolo: false }, null, { skipGarments: false, setAge: true }).faces).not.toHaveProperty("set_age");
+    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: true }).faces.set_age).toBe(true);
+    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: false }).faces).not.toHaveProperty("set_age");
+    expect(scanBody("", { ...DETECTORS, mivolo: false }, null, { withGarments: false, setAge: true }).faces).not.toHaveProperty("set_age");
     expect(scanBody("shoots", NONE).nsfw).toEqual({ enabled: false });
     expect(scanBody("shoots", NONE).guard).toEqual({ enabled: false });
     expect(scanBody("shoots", { ...NONE, nudenet: true, singguard: true }).nsfw.enabled).toBe(true);

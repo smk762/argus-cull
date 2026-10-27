@@ -117,17 +117,18 @@ export function guardBody(detectors: Detectors, choice: PolicyChoice | null): Gu
   return variants.length > 0 ? { enabled, policy, variants } : { enabled, policy };
 }
 
-/** Turn a detector on only when /detectors says its weights are loaded. */
-/** What the viewer chose to leave out of a scan. Every check the curator has loaded runs unless named here. */
+/** What the viewer asked for beyond the curator's defaults. Every check named here is off unless asked for, and runs only when its weights are loaded. */
 export interface ScanChecks {
-  skipGarments: boolean;
+  /** Run Fashionpedia. It is the slowest local check and nothing else in the scan waits on it. */
+  withGarments: boolean;
   /** Ask for the set's age on frames with no face. Sent only when MiVOLO is loaded; an older curator ignores it. */
   setAge: boolean;
 }
 
-export const ALL_CHECKS: ScanChecks = { skipGarments: false, setAge: false };
+export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false };
 
-export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null, checks: ScanChecks = ALL_CHECKS): ScanBody {
+/** Turn a detector on only when /detectors says its weights are loaded. */
+export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null, checks: ScanChecks = DEFAULT_CHECKS): ScanBody {
   const fairface = detectors.fairface;
   const mivolo = detectors.mivolo;
   return {
@@ -139,7 +140,7 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
       ...(checks.setAge && mivolo ? { set_age: true } : {}),
     },
     scenes: { enabled: detectors.places365 },
-    garments: { enabled: detectors.garments && !checks.skipGarments, min_conf: 0.3 },
+    garments: { enabled: detectors.garments && checks.withGarments, min_conf: 0.3 },
     // NudeNet and SingGuard are remote servers. Ask only when /detectors says the URL is set.
     nsfw: { enabled: Boolean(detectors.nudenet) },
     guard: guardBody(detectors, policies),
