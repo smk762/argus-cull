@@ -1,16 +1,22 @@
 "use client";
 
-import type { PolicyChoice } from "@/lib/policies";
+import { policyByName, type PolicyChoice } from "@/lib/policies";
+import type { GuardPolicyInfo } from "@/lib/types";
+
+import { PolicyWording } from "./PolicyWording";
 
 /** Which SingGuard policies the next scan runs. The official one drives the keep set; variants run beside it to compare. */
 export function PolicyPicker({
   available,
   choice,
+  catalog = null,
   disabled,
   onChange,
 }: {
   available: readonly string[];
   choice: PolicyChoice;
+  /** Curator 0.8: the wording of each named policy. */
+  catalog?: readonly GuardPolicyInfo[] | null;
   disabled: boolean;
   onChange: (choice: PolicyChoice) => void;
 }) {
@@ -68,6 +74,7 @@ export function PolicyPicker({
           </p>
         </>
       ) : null}
+      <PolicyWording info={policyByName(catalog, choice.policy)} />
     </section>
   );
 }

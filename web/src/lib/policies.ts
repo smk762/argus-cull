@@ -1,5 +1,5 @@
 import { isPositive, type ImageLabel } from "./labels";
-import type { GuardResult, ImageResult } from "./types";
+import type { GuardPolicyInfo, GuardResult, ImageResult } from "./types";
 
 /** What a scan asks SingGuard to run: the official policy and the variants beside it. */
 export interface PolicyChoice {
@@ -20,6 +20,19 @@ export function normalisePolicyChoice(choice: PolicyChoice, available: readonly 
   const policy = available.includes(choice.policy) ? choice.policy : (available.includes("adult") ? "adult" : available[0] ?? choice.policy);
   const variants = available.filter((name) => name !== policy && choice.variants.includes(name));
   return { policy, variants };
+}
+
+/** The listed wording for a policy name, or null when `/guard/policies` did not name it. */
+export function policyByName(catalog: readonly GuardPolicyInfo[] | null | undefined, name: string): GuardPolicyInfo | null {
+  return catalog?.find((entry) => entry.name === name) ?? null;
+}
+
+/** One word for `source`, as the wording fold's summary shows it. */
+export function policySourceLabel(source: string): string {
+  if (source === "file") return "policy file";
+  if (source === "singguard") return "SingGuard";
+  if (source === "builtin") return "built in";
+  return source;
 }
 
 export interface PolicyVerdict {

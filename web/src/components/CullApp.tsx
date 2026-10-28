@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
+import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
 import { DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
@@ -19,6 +19,7 @@ import {
   type ExportMode,
   type FaceRace,
   type ExportResult,
+  type GuardPolicyInfo,
   type Health,
   type Progress,
   type ScanList,
@@ -59,6 +60,7 @@ export function CullApp() {
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [detectors, setDetectors] = useState<Detectors | null>(null);
+  const [guardPolicies, setGuardPolicies] = useState<GuardPolicyInfo[] | null>(null);
   const [labels, setLabels] = useState<Map<string, ImageLabel>>(() => new Map());
   const [labelsFolder, setLabelsFolder] = useState<string | null>(null);
   const [labelSaving, setLabelSaving] = useState(false);
@@ -184,6 +186,14 @@ export function CullApp() {
         if (!cancel) setDetectors((current) => (sameJson(current, body) ? current : body));
       } catch {
         if (!cancel) setDetectors(null);
+      }
+      try {
+        const body = await getGuardPolicies();
+        if (cancel) return;
+        const next = body?.policies ?? null;
+        setGuardPolicies((current) => (sameJson(current, next) ? current : next));
+      } catch {
+        if (!cancel) setGuardPolicies(null);
       }
     }
     void loadStatus();
@@ -970,6 +980,7 @@ export function CullApp() {
           from={scanForm.from}
           detectors={detectors}
           health={health}
+          policies={guardPolicies}
           canScan={canScan}
           busyLabel={!sourceReady ? "The curator is not ready." : scanBusy ? "A scan is running. Scan is available once it finishes, or stop it from the progress bar." : null}
           onClose={() => setScanForm(null)}
@@ -987,6 +998,7 @@ export function CullApp() {
           cohortNotes={[cohortError, wantsCaptions ? captionError : null].filter((note): note is string => Boolean(note))}
           onClose={() => setPolicyOpen(false)}
           onDownloadLabels={labels.size > 0 ? downloadLabels : null}
+          catalog={guardPolicies}
         />
       ) : null}
       {exportOpen ? (
