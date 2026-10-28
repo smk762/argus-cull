@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { getFolders } from "@/lib/api";
 import { templateSummary, type ScanTemplate } from "@/lib/scanTemplate";
-import type { Detectors, FolderListing, Health } from "@/lib/types";
+import type { Detectors, FolderListing, GuardPolicyInfo, Health } from "@/lib/types";
 
 import { FolderPicker } from "./FolderPicker";
 import { PolicyPicker } from "./PolicyPicker";
@@ -22,6 +22,7 @@ export function ScanDialog({
   from,
   detectors,
   health,
+  policies = null,
   canScan,
   busyLabel,
   onClose,
@@ -32,6 +33,8 @@ export function ScanDialog({
   from: string | null;
   detectors: Detectors | null;
   health: Health | null;
+  /** Curator 0.8: wording of each named policy, for the form. */
+  policies?: readonly GuardPolicyInfo[] | null;
   /** The curator is up and no scan is running. */
   canScan: boolean;
   /** Why Scan is off, when it is: "Scan in progress" or the curator's trouble. */
@@ -92,7 +95,7 @@ export function ScanDialog({
           </p>
         </div>
         <FolderPicker listing={listing} error={listingError} onOpen={(folder) => setDraft((current) => ({ ...current, folder }))} />
-        <PolicyPicker available={detectors?.singguard_policies ?? []} choice={draft.policy} disabled={false} onChange={(policy) => setDraft((current) => ({ ...current, policy }))} />
+        <PolicyPicker available={detectors?.singguard_policies ?? []} choice={draft.policy} catalog={policies} disabled={false} onChange={(policy) => setDraft((current) => ({ ...current, policy }))} />
         <ScanChecks
           detectors={detectors}
           health={health}

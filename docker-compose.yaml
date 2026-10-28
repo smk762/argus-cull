@@ -3,7 +3,7 @@ services:
     # Published 0.5.1: scan batches over the stream, GET /scans, delete of
     # under-18 exposed frames, and the adult SingGuard policies. No sibling
     # checkout is needed; docker-compose.local-curator.yaml builds one instead.
-    image: ghcr.io/smk762/argus-curator:0.7.0
+    image: ghcr.io/smk762/argus-curator:0.8.0
     ports:
       - "${CURATOR_PORT:-8101}:8101"
     environment:
