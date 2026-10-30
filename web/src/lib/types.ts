@@ -111,6 +111,18 @@ export const EXPOSED_LABELS = [
 ] as const satisfies readonly NudeNetLabel[];
 export type ExposedLabel = (typeof EXPOSED_LABELS)[number];
 
+/** Covered intimate classes. A detection here, with none of the exposed set, is suggestive. */
+export const SUGGESTIVE_LABELS = [
+  "FEMALE_BREAST_COVERED",
+  "FEMALE_GENITALIA_COVERED",
+  "BUTTOCKS_COVERED",
+  "ANUS_COVERED",
+] as const satisfies readonly NudeNetLabel[];
+
+/** NudeNet content rating on an image the detector checked. Unchecked images have none. */
+export const CONTENT_RATINGS = ["safe", "suggestive", "explicit"] as const;
+export type ContentRating = (typeof CONTENT_RATINGS)[number];
+
 /** SingGuard's default policy, addressed by letter the way `--guard-rules` accepts. */
 export const GUARD_RULES = [
   { id: "A", label: "A. Sexual Content Risk" },
@@ -306,6 +318,8 @@ export interface ImageResult {
   scene: SceneTags | null;
   garments: GarmentDetection[] | null;
   nsfw?: NsfwResult | null;
+  /** Curator #18: derived from NudeNet. Missing on an older server; null when NudeNet did not check the image. */
+  content_rating?: ContentRating | null;
   guard?: GuardResult | null;
   guard_variants?: GuardVariants;
 }
@@ -445,6 +459,8 @@ export interface FilterState {
   /** Null leaves the exposed score unused. Inclusive, and never below 0.2. */
   nsfwThreshold: number | null;
   nsfwExposedLabels: NudeNetLabel[];
+  /** Keep only these NudeNet ratings. Empty leaves the rating unused. Unchecked images drop once any are set. */
+  contentRatings: ContentRating[];
   guardUnsafe: boolean;
   guardRules: string[];
 }
@@ -464,6 +480,8 @@ export interface ViewState {
   withGarments: boolean;
   /** The folder is one set of one person: frames with no face may take the set's age. */
   setAge: boolean;
+  /** Person names by cluster id, for export (`face_names`). The cached scan is not changed. */
+  faceNames: Record<string, string>;
   filter: FilterState;
 }
 
@@ -490,6 +508,8 @@ export interface SelectRequest {
   nsfw_label_thresholds: Record<string, number> | null;
   /** Omitted when the selection is the server's default exposed set. */
   nsfw_exposed_labels?: NudeNetLabel[];
+  /** Keep only these ratings. Omitted or null leaves the rating unused. Unchecked images are excluded once this is set. */
+  content_ratings?: ContentRating[] | null;
   guard_unsafe: boolean;
   guard_rules: string[] | null;
   /** Policies the unsafe and rule filters read. Omitted means the official verdict only; listed means any of them. */
@@ -519,6 +539,8 @@ export interface ExportResult {
   selected_rel_paths: string[];
   exported_paths: Record<string, string>;
   exported_abs_paths: Record<string, string>;
+  /** Sidecars written beside exported files (`write_xmp`). Absent on an older curator. */
+  xmp_written?: number;
 }
 
 export const DEFAULT_FILTER: FilterState = {
@@ -542,6 +564,7 @@ export const DEFAULT_FILTER: FilterState = {
   garmentsUncropped: false,
   nsfwThreshold: null,
   nsfwExposedLabels: [...EXPOSED_LABELS],
+  contentRatings: [],
   guardUnsafe: false,
   guardRules: [],
 };
@@ -557,6 +580,7 @@ export const DEFAULT_VIEW: ViewState = {
   guardVariants: [],
   withGarments: false,
   setAge: false,
+  faceNames: {},
   filter: DEFAULT_FILTER,
 };
 

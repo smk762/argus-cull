@@ -245,6 +245,7 @@ describe("detail lines", () => {
     expect(qualityLine(image("a.jpg"))).toBe("0.800 · sharpness 350");
     expect(qualityLine(image("a.jpg", { score: 0, reject_reason: "blur" }))).toBe("0.000 · blur");
     expect(nudeNetLine({ exposed_score: 0.84, labels: { FEMALE_BREAST_EXPOSED: 0.84, BUTTOCKS_EXPOSED: 0.31, FACE_FEMALE: 0.9 } })).toBe("0.84 · female breast exposed 0.84, buttocks exposed 0.31");
+    expect(nudeNetLine({ exposed_score: 0.84, labels: { FEMALE_BREAST_EXPOSED: 0.84 } }, "explicit")).toBe("explicit · 0.84 · female breast exposed 0.84");
     expect(nudeNetLine({ exposed_score: 0, labels: { FACE_FEMALE: 0.9 } })).toBe("0.00 · nothing exposed at 0.2");
     expect(
       sceneLine(

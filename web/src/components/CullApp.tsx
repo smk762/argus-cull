@@ -28,7 +28,7 @@ import {
 } from "@/lib/types";
 import { mergeProgress } from "@/lib/progress";
 import { withoutScan } from "@/lib/purge";
-import { withFilter } from "@/lib/urlState";
+import { withFaceName, withFilter } from "@/lib/urlState";
 import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch } from "@/lib/urlStore";
 
 import { ExportDialog } from "./ExportDialog";
@@ -688,13 +688,16 @@ export function CullApp() {
     }, 150);
   }
 
-  async function onExport(dest: string, mode: ExportMode) {
+  async function onExport(dest: string, mode: ExportMode, writeXmp: boolean) {
     if (!summary) return;
     setExporting(true);
     setExportError(null);
     setExportProgress(null);
     try {
-      const result = await exportScan(summary.scan_id, dest, mode, selectBody(view.filter, gates, summary), setExportProgress);
+      const result = await exportScan(summary.scan_id, dest, mode, selectBody(view.filter, gates, summary), setExportProgress, {
+        writeXmp,
+        faceNames: view.faceNames,
+      });
       setExportResult(result);
     } catch (err: unknown) {
       setExportError(err instanceof Error ? err.message : "Export failed.");
@@ -745,6 +748,7 @@ export function CullApp() {
           detectors={detectors}
           summary={summary}
           gates={gates}
+          faceNames={view.faceNames}
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
@@ -847,9 +851,11 @@ export function CullApp() {
             clusters={summary.face_clusters}
             scanId={summary.scan_id}
             active={view.cluster}
+            names={view.faceNames}
             sensitive={sensitive}
             onOpen={(cluster) => replaceView(withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
             onClear={() => replaceView(withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
+            onName={(cluster, name) => replaceView(withFaceName(view, cluster, name))}
           />
         ) : null}
         {summary && view.view === "grid" ? (
@@ -1022,7 +1028,7 @@ export function CullApp() {
           error={exportError}
           result={exportResult}
           onClose={() => setExportOpen(false)}
-          onExport={(dest, mode) => void onExport(dest, mode)}
+          onExport={(dest, mode, writeXmp) => void onExport(dest, mode, writeXmp)}
           onDownloadExported={() => {
             if (exportResult) downloadText("exported-abs-paths.txt", exportedAbsPathList(exportResult), "text/plain");
           }}

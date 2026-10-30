@@ -31,8 +31,8 @@ One question: which files would make the training set, and which paths should a 
    - Attributes on the primary face: race, gender, FairFace age bracket, MiVOLO year range, confidence floor. Show `gender_source` and `age_source`. These are appearance guesses; the UI says so.
    - Scene: Places365 labels among the recorded top-k, indoor or outdoor, confidence floor.
    - Wardrobe: garment present, garment excluded, uncropped only.
-   - NudeNet: `nsfw_threshold` on the exposed score (0.2–1, inclusive) and which of NudeNet’s 18 classes that score covers (the five exposed classes start checked). SingGuard: `guard_unsafe`, or `guard_rules` by letter. Frames stay blurred until the NudeNet exposed score is under the display line, then again if policy marks them unsafe, unless that re-blur is opted out. A blurred frame stays hidden until click-to-reveal. A MiVOLO age under 18 with an exposed score of at least 0.2 (NudeNet’s reporting floor, on the five exposed classes) stays blurred, is never kept, and the detail view offers delete instead of reveal. A threshold or rule change updates the count before anyone exports. Unchecked images are excluded once a filter is on.
-4. **People.** A cluster list: name, count, representative thumb, grid of that cluster. Merge, split, and rename can wait; showing the clusters curator already computed cannot.
+   - NudeNet: `nsfw_threshold` on the exposed score (0.2–1, inclusive) and which of NudeNet’s 18 classes that score covers (the five exposed classes start checked). Content rating facet: `safe` / `suggestive` / `explicit` (`content_ratings`). SingGuard: `guard_unsafe`, or `guard_rules` by letter. Frames stay blurred until the NudeNet exposed score is under the display line, then again if policy marks them unsafe, unless that re-blur is opted out. A blurred frame stays hidden until click-to-reveal. A MiVOLO age under 18 with an exposed score of at least 0.2 (NudeNet’s reporting floor, on the five exposed classes) stays blurred, is never kept, and the detail view offers delete instead of reveal. A threshold or rule change updates the count before anyone exports. Unchecked images are excluded once a filter is on.
+4. **People.** A cluster list: name, count, representative thumb, grid of that cluster. A rename field per cluster is kept in the URL and sent as `face_names` at export; two clusters can share a name. Split stays out of scope.
 5. **Path list.** The thing lightbox cannot do, because the gallery stores filenames only. Two outputs, both from the current filter:
    - **List only.** `GET` or `POST` a text body, one `rel_path` per line, plus a sibling JSONL of `{rel_path, abs_path, keep_reason}`. Nothing is copied. This is the input for a follow-up script that deletes, moves, or processes.
    - **Export.** The existing `POST /export`: copy, symlink, or move into the export root, plus the manifest. Move stays behind the server flag and a confirm step. The UI offers the manifest’s `exported_abs_path` list as a download after the transfer.
@@ -44,7 +44,7 @@ A filtered view’s URL holds the scan id and the filter, so a selection can be 
 - Lens captions, category facets, explain, or compare. Link to lightbox.
 - Quarry, forge, proof, or training.
 - GPS, or a model that estimates where a photo was taken.
-- Face names written back into the user’s photo folder. Export and the path list are the write paths. XMP regions wait on #16.
+- Face names written back into the user’s photo folder. Export and the path list are the write paths. XMP regions, names and the content rating are an export checkbox (`write_xmp`).
 - A second implementation of scoring in the browser. The client sends the filter; the server decides `keep_reason`.
 
 ## Shape

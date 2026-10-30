@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
-import { exposedLabelsForRequest, guardRuleLabel, isSensitive, recordedGuardRules } from "./moderation";
+import { contentRating, exposedLabelsForRequest, guardRuleLabel, isSensitive, rateContent, ratingCounts, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
 import { ageMissing, awaitingChecks, blurFromEnv, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
@@ -11,7 +11,7 @@ import { withoutScan } from "./purge";
 import { availability, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
 import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
-import { parseView, serializeView } from "./urlState";
+import { clusterLabel, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
 
 const DETECTORS: Detectors = {
   torch: false,
@@ -90,6 +90,7 @@ describe("url state", () => {
         scenes: ["beach"],
         nsfwThreshold: 0.5,
         nsfwExposedLabels: ["ANUS_EXPOSED"] as FilterState["nsfwExposedLabels"],
+        contentRatings: ["safe", "explicit"] as FilterState["contentRatings"],
         guardRules: ["A"],
       },
     };
@@ -110,7 +111,35 @@ describe("url state", () => {
     expect(once.filter.garmentsUncropped).toBe(true);
     expect(once.filter.nsfwThreshold).toBe(0.5);
     expect(once.filter.nsfwExposedLabels).toEqual(["ANUS_EXPOSED"]);
+    expect(once.filter.contentRatings).toEqual(["explicit", "safe"]);
     expect(once.filter.guardRules).toEqual(["A"]);
+  });
+
+  it("keeps cluster names in the URL", () => {
+    const view = { ...DEFAULT_VIEW, faceNames: { face_1: "Ada", face_3: "Ada", face_2: "  " } };
+    expect(serializeView(view)).toBe("?name=face_1%3AAda&name=face_3%3AAda");
+    expect(parseView(new URLSearchParams("name=face_1:Ada&name=face_3:Ada")).faceNames).toEqual({ face_1: "Ada", face_3: "Ada" });
+    expect(parseView(new URLSearchParams("name=:Ada&name=face_1:&name=face_1")).faceNames).toEqual({});
+    expect(namedFaces({ face_1: " Ada ", " ": "x", face_2: "" })).toEqual({ face_1: "Ada" });
+    expect(clusterLabel("face_1", { face_1: " Ada " })).toBe("Ada");
+    expect(clusterLabel("face_2", { face_1: "Ada" })).toBe("face_2");
+    expect(withFaceName(DEFAULT_VIEW, "face_1", "Ada").faceNames).toEqual({ face_1: "Ada" });
+    expect(withFaceName({ ...DEFAULT_VIEW, faceNames: { face_1: "Ada" } }, "face_1", "").faceNames).toEqual({});
+  });
+
+  it("keeps a space in a cluster name through the URL", () => {
+    // Each keystroke writes the query string. Trimming would eat the space in "Mary Jane".
+    const typing = parseView(new URLSearchParams(serializeView({ ...DEFAULT_VIEW, faceNames: { face_1: "Mary " } }).slice(1)));
+    expect(typing.faceNames).toEqual({ face_1: "Mary " });
+    const named = parseView(new URLSearchParams(serializeView({ ...DEFAULT_VIEW, faceNames: { face_1: "Mary Jane" } }).slice(1)));
+    expect(named.faceNames).toEqual({ face_1: "Mary Jane" });
+    expect(namedFaces({ face_1: "Mary " })).toEqual({ face_1: "Mary" });
+  });
+
+  it("reads a content-rating facet from the URL", () => {
+    expect(parseView(new URLSearchParams("f=rating:explicit")).filter.contentRatings).toEqual(["explicit"]);
+    expect(parseView(new URLSearchParams("f=rating:nsfw")).filter.contentRatings).toEqual([]);
+    expect(serializeView({ ...DEFAULT_VIEW, filter: { ...DEFAULT_FILTER, contentRatings: ["safe"] } })).toBe("?f=rating%3Asafe");
   });
 
   it("keeps every NudeNet class in the exposed set", () => {
@@ -229,6 +258,14 @@ describe("select body", () => {
     expect(exposedLabelsForRequest({ ...filter, nsfwExposedLabels: [...EXPOSED_LABELS] }, true)).toBeUndefined();
   });
 
+  it("sends content ratings only for a scan that ran NudeNet", () => {
+    const open = availability({ ...DETECTORS, nudenet: true }, summary({ nsfw: true }));
+    const filter = { ...DEFAULT_FILTER, contentRatings: ["safe", "suggestive"] as FilterState["contentRatings"] };
+    expect(selectBody(filter, open).content_ratings).toEqual(["safe", "suggestive"]);
+    expect(selectBody(DEFAULT_FILTER, open).content_ratings).toBeNull();
+    expect(selectBody(filter, availability(DETECTORS, summary({}))).content_ratings).toBeNull();
+  });
+
   it("collects scene labels from the recorded top-k", () => {
     expect(recordedScenes(summary({}))).toEqual(["beach", "coast"]);
   });
@@ -256,6 +293,14 @@ describe("path downloads", () => {
     const body = exportBody("scan", "selection", "move", selectBody(DEFAULT_FILTER, openGates()));
     expect(body).toMatchObject({ scan_id: "scan", dest: "selection", mode: "move", write_manifest: true });
     expect(body).not.toHaveProperty("max_keep");
+    expect(body).not.toHaveProperty("write_xmp");
+    expect(body).not.toHaveProperty("face_names");
+    const named = exportBody("scan", "selection", "copy", selectBody(DEFAULT_FILTER, openGates()), {
+      writeXmp: true,
+      faceNames: { face_1: "Ada", face_3: "Ada", face_2: "  " },
+    });
+    expect(named.write_xmp).toBe(true);
+    expect(named.face_names).toEqual({ face_1: "Ada", face_3: "Ada" });
   });
 });
 
@@ -286,6 +331,24 @@ describe("moderation", () => {
     expect(isSensitive({ nsfw: { detections: [], labels: {}, exposed_score: 0 }, guard: { safe: true, rules: [] } })).toBe(false);
     expect(isSensitive({ nsfw: { detections: [], labels: { ANUS_EXPOSED: 0.4 }, exposed_score: 0.4 } })).toBe(true);
     expect(isSensitive({ guard: { safe: false, rules: ["A. Sexual Content Risk"] } })).toBe(true);
+  });
+
+  it("rates NudeNet the way the curator does", () => {
+    expect(rateContent(null)).toBeNull();
+    expect(rateContent({ detections: [], labels: {}, exposed_score: 0 })).toBe("safe");
+    expect(rateContent({ detections: [], labels: { FEMALE_BREAST_COVERED: 0.4 }, exposed_score: 0 })).toBe("suggestive");
+    expect(rateContent({ detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.4, FEMALE_BREAST_COVERED: 0.9 }, exposed_score: 0.4 })).toBe("explicit");
+    expect(rateContent({ detections: [], labels: { FACE_FEMALE: 0.9 }, exposed_score: 0.1 })).toBe("safe");
+    // An older curator that does not send content_rating still rates from nsfw.
+    expect(contentRating({ nsfw: { detections: [], labels: { BUTTOCKS_COVERED: 0.3 }, exposed_score: 0 } })).toBe("suggestive");
+    expect(contentRating({ content_rating: "safe", nsfw: { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.9 }, exposed_score: 0.9 } })).toBe("safe");
+    expect(contentRating({ content_rating: null, nsfw: { detections: [], labels: {}, exposed_score: 0 } })).toBeNull();
+    expect(ratingCounts([
+      { nsfw: { detections: [], labels: {}, exposed_score: 0 } },
+      { nsfw: { detections: [], labels: { FEMALE_BREAST_COVERED: 0.5 }, exposed_score: 0 } },
+      { nsfw: { detections: [], labels: { ANUS_EXPOSED: 0.7 }, exposed_score: 0.7 } },
+      { nsfw: null },
+    ])).toEqual({ safe: 1, suggestive: 1, explicit: 1 });
   });
 
   it("keeps default SingGuard letters and adds a custom rule", () => {
@@ -550,6 +613,7 @@ describe("folder change", () => {
         page: 3,
         photo: "a.png",
         cluster: "p1",
+        faceNames: { p1: "Ada" },
         filter: { ...DEFAULT_FILTER, minScore: 0.8, faceClusters: ["p1"], scenes: ["beach"] },
       },
       "scenes",
@@ -562,6 +626,7 @@ describe("folder change", () => {
     expect(next.filter.faceClusters).toEqual([]);
     expect(next.filter.scenes).toEqual([]);
     expect(next.filter.minScore).toBe(0.8);
+    expect(next.faceNames).toEqual({});
   });
 });
 
