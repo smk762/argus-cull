@@ -57,7 +57,7 @@ folder on disk ──▶ argus-curator :8101 ──▶ demo UI :3000
 
 The UI is a Next.js app, same generation as lightbox (App Router, static where it can be, Tailwind tokens if the suite palette is reused). It cannot be a pure static export: scans and exports are live. Pages call the curator server directly. `NEXT_PUBLIC_CURATOR_URL` defaults to `http://localhost:8101`.
 
-Compose runs the published curator image, the demo UI, a NudeNet server, and a SingGuard server (`inclusionAI/Sing-Guard-4b` on `:9150`, NVIDIA GPU). The photo mount is the source root. A second mount is the export root. Model caches stay in the volumes curator already uses (`argus_curator`, Hugging Face, InsightFace). SingGuard weights live in the `singguard_hf` volume.
+Compose runs the published curator image, the demo UI, and a NudeNet server. SingGuard is agent-composer's `/api/guard/check` (`ARGUS_CURATOR_SINGGUARD_URL`, the same guard darkroom uses). The optional `local-singguard` profile still builds an in-process `inclusionAI/Sing-Guard-4b` on this GPU; do not run it beside composer. The photo mount is the source root. A second mount is the export root. Model caches stay in the volumes curator already uses (`argus_curator`, Hugging Face, InsightFace).
 
 `GET /health` must answer before the UI offers Scan. If `/detectors` reports a model missing, that filter group is disabled and says which convert command produces the ONNX file (`fairface-convert`, `mivolo-convert`, `places365-convert`, `garments-convert`).
 
