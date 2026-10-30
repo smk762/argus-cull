@@ -17,7 +17,8 @@ services:
       - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
       # Both checks are on unless .env sets the URL empty.
       - ARGUS_CURATOR_NUDENET_URL=${ARGUS_CURATOR_NUDENET_URL-http://nudenet:8080}
-      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://singguard:9150}
+      # Darkroom's guard: agent-composer on the LAN. Empty turns the check off.
+      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://192.168.1.198:9150}
       # cascade: fast on every frame (about a second), slow only on the frames
       # fast flags, slow's verdict stands. fast is a verdict and rule only;
       # fast-slow and slow also write why.
@@ -46,9 +47,11 @@ services:
       nofile: 1000000
     restart: unless-stopped
 
-  # SingGuard (inclusionAI/Sing-Guard-4b). Curator calls POST /api/guard/check.
-  # The first start downloads the weights into the named volume. Needs an NVIDIA GPU.
+  # Optional local Sing-Guard-4b. Off unless `--profile local-singguard`.
+  # Prefer agent-composer (`ARGUS_CURATOR_SINGGUARD_URL`); this copy cannot
+  # do text-only checks and holds a GPU darkroom wants for ComfyUI.
   singguard:
+    profiles: ["local-singguard"]
     build:
       context: ./singguard
     environment:
