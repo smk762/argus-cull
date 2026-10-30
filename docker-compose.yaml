@@ -1,11 +1,11 @@
 services:
   argus-curator:
-    # Published 0.10.0, the CUDA image: face detection, MiVOLO, Places365 and
+    # Published 0.10.1, the CUDA image: face detection, MiVOLO, Places365 and
     # Fashionpedia on the GPU. The host needs the NVIDIA container runtime and a
     # driver for CUDA 13; on a host without one, use the CPU image
-    # (ghcr.io/smk762/argus-curator:0.10.0) and drop `gpus` below. No sibling
+    # (ghcr.io/smk762/argus-curator:0.10.1) and drop `gpus` below. No sibling
     # checkout is needed; docker-compose.local-curator.yaml builds one instead.
-    image: ghcr.io/smk762/argus-curator:0.10.0-gpu
+    image: ghcr.io/smk762/argus-curator:0.10.1-gpu
     gpus: all
     ports:
       - "${CURATOR_PORT:-8101}:8101"

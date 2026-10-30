@@ -6,7 +6,7 @@ Lightbox is the demo for argus-lens. This is the demo for the curator. The suite
 
 ## Run
 
-Curator 0.6 publishes `POST /scan/{id}/select`, `GET /image`, NudeNet, SingGuard with named policies and variants, image batches on the scan stream, `GET /scans`, `POST /scan/{id}/delete`, `POST /scan/{id}/cancel`, and `POST /scans/purge`; 0.7 adds the set age (`set_age` on `/health`); 0.8 adds `GET /guard/policies` (`guard_policy_text` on `/health`) so the page can show the wording a verdict was judged against; 0.8.1 names SingGuard's own "Adult Content (Non-criminal)" under Safe, because a "not this rule" line under a risk heading was read as a match. Curator 0.10 adds the CUDA image, person boxes and `people_check`, and falls back to `fast` on a SingGuard server without `cascade`. The compose file runs the published `ghcr.io/smk762/argus-curator:0.10.0-gpu` image, given the GPU (`gpus: all`; the host needs the NVIDIA container runtime and a CUDA 13 driver, or use `:0.10.0` and drop `gpus`), with a NudeNet server beside it. SingGuard is agent-composer on the LAN, the same guard darkroom uses:
+Curator 0.6 publishes `POST /scan/{id}/select`, `GET /image`, NudeNet, SingGuard with named policies and variants, image batches on the scan stream, `GET /scans`, `POST /scan/{id}/delete`, `POST /scan/{id}/cancel`, and `POST /scans/purge`; 0.7 adds the set age (`set_age` on `/health`); 0.8 adds `GET /guard/policies` (`guard_policy_text` on `/health`) so the page can show the wording a verdict was judged against; 0.8.1 names SingGuard's own "Adult Content (Non-criminal)" under Safe, because a "not this rule" line under a risk heading was read as a match. Curator 0.10 adds the CUDA image, person boxes and `people_check`, and falls back to `fast` on a SingGuard server without `cascade`. The compose file runs the published `ghcr.io/smk762/argus-curator:0.10.1-gpu` image, given the GPU (`gpus: all`; the host needs the NVIDIA container runtime and a CUDA 13 driver, or use `:0.10.1` and drop `gpus`), with a NudeNet server beside it. SingGuard is agent-composer on the LAN, the same guard darkroom uses:
 
 ```bash
 cp .env.example .env
@@ -23,7 +23,7 @@ docker compose -f docker-compose.yaml -f docker-compose.local-curator.yaml up --
 
 `NEXT_PUBLIC_CURATOR_URL` is baked in at image build time and defaults to `http://localhost:8101`, which is the published port the browser can reach.
 
-The curator runs the CUDA image (`0.10.0-gpu`, `gpus: all`), so the host needs the NVIDIA container runtime and a CUDA 13 driver. On a host without one, use `ghcr.io/smk762/argus-curator:0.10.0` and drop `gpus`. The curator takes turns on the GPU with argus-lens through a lock file in `ARGUS_GPU_LOCK_DIR` (`/tmp/argus-gpu` on the host); lens must mount the same directory. Set `ARGUS_GPU_COORDINATOR=none` to turn that off.
+The curator runs the CUDA image (`0.10.1-gpu`, `gpus: all`), so the host needs the NVIDIA container runtime and a CUDA 13 driver. On a host without one, use `ghcr.io/smk762/argus-curator:0.10.1` and drop `gpus`. The curator takes turns on the GPU with argus-lens through a lock file in `ARGUS_GPU_LOCK_DIR` (`/tmp/argus-gpu` on the host); lens must mount the same directory. Set `ARGUS_GPU_COORDINATOR=none` to turn that off.
 
 Put machine-local changes like those in `compose.override.yaml`, which compose merges automatically and git ignores. Check it after an update: an override that pins its own `image:` keeps the old curator, or names one that cannot be pulled.
 
