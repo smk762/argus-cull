@@ -1,3 +1,4 @@
+import { resolvedGuard } from "./policies";
 import {
   ADULT_RULE_A,
   EXPOSED_LABELS,
@@ -20,7 +21,7 @@ export function sameMembers(left: readonly string[], right: readonly string[]): 
 /** Blur until the viewer asks. An exposed score or an unsafe verdict is enough. */
 export function isSensitive(image: Pick<ImageResult, "nsfw" | "guard">): boolean {
   if ((image.nsfw?.exposed_score ?? 0) > 0) return true;
-  return image.guard?.safe === false;
+  return image.guard != null && !resolvedGuard(image.guard).safe;
 }
 
 export function nudeNetLabel(label: string): string {
@@ -70,7 +71,7 @@ export function recordedGuardRules(summary: ScanSummary | null, known: readonly 
   const knownSet = new Set(known);
   const extra = new Set<string>();
   for (const image of summary?.results ?? []) {
-    for (const rule of image.guard?.rules ?? []) {
+    for (const rule of image.guard ? resolvedGuard(image.guard).rules : []) {
       const letter = rule.trim().slice(0, 1).toUpperCase();
       if (!knownSet.has(letter) && !knownSet.has(rule)) extra.add(rule);
     }

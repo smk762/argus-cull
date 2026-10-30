@@ -2,11 +2,13 @@
 
 The model writes a verdict on the first line and the matched rule inside an
 ``<answer>`` tag. In ``fast-slow`` mode the first line is the fast first-token
-signal and the tag is the final judgment after reasoning, so the two can
-disagree. The tag decides; the first line only stands in when the tag is
-missing. In ``slow`` mode there is no first line at all (see app.py), and the
-explanation starts at ``[Step 1]``. A generation with neither a verdict line
-nor a tag is a failed check, not a pass.
+signal and the tag is the final judgment after reasoning. Fast is a screen:
+a pass stands, a flag is settled by deeper reasoning. The tag decides; a
+``[Step 3] Final Judgment`` that concludes safe or unsafe stands when the
+tag is missing; the first line only stands in when neither is present. In
+``slow`` mode there is no first line at all (see app.py), and the
+explanation starts at ``[Step 1]``. A generation with neither a verdict line,
+a Final Judgment, nor a tag is a failed check, not a pass.
 """
 
 from __future__ import annotations
@@ -17,6 +19,14 @@ import re
 log = logging.getLogger("singguard")
 
 _ANSWER = re.compile(r"<answer>\s*(.*?)\s*</answer>", re.IGNORECASE | re.DOTALL)
+_LATE_VERDICT_LINE = re.compile(r"^\s*\**\s*(safe|unsafe)\s*\**\s*[.!]?\s*$", re.IGNORECASE)
+_STEP3_HEADING = re.compile(r"^\[step 3\]", re.IGNORECASE)
+_CONCLUDE_RE = re.compile(
+    r"\b(?:therefore[,:]?\s+)?(?:(?:the\s+)?(?:content|image)\s+is|"
+    r"it\s+is(?:\s+classified\s+as)?|classified\s+as|conclude(?:s|d)?|"
+    r"final judgment[:\s]+)\s+(safe|unsafe)\b",
+    re.IGNORECASE,
+)
 _EXPLANATION_MAX = 4000
 
 
@@ -33,12 +43,37 @@ def _first_line_verdict(raw: str) -> bool | None:
     return None
 
 
+def _late_judgment(raw: str) -> bool | None:
+    """Verdict after reasoning: a standalone safe/unsafe line in Step 3, else its prose."""
+    found: bool | None = None
+    concluded: bool | None = None
+    in_step3 = False
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _STEP3_HEADING.match(stripped):
+            in_step3 = True
+            continue
+        if not in_step3:
+            continue
+        late = _LATE_VERDICT_LINE.match(stripped)
+        if late:
+            found = late.group(1).lower() == "safe"
+            continue
+        conclude = _CONCLUDE_RE.search(stripped)
+        if conclude:
+            concluded = conclude.group(1).lower() == "safe"
+    return found if found is not None else concluded
+
+
 def parse_generation(text: str) -> tuple[bool, str, str, bool | None]:
     """Return ``(safe, rule, explanation, fast_safe)`` from one generation.
 
     ``fast_safe`` is the first-line verdict, or None when the first line was
     not one. Raises :class:`NoVerdict` when there is neither an ``<answer>``
-    tag nor a first-line verdict, and when an unsafe verdict names no rule.
+    tag, a Step 3 conclusion, nor a first-line verdict, and when an unsafe
+    verdict names no rule.
     """
     raw = text.strip()
     if not raw:
@@ -53,6 +88,8 @@ def parse_generation(text: str) -> tuple[bool, str, str, bool | None]:
     explanation = body.strip()[:_EXPLANATION_MAX]
     if answer:
         safe = answer.lower() == "safe"
+    elif (late := _late_judgment(raw)) is not None:
+        safe = late
     elif fast_safe is not None:
         safe = fast_safe
     else:

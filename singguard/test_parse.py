@@ -84,6 +84,30 @@ class ParseGenerationTest(unittest.TestCase):
         self.assertTrue(explanation.startswith("[Step 1] Content Summary"))
         self.assertNotIn("<answer>", explanation)
 
+    def test_final_judgment_prose_is_a_verdict_without_an_answer_tag(self) -> None:
+        text = (
+            "[Step 1] Content Summary\n"
+            "A portrait of an adult.\n"
+            "[Step 3] Final Judgment\n"
+            "The subject is an adult. Therefore, the content is safe.\n"
+        )
+        safe, rule, explanation, fast_safe = parse_generation(text)
+        self.assertTrue(safe)
+        self.assertEqual(rule, "Safe")
+        self.assertIsNone(fast_safe)
+        self.assertIn("Final Judgment", explanation)
+
+    def test_a_safe_line_in_step_2_is_not_a_verdict(self) -> None:
+        text = (
+            "[Step 1] Content Summary\n"
+            "A request that is hard to place.\n"
+            "[Step 2] Check Risk Categories\n"
+            "safe\n"
+            "Looking at rule B more closely,"
+        )
+        with self.assertRaises(NoVerdict):
+            parse_generation(text)
+
     def test_missing_verdict_is_a_failure(self) -> None:
         with self.assertRaises(NoVerdict):
             parse_generation("I am not sure\nno tag here")

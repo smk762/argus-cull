@@ -5,7 +5,7 @@ import { contentRating, exposedLabelsForRequest, guardRuleLabel, isSensitive, ra
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
 import { ageMissing, awaitingChecks, blurFromEnv, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
-import { splitGuardExplanation } from "./guardText";
+import { cascadePath, displayGuardExplanation, finalJudgment, splitGuardExplanation } from "./guardText";
 import { mergeProgress, phaseLabel, progressRatio } from "./progress";
 import { withoutScan } from "./purge";
 import { availability, recordedScenes, scanBody, selectBody } from "./select";
@@ -331,6 +331,7 @@ describe("moderation", () => {
     expect(isSensitive({ nsfw: { detections: [], labels: {}, exposed_score: 0 }, guard: { safe: true, rules: [] } })).toBe(false);
     expect(isSensitive({ nsfw: { detections: [], labels: { ANUS_EXPOSED: 0.4 }, exposed_score: 0.4 } })).toBe(true);
     expect(isSensitive({ guard: { safe: false, rules: ["A. Sexual Content Risk"] } })).toBe(true);
+    expect(isSensitive({ guard: { safe: false, rules: ["Safe"] } })).toBe(false);
   });
 
   it("rates NudeNet the way the curator does", () => {
@@ -581,6 +582,23 @@ describe("scan chunks", () => {
 });
 
 describe("SingGuard explanation", () => {
+  it("reads a cascade Final Judgment as the verdict, not as a parser conflict", () => {
+    const text = [
+      "Cascade: fast flagged this; the slow pass is the verdict.",
+      "",
+      "SingGuard did not give a safe or unsafe verdict. The check is unsafe so an unreadable result is not treated as safe.",
+      "",
+      "[Step 3] Final Judgment",
+      "The image, when evaluated in isolation and in context, does not violate any of the defined risk categories. Therefore, the content is safe.",
+    ].join("\n");
+    expect(cascadePath(text)).toBe(true);
+    expect(finalJudgment(text)).toBe("safe");
+    const shown = displayGuardExplanation(text);
+    expect(shown).toContain("Final Judgment");
+    expect(shown).not.toContain("Cascade:");
+    expect(shown).not.toContain("unreadable");
+  });
+
   it("splits steps and marks the fired rule", () => {
     const text = [
       "[Step 1] Content Summary",

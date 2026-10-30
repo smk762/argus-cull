@@ -1,3 +1,4 @@
+import { finalJudgment } from "./guardText";
 import { isPositive, type ImageLabel } from "./labels";
 import type { GuardPolicyInfo, GuardResult, ImageResult } from "./types";
 
@@ -43,15 +44,35 @@ export interface PolicyVerdict {
 
 type Guarded = Pick<ImageResult, "guard" | "guard_variants">;
 
+/**
+ * Fast is a screen: a pass stands, a flag is settled by slower reasoning.
+ * When the recorded payload kept the snap or treated an unreadable parse as
+ * unsafe, but Step 3 or the answer said Safe, that slower result is the verdict.
+ */
+export function slowResultSafe(guard: GuardResult): boolean {
+  if (guard.safe) return true;
+  const judgment = finalJudgment(guard.explanation);
+  if (judgment === "safe") return true;
+  if (judgment === "unsafe") return false;
+  if (guard.rules.length > 0 && guard.rules.every((rule) => rule.trim().toLowerCase() === "safe")) return true;
+  return /the answer is Safe/i.test(guard.explanation ?? "");
+}
+
+/** The verdict to show and filter on: slow's result when it passed, else the record. */
+export function resolvedGuard(guard: GuardResult): GuardResult {
+  if (guard.safe || !slowResultSafe(guard)) return guard;
+  return { ...guard, safe: true, rules: [] };
+}
+
 /** Every verdict on an image, official first, then variants in the curator's order. */
 export function policyVerdicts(image: Guarded): PolicyVerdict[] {
   const out: PolicyVerdict[] = [];
   const official = image.guard ?? null;
   const officialName = official?.policy ?? null;
-  if (official) out.push({ policy: officialName ?? "default", result: official, official: true });
+  if (official) out.push({ policy: officialName ?? "default", result: resolvedGuard(official), official: true });
   for (const [policy, result] of Object.entries(image.guard_variants ?? {})) {
     if (policy === officialName || result == null) continue;
-    out.push({ policy, result, official: false });
+    out.push({ policy, result: resolvedGuard(result), official: false });
   }
   return out;
 }
@@ -180,9 +201,8 @@ export function shieldTitle(image: Guarded, override?: string | null): string {
 }
 
 /**
- * A verdict recorded as unsafe whose only rule is "Safe". SingGuard's fast
- * first-line signal said unsafe and its reasoned answer said Safe; a server
- * before this fix kept the first line. The scan needs re-running to settle it.
+ * A verdict recorded as unsafe whose only rule is "Safe". That is the fast
+ * screen, not a disagreement: `resolvedGuard` treats it as safe.
  */
 export function verdictConflict(guard: GuardResult): boolean {
   return !guard.safe && guard.rules.length > 0 && guard.rules.every((rule) => rule.trim().toLowerCase() === "safe");
