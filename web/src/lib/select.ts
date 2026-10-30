@@ -89,6 +89,7 @@ export function selectBody(filter: FilterState, gates: FilterAvailability, summa
     nsfw_threshold: threshold,
     nsfw_label_thresholds: null,
     nsfw_exposed_labels: exposedLabelsForRequest(filter, threshold != null),
+    content_ratings: listed(gates.nsfw, filter.contentRatings),
     guard_unsafe: gates.guard ? filter.guardUnsafe : false,
     guard_rules: filter.guardUnsafe ? null : listed(gates.guard, filter.guardRules),
     guard_policies: guardPoliciesForRequest(summary, guardActive),

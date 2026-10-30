@@ -8,7 +8,7 @@ import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type Coh
 import { confLine, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
 import { splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
-import { nudeNetLabel } from "@/lib/moderation";
+import { contentRating, nudeNetLabel } from "@/lib/moderation";
 import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "@/lib/policies";
 import { NUDENET_LABELS, slugLabel, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
@@ -139,13 +139,21 @@ function AppearanceTable({ image }: { image: ImageResult }) {
   );
 }
 
-function NudeNetTable({ nsfw }: { nsfw: NsfwResult }) {
+function NudeNetTable({ nsfw, rating }: { nsfw: NsfwResult; rating: ReturnType<typeof contentRating> }) {
   const detected = NUDENET_LABELS.filter((label) => nsfw.labels[label] != null).sort((left, right) => nsfw.labels[right] - nsfw.labels[left]);
   const quiet = NUDENET_LABELS.filter((label) => nsfw.labels[label] == null);
   return (
     <section>
       <table className="mt-1 w-full border-collapse text-small tabular-nums">
         <tbody>
+          {rating ? (
+            <tr>
+              <th scope="row" className="w-2/5 py-1 pr-3 text-left font-normal text-text-secondary">
+                Content rating
+              </th>
+              <td className="py-1 font-semibold capitalize">{rating}</td>
+            </tr>
+          ) : null}
           <tr>
             <th scope="row" className="w-2/5 py-1 pr-3 text-left font-normal text-text-secondary">
               Exposed score
@@ -668,8 +676,8 @@ export function PhotoDialog({
             <QualityTable image={image} />
           </Fold>
           {image.nsfw ? (
-            <Fold title="NudeNet" summary={nudeNetLine(image.nsfw)} open={false}>
-              <NudeNetTable nsfw={image.nsfw} />
+            <Fold title="NudeNet" summary={nudeNetLine(image.nsfw, contentRating(image))} open={false}>
+              <NudeNetTable nsfw={image.nsfw} rating={contentRating(image)} />
             </Fold>
           ) : null}
           {image.scene ? (

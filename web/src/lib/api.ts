@@ -1,7 +1,7 @@
 import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type GuardPolicies, type Health, type Progress, type PurgeResult, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
 import type { Caption, CohortConfig } from "./cohorts";
 import type { ImageLabel, LabelFile } from "./labels";
-import { exportBody } from "./paths";
+import { exportBody, type ExportExtras } from "./paths";
 import type { PolicyChoice } from "./policies";
 import { scanBody, type ScanChecks } from "./select";
 import { parseSseFrames } from "./sse";
@@ -188,6 +188,7 @@ export function exportScan(
   mode: ExportMode,
   filter: SelectRequest,
   onProgress: (progress: Progress) => void,
+  extras: ExportExtras = {},
 ): Promise<ExportResult> {
-  return postSse("/export/stream", exportBody(scanId, dest, mode, filter), onProgress);
+  return postSse("/export/stream", exportBody(scanId, dest, mode, filter, extras), onProgress);
 }

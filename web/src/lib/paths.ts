@@ -1,3 +1,4 @@
+import { namedFaces } from "./urlState";
 import type { ExportMode, ExportResult, SelectRequest, SelectRow } from "./types";
 
 export function lines(values: readonly string[]): string {
@@ -29,9 +30,23 @@ export interface ExportBody extends SelectRequest {
   mode: ExportMode;
   preserve_structure: boolean;
   write_manifest: boolean;
+  write_xmp?: boolean;
+  face_names?: Record<string, string>;
 }
 
-export function exportBody(scanId: string, dest: string, mode: ExportMode, filter: SelectRequest): ExportBody {
+export interface ExportExtras {
+  writeXmp?: boolean;
+  faceNames?: Record<string, string>;
+}
+
+export function exportBody(
+  scanId: string,
+  dest: string,
+  mode: ExportMode,
+  filter: SelectRequest,
+  extras: ExportExtras = {},
+): ExportBody {
+  const names = namedFaces(extras.faceNames ?? {});
   return {
     ...filter,
     scan_id: scanId,
@@ -39,5 +54,7 @@ export function exportBody(scanId: string, dest: string, mode: ExportMode, filte
     mode,
     preserve_structure: true,
     write_manifest: true,
+    ...(extras.writeXmp ? { write_xmp: true } : {}),
+    ...(names ? { face_names: names } : {}),
   };
 }

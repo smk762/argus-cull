@@ -3,10 +3,11 @@
 import type { ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
-import { guardRuleLabel, nudeNetLabel, recordedGuardRules } from "@/lib/moderation";
+import { guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
 import { recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
   AGE_BRACKETS,
+  CONTENT_RATINGS,
   ENVIRONMENTS,
   NUDENET_LABELS,
   GARMENTS,
@@ -20,7 +21,7 @@ import {
   type FilterState,
   type ScanSummary,
 } from "@/lib/types";
-import { toggleValue } from "@/lib/urlState";
+import { clusterLabel, toggleValue } from "@/lib/urlState";
 
 const APPEARANCE =
   "Race, gender, and age are appearance guesses from a model, not facts about a person. gender_source and age_source name which model made the guess.";
@@ -29,11 +30,13 @@ function CheckList<T extends string>({
   options,
   selected,
   label,
+  counts,
   onToggle,
 }: {
   options: readonly T[];
   selected: readonly T[];
   label: (value: T) => string;
+  counts?: Partial<Record<T, number>>;
   onToggle: (value: T) => void;
 }) {
   if (options.length === 0) return <p className="text-caption text-text-muted">Nothing recorded in this scan.</p>;
@@ -43,7 +46,10 @@ function CheckList<T extends string>({
         <li key={option}>
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} />
-            <span className="capitalize">{label(option)}</span>
+            <span className="capitalize">
+              {label(option)}
+              {counts?.[option] != null ? ` (${counts[option]})` : ""}
+            </span>
           </label>
         </li>
       ))}
@@ -99,6 +105,7 @@ export function Filters({
   detectors,
   summary,
   gates,
+  faceNames,
   onChange,
   unblurNsfw,
   onUnblurNsfw,
@@ -107,6 +114,7 @@ export function Filters({
   detectors: Detectors | null;
   summary: ScanSummary | null;
   gates: FilterAvailability;
+  faceNames: Record<string, string>;
   onChange: (patch: Partial<FilterState>) => void;
   unblurNsfw: boolean;
   onUnblurNsfw: (unblurNsfw: boolean) => void;
@@ -160,7 +168,7 @@ export function Filters({
         <CheckList
           options={clusters}
           selected={filter.faceClusters}
-          label={(id) => id}
+          label={(id) => clusterLabel(id, faceNames)}
           onToggle={(id) => onChange({ faceClusters: toggleValue(filter.faceClusters, id) })}
         />
         <p className="text-caption text-text-muted">Head pose</p>
@@ -292,6 +300,17 @@ export function Filters({
         >
           <p className="text-caption text-text-secondary">
             Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too. The first five are the usual exposed set; the rest are faces, covered parts, and other exposed areas.
+          </p>
+          <p className="text-caption text-text-muted">Content rating</p>
+          <CheckList
+            options={CONTENT_RATINGS}
+            selected={filter.contentRatings}
+            counts={ratingCounts(summary?.results ?? [])}
+            label={(rating) => rating}
+            onToggle={(rating) => onChange({ contentRatings: toggleValue(filter.contentRatings, rating) })}
+          />
+          <p className="text-caption text-text-muted">
+            Explicit is an exposed class at 0.2 or above; suggestive is a covered intimate class without that; safe is neither. An image NudeNet did not check is dropped once a rating is selected.
           </p>
           <label className="flex items-center gap-2 text-small">
             <input

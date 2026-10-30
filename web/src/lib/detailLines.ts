@@ -1,5 +1,5 @@
 import { nudeNetLabel } from "./moderation";
-import { EXPOSED_LABELS, slugLabel, type ImageResult, type NsfwResult, type SceneLabel } from "./types";
+import { EXPOSED_LABELS, slugLabel, type ContentRating, type ImageResult, type NsfwResult, type SceneLabel } from "./types";
 
 /**
  * One line each for the folded sections of the detail view, so a reader sees
@@ -13,12 +13,13 @@ export function qualityLine(image: Pick<ImageResult, "score" | "reject_reason" |
   return `${score} · sharpness ${Math.round(image.sharpness)}`;
 }
 
-/** The exposed score, then the exposed classes that scored, highest first: "0.84 · breast 0.84, buttocks 0.31". */
-export function nudeNetLine(nsfw: Pick<NsfwResult, "exposed_score" | "labels">): string {
+/** The rating, then the exposed score, then the exposed classes that scored, highest first: "explicit · 0.84 · breast 0.84". */
+export function nudeNetLine(nsfw: Pick<NsfwResult, "exposed_score" | "labels">, rating?: ContentRating | null): string {
   const exposed = EXPOSED_LABELS.filter((label) => nsfw.labels[label] != null)
     .sort((left, right) => nsfw.labels[right] - nsfw.labels[left])
     .map((label) => `${nudeNetLabel(label)} ${nsfw.labels[label].toFixed(2)}`);
-  return exposed.length > 0 ? `${nsfw.exposed_score.toFixed(2)} · ${exposed.join(", ")}` : `${nsfw.exposed_score.toFixed(2)} · nothing exposed at 0.2`;
+  const body = exposed.length > 0 ? `${nsfw.exposed_score.toFixed(2)} · ${exposed.join(", ")}` : `${nsfw.exposed_score.toFixed(2)} · nothing exposed at 0.2`;
+  return rating ? `${rating} · ${body}` : body;
 }
 
 /** The top scene and the environment: "bedroom 0.61 · indoor". */
