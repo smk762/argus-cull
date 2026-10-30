@@ -11,7 +11,7 @@ import { withoutScan } from "./purge";
 import { availability, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
 import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
-import { namedFaces, parseView, serializeView } from "./urlState";
+import { clusterLabel, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
 
 const DETECTORS: Detectors = {
   torch: false,
@@ -121,6 +121,25 @@ describe("url state", () => {
     expect(parseView(new URLSearchParams("name=face_1:Ada&name=face_3:Ada")).faceNames).toEqual({ face_1: "Ada", face_3: "Ada" });
     expect(parseView(new URLSearchParams("name=:Ada&name=face_1:&name=face_1")).faceNames).toEqual({});
     expect(namedFaces({ face_1: " Ada ", " ": "x", face_2: "" })).toEqual({ face_1: "Ada" });
+    expect(clusterLabel("face_1", { face_1: " Ada " })).toBe("Ada");
+    expect(clusterLabel("face_2", { face_1: "Ada" })).toBe("face_2");
+    expect(withFaceName(DEFAULT_VIEW, "face_1", "Ada").faceNames).toEqual({ face_1: "Ada" });
+    expect(withFaceName({ ...DEFAULT_VIEW, faceNames: { face_1: "Ada" } }, "face_1", "").faceNames).toEqual({});
+  });
+
+  it("keeps a space in a cluster name through the URL", () => {
+    // Each keystroke writes the query string. Trimming would eat the space in "Mary Jane".
+    const typing = parseView(new URLSearchParams(serializeView({ ...DEFAULT_VIEW, faceNames: { face_1: "Mary " } }).slice(1)));
+    expect(typing.faceNames).toEqual({ face_1: "Mary " });
+    const named = parseView(new URLSearchParams(serializeView({ ...DEFAULT_VIEW, faceNames: { face_1: "Mary Jane" } }).slice(1)));
+    expect(named.faceNames).toEqual({ face_1: "Mary Jane" });
+    expect(namedFaces({ face_1: "Mary " })).toEqual({ face_1: "Mary" });
+  });
+
+  it("reads a content-rating facet from the URL", () => {
+    expect(parseView(new URLSearchParams("f=rating:explicit")).filter.contentRatings).toEqual(["explicit"]);
+    expect(parseView(new URLSearchParams("f=rating:nsfw")).filter.contentRatings).toEqual([]);
+    expect(serializeView({ ...DEFAULT_VIEW, filter: { ...DEFAULT_FILTER, contentRatings: ["safe"] } })).toBe("?f=rating%3Asafe");
   });
 
   it("keeps every NudeNet class in the exposed set", () => {

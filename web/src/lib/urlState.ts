@@ -157,13 +157,18 @@ export function parseView(params: URLSearchParams): ViewState {
   };
 }
 
-/** `face_1:Ada` as export `face_names` stores them. A name is 1–200 characters after trim. */
+/**
+ * `face_1:Ada` as the URL stores a cluster name. The name is not trimmed: a
+ * trailing space is how "Mary Jane" is typed, because each keystroke writes
+ * the query string and a trim would eat the space. Empty-after-trim is dropped.
+ * A name is at most 200 characters, matching the input and the curator.
+ */
 function readFaceName(raw: string): { id: string; name: string } | null {
   const i = raw.indexOf(":");
   if (i <= 0) return null;
   const id = raw.slice(0, i).trim();
-  const name = raw.slice(i + 1).trim();
-  if (!id || !name || name.length > 200) return null;
+  const name = raw.slice(i + 1);
+  if (!id || !name.trim() || name.length > 200) return null;
   return { id, name };
 }
 
@@ -171,7 +176,7 @@ function readFaceName(raw: string): { id: string; name: string } | null {
 export function namedFaces(names: Record<string, string>): Record<string, string> | null {
   const out: Record<string, string> = {};
   for (const [id, name] of Object.entries(names)) {
-    const parsed = readFaceName(`${id}:${name}`);
+    const parsed = readFaceName(`${id}:${name.trim()}`);
     if (parsed) out[parsed.id] = parsed.name;
   }
   return Object.keys(out).length > 0 ? out : null;
@@ -206,10 +211,12 @@ export function serializeView(view: ViewState): string {
   if (view.guardVariants.length > 0) params.set("variants", view.guardVariants.join(","));
   if (view.withGarments) params.set("garments", "on");
   if (view.setAge) params.set("set", "1");
-  const names = namedFaces(view.faceNames);
-  if (names) {
-    for (const id of Object.keys(names).sort()) params.append("name", `${id}:${names[id]}`);
+  const names: Record<string, string> = {};
+  for (const [id, name] of Object.entries(view.faceNames)) {
+    const parsed = readFaceName(`${id}:${name}`);
+    if (parsed) names[parsed.id] = parsed.name;
   }
+  for (const id of Object.keys(names).sort()) params.append("name", `${id}:${names[id]}`);
   if (filter.minScore !== DEFAULT_FILTER.minScore) params.set("min_score", String(filter.minScore));
   if (filter.includeRejected) params.set("include_rejected", "1");
   if (filter.keepSimilar) params.set("keep_similar", "1");
