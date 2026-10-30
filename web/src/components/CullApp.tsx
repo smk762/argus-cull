@@ -8,7 +8,7 @@ import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type 
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
 import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
-import { pathsByShield, policiesRun, policyStats, type ShieldPick } from "@/lib/policies";
+import { filterByShield, pathsByShield, policiesRun, policyStats, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
 import { availability, selectBody } from "@/lib/select";
@@ -327,6 +327,7 @@ export function CullApp() {
   const [ageTo, setAgeTo] = useState<number | null>(null);
   const [race, setRace] = useState<FaceRace | null>(null);
   const [faceView, setFaceView] = useState<FaceView>("all");
+  const [shieldView, setShieldView] = useState<ShieldView>("all");
   const [keepView, setKeepView] = useState<KeepView>("all");
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -354,7 +355,11 @@ export function CullApp() {
     return out;
   }, [auto, labels]);
   const tagOptions = useMemo(() => cohorts.tags.map((rule) => rule.tag).filter((name) => visible.some((image) => (tags.get(image.rel_path) ?? []).includes(name))), [cohorts, visible, tags]);
-  const viewed = useMemo(() => filterByTag(filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), tags, tag), [visible, ageFrom, ageTo, race, faceView, tags, tag]);
+  const shieldOverride = useCallback((rel: string) => labels.get(rel)?.override ?? null, [labels]);
+  const viewed = useMemo(
+    () => filterByTag(filterByShield(filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), shieldView, shieldOverride), tags, tag),
+    [visible, ageFrom, ageTo, race, faceView, shieldView, shieldOverride, tags, tag],
+  );
   const facesKnown = useMemo(() => facesRan(summary), [summary]);
   const gallery = useMemo(() => sortImages(filterByKeep(viewed, reasons, keepView), sort, sortDirection), [viewed, reasons, keepView, sort, sortDirection]);
   const keepCounts = useMemo(() => {
@@ -367,7 +372,10 @@ export function CullApp() {
   const policyNames = useMemo(() => policiesRun(summary), [summary]);
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
-  const cohortBase = useMemo(() => filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), [visible, ageFrom, ageTo, race, faceView]);
+  const cohortBase = useMemo(
+    () => filterByShield(filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), shieldView, shieldOverride),
+    [visible, ageFrom, ageTo, race, faceView, shieldView, shieldOverride],
+  );
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
 
@@ -647,13 +655,14 @@ export function CullApp() {
     }
   }
 
-  function changeGallery(patch: { sort?: GridSort; direction?: SortDirection; ageFrom?: number | null; ageTo?: number | null; race?: FaceRace | null; faceView?: FaceView; tag?: string | null }) {
+  function changeGallery(patch: { sort?: GridSort; direction?: SortDirection; ageFrom?: number | null; ageTo?: number | null; race?: FaceRace | null; faceView?: FaceView; shieldView?: ShieldView; tag?: string | null }) {
     if (patch.sort != null) setSort(patch.sort);
     if (patch.direction != null) setSortDirection(patch.direction);
     if ("ageFrom" in patch) setAgeFrom(patch.ageFrom ?? null);
     if ("ageTo" in patch) setAgeTo(patch.ageTo ?? null);
     if ("race" in patch) setRace(patch.race ?? null);
     if (patch.faceView != null) setFaceView(patch.faceView);
+    if (patch.shieldView != null) setShieldView(patch.shieldView);
     if ("tag" in patch) setTag(patch.tag ?? null);
     if (view.page !== 1) replaceView({ ...view, page: 1 });
   }
@@ -864,6 +873,8 @@ export function CullApp() {
             onRace={(next) => changeGallery({ race: next })}
             faceView={faceView}
             onFaceView={(next) => changeGallery({ faceView: next })}
+            shieldView={shieldView}
+            onShieldView={(next) => changeGallery({ shieldView: next })}
             facesRan={facesKnown}
             tag={tag}
             tagOptions={tagOptions}
@@ -910,6 +921,8 @@ export function CullApp() {
             onRace={(next) => changeGallery({ race: next })}
             faceView={faceView}
             onFaceView={(next) => changeGallery({ faceView: next })}
+            shieldView={shieldView}
+            onShieldView={(next) => changeGallery({ shieldView: next })}
             facesRan={facesKnown}
             tag={tag}
             tagOptions={tagOptions}
