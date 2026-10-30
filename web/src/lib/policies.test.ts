@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policySourceLabel, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policySourceLabel, policyStats, policyVerdicts, resolvedGuard, shieldLabel, shieldState, shieldTitle, slowResultSafe, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -129,6 +129,40 @@ describe("policy verdicts", () => {
     expect(verdictConflict({ safe: false, rules: ["A. Sexual Content Risk"] })).toBe(false);
     expect(verdictConflict({ safe: false, rules: [] })).toBe(false);
     expect(verdictConflict({ safe: true, rules: ["Safe"] })).toBe(false);
+  });
+
+  it("treats a slow pass as safe, not as a disagreement with the fast flag", () => {
+    const cascadeSafe: GuardResult = {
+      safe: false,
+      rules: [],
+      policy: "adult-granular",
+      explanation: [
+        "Cascade: fast flagged this; the slow pass is the verdict.",
+        "SingGuard did not give a safe or unsafe verdict. The check is unsafe so an unreadable result is not treated as safe.",
+        "[Step 3] Final Judgment",
+        "The subject is an adult, the content is non-exploitative. Therefore, the content is safe.",
+      ].join("\n\n"),
+    };
+    expect(slowResultSafe(cascadeSafe)).toBe(true);
+    expect(resolvedGuard(cascadeSafe)).toMatchObject({ safe: true, rules: [] });
+    expect(verdictConflict({ safe: false, rules: ["Safe"] })).toBe(true);
+    expect(slowResultSafe({ safe: false, rules: ["Safe"] })).toBe(true);
+    expect(resolvedGuard({ safe: false, rules: ["Safe"] }).safe).toBe(true);
+    const image = { rel_path: "cascade.jpg", guard: cascadeSafe } as unknown as ImageResult;
+    expect(effectiveUnsafe(image)).toBe(false);
+    expect(shieldState(image)).toBe("safe");
+    expect(policyVerdicts(image)[0].result.safe).toBe(true);
+  });
+
+  it("keeps a slow fail, and an unreadable result with no final judgment", () => {
+    const slowFail: GuardResult = {
+      safe: false,
+      rules: ["A. Sexual Content Risk"],
+      explanation: "[Step 3] Final Judgment\nBased on the assessment, conclude unsafe.\n",
+    };
+    expect(slowResultSafe(slowFail)).toBe(false);
+    expect(resolvedGuard(slowFail).safe).toBe(false);
+    expect(slowResultSafe({ safe: false, rules: [], explanation: "SingGuard did not give a safe or unsafe verdict." })).toBe(false);
   });
 
   it("blurs and sorts on the union, and lets an override lift it", () => {

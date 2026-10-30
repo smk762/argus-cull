@@ -6,10 +6,10 @@ import { imageUrl, thumbUrl } from "@/lib/api";
 import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, measuredAges, revealHeld, shouldBlur, shownAge, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { confLine, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
-import { splitGuardExplanation } from "@/lib/guardText";
+import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { contentRating, nudeNetLabel } from "@/lib/moderation";
-import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "@/lib/policies";
+import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle } from "@/lib/policies";
 import { NUDENET_LABELS, slugLabel, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
@@ -177,7 +177,7 @@ function NudeNetTable({ nsfw, rating }: { nsfw: NsfwResult; rating: ReturnType<t
 }
 
 function GuardReport({ guard }: { guard: GuardResult }) {
-  const steps = splitGuardExplanation(guard.explanation ?? "", guard.rules);
+  const steps = splitGuardExplanation(displayGuardExplanation(guard.explanation ?? ""), guard.rules);
   if (steps.length === 0) return <p className="mt-2 text-caption text-text-muted">No reasoning recorded. Set ARGUS_CURATOR_SINGGUARD_THINKING=fast-slow to keep it.</p>;
   return (
     <div className="mt-3 space-y-3">
@@ -217,7 +217,7 @@ function PolicyReports({ image, override }: { image: ImageResult; override: stri
   if (verdicts.length === 0) return null;
   const official = verdicts.find((verdict) => verdict.official) ?? null;
   const state = shieldState(image, override);
-  const conflicts = verdicts.filter((verdict) => verdictConflict(verdict.result));
+  const cascaded = verdicts.some((verdict) => cascadePath(verdict.result.explanation));
   return (
     <section className="border-t border-base-700 pt-3">
       <h3 className="flex items-center gap-2 text-caption text-text-muted">
@@ -236,28 +236,20 @@ function PolicyReports({ image, override }: { image: ImageResult; override: stri
         <tbody>
           {verdicts.map((verdict) => {
             const differs = official != null && !verdict.official && verdict.result.safe !== official.result.safe;
-            const conflict = verdictConflict(verdict.result);
-            const notes = [
-              verdict.official ? "official" : null,
-              override === verdict.policy ? "shield follows this" : null,
-              differs ? "differs from official" : null,
-              conflict ? "answer said Safe" : null,
-            ].filter(Boolean);
+            const notes = [verdict.official ? "official" : null, override === verdict.policy ? "shield follows this" : null, differs ? "differs from official" : null].filter(Boolean);
             return (
               <tr key={verdict.policy} className="border-t border-base-700">
                 <td className="py-1 pr-3">{verdict.policy}</td>
                 <td className={`py-1 pr-3 ${verdict.result.safe ? "text-success" : "text-warning"}`}>{verdict.result.safe ? "Safe" : "Unsafe"}</td>
-                <td className="py-1 pr-3">{verdict.result.safe || conflict ? <span className="text-text-muted">–</span> : verdict.result.rules.join(", ")}</td>
-                <td className={`py-1 text-caption ${conflict ? "text-warning" : "text-text-muted"}`}>{notes.join(" · ")}</td>
+                <td className="py-1 pr-3">{verdict.result.safe ? <span className="text-text-muted">–</span> : verdict.result.rules.join(", ")}</td>
+                <td className="py-1 text-caption text-text-muted">{notes.join(" · ")}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      {conflicts.length > 0 ? (
-        <p className="mt-2 text-caption leading-relaxed text-warning">
-          SingGuard&apos;s first-line signal said unsafe and its reasoned answer said Safe. The recorded verdict kept the first line. The current server records the answer; rescan to settle it.
-        </p>
+      {cascaded ? (
+        <p className="mt-2 text-caption leading-relaxed text-text-muted">Fast flagged this for a closer look; the slow pass is the verdict.</p>
       ) : null}
       <div className="mt-2 space-y-2">
         {verdicts.map((verdict) => {
