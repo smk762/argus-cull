@@ -1,9 +1,8 @@
 services:
   argus-curator:
-    # Published 0.5.1: scan batches over the stream, GET /scans, delete of
-    # under-18 exposed frames, and the adult SingGuard policies. No sibling
+    # Published 0.9.0: XMP on export, content rating, POST /faces. No sibling
     # checkout is needed; docker-compose.local-curator.yaml builds one instead.
-    image: ghcr.io/smk762/argus-curator:0.8.1
+    image: ghcr.io/smk762/argus-curator:0.9.0
     ports:
       - "${CURATOR_PORT:-8101}:8101"
     environment:
@@ -26,7 +25,7 @@ services:
       # What the scan already knows, sent to SingGuard as recorded context:
       # age (MiVOLO estimate per face), folder, caption (a lens sidecar).
       # Empty sends the image alone.
-      - ARGUS_CURATOR_SINGGUARD_CONTEXT=${ARGUS_CURATOR_SINGGUARD_CONTEXT-age,folder}
+      - ARGUS_CURATOR_SINGGUARD_CONTEXT=${ARGUS_CURATOR_SINGGUARD_CONTEXT-age,folder,caption}
       # Empty keeps the curator's localhost:3000 allow-list. A set value replaces
       # that list, so name every origin the page is opened as.
       - CURATOR_CORS_ORIGINS=${CURATOR_CORS_ORIGINS-}
