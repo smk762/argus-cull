@@ -14,7 +14,6 @@ services:
       - CURATOR_EXPORT_PATH=/data/out
       - CURATOR_CACHE_DIR=/root/.cache/argus_curator/scans
       - HF_HOME=/root/.cache/huggingface
-      - ARGUS_CURATOR_FAIRFACE_MODEL=/root/.cache/argus_curator/models/fairface_res34_race7.onnx
       - ARGUS_CURATOR_MIVOLO_MODEL=/root/.cache/argus_curator/models/mivolo_v2_d1_384.onnx
       - ARGUS_CURATOR_PLACES365_MODEL=/root/.cache/argus_curator/models/places365_resnet18.onnx
       - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
@@ -41,6 +40,7 @@ services:
       # ARGUS_GPU_COORDINATOR=none in .env turns it off.
       - ARGUS_GPU_COORDINATOR=${ARGUS_GPU_COORDINATOR:-lease}
       - ARGUS_GPU_LEASE_PATH=/run/argus-gpu/argus-gpu.lock
+      - ARGUS_GPU_LEASE_TIMEOUT_S=${ARGUS_GPU_LEASE_TIMEOUT_S:-300}
     volumes:
       - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images
       - ${CURATOR_OUTPUT_PATH:-./out}:/data/out

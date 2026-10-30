@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { imageUrl, thumbUrl } from "@/lib/api";
-import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, measuredAges, revealHeld, shouldBlur, shownAge, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
+import { ageMissing, awaitingChecks, bodyAges, DEFAULT_BLUR, isMinorExposed, measuredAges, revealHeld, shouldBlur, shownAge, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { confLine, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
 import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/lib/guardText";
@@ -93,17 +93,17 @@ function QualityTable({ image }: { image: ImageResult }) {
 
 function AppearanceTable({ image }: { image: ImageResult }) {
   const attrs: FaceAttributes | null = image.primary_face_attributes;
-  const otherRaces = (image.faces ?? [])
-    .filter((face) => !face.primary && face.attributes?.race && face.attributes.race !== attrs?.race)
-    .map((face) => slugLabel(face.attributes?.race ?? ""));
   const youngest = youngestAge(image);
   const faceCount = image.faces?.length ?? 0;
   const setAge = usesSetAge(image) ? image.set_age : null;
-  if (!attrs && !image.primary_face_pose && faceCount === 0 && !setAge) return null;
-  // The age row is the youngest face, the one the under-18 rule reads. The primary face gets its own row when it reads older.
+  const bodies = bodyAges(image);
+  const people = peopleCheckRow(image);
+  if (!attrs && !image.primary_face_pose && faceCount === 0 && !setAge && bodies.length === 0 && !people) return null;
+  // The age row is the youngest face or body-only person, the one the under-18 rule reads. The primary face gets its own row when it reads older.
   const primaryYears = attrs?.age_source === "mivolo" || attrs?.age_source == null ? attrs?.age_years ?? null : null;
   const age = !setAge && youngest != null ? `${Math.round(youngest)} years` : attrs?.age ?? null;
   const agedFaces = measuredAges(image).length;
+  const youngestIsBody = bodies.length > 0 && youngest != null && youngest === Math.min(...bodies);
   return (
     <StatTable
       title="Appearance guess"
@@ -121,22 +121,32 @@ function AppearanceTable({ image }: { image: ImageResult }) {
               "Age",
               age,
               youngest != null && !setAge
-                ? agedFaces > 1
+                ? youngestIsBody
+                  ? "mivolo · body only, a person with no visible face"
+                  : agedFaces > 1
                   ? `mivolo · youngest of ${agedFaces} faces`
                   : [attrs?.age_source ?? "mivolo", attrs?.age_conf != null ? attrs.age_conf.toFixed(2) : null].filter(Boolean).join(" · ")
                 : [attrs?.age_source, attrs?.age_conf != null ? attrs.age_conf.toFixed(2) : null].filter(Boolean).join(" · "),
             ]
           : null,
-        youngest != null && primaryYears != null && primaryYears > youngest ? ["Primary face", `${Math.round(primaryYears)} years`, "mivolo · the face the gender and race read from"] : null,
-        // Only FairFace records race; a scan without it says nothing rather than "not recorded" on every frame.
-        attrs?.race ? ["Race", slugLabel(attrs.race), ["fairface", attrs.race_conf != null ? attrs.race_conf.toFixed(2) : null].filter(Boolean).join(" · ")] : null,
-        otherRaces.length > 0 ? ["Other faces", otherRaces.join(", ")] : null,
+        youngest != null && primaryYears != null && primaryYears > youngest ? ["Primary face", `${Math.round(primaryYears)} years`, "mivolo · the face the gender reads from"] : null,
+        bodies.length > 0
+          ? ["No visible face", bodies.map((years) => `${Math.round(years)} years`).join(", "), `mivolo · read from the body alone; ${bodies.length === 1 ? "one person" : `${bodies.length} people`} the face detector missed`]
+          : null,
+        people,
         image.primary_face_pose ? ["Head pose", image.primary_face_pose.replaceAll("_", " ")] : null,
         faceCount > 1 ? ["Faces", String(faceCount)] : null,
       ]}
-      caption="Age is the youngest face in the frame, the one the under-18 check reads; gender and race come from the primary face. Sources are named so a guess is not read as a fact."
+      caption="Age is the youngest face or body-only person in the frame, the one the under-18 check reads; gender comes from the primary face. Sources are named so a guess is not read as a fact."
     />
   );
+}
+
+/** The person check failed, so an empty list of people is not "nobody without a face". Null when it ran clean or was not asked for. */
+function peopleCheckRow(image: ImageResult): Row | null {
+  if (image.people_check == null || image.people_check === "ok") return null;
+  const what = image.people_check === "detection_failed" ? "Person detector failed; faces only" : "Body-only ages failed";
+  return ["People check", <span key="people" className="text-warning">{what}</span>, image.people_error ?? undefined];
 }
 
 function NudeNetTable({ nsfw, rating }: { nsfw: NsfwResult; rating: ReturnType<typeof contentRating> }) {

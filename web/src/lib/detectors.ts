@@ -1,7 +1,7 @@
 import type { Detectors, GuardPolicy } from "./types";
 
 export interface DetectorGroup {
-  id: "insightface" | "fairface" | "mivolo" | "places365" | "garments";
+  id: "insightface" | "mivolo" | "places365" | "garments";
   label: string;
   ready: boolean;
   hint: string;
@@ -14,12 +14,6 @@ export function detectorGroups(detectors: Detectors): DetectorGroup[] {
       label: "People and pose",
       ready: detectors.insightface,
       hint: 'InsightFace is not loaded. Install it with pip install "argus-curator[faces]".',
-    },
-    {
-      id: "fairface",
-      label: "FairFace",
-      ready: detectors.fairface,
-      hint: "FairFace weights are not loaded. argus-curator fairface-convert produces the ONNX file.",
     },
     {
       id: "mivolo",

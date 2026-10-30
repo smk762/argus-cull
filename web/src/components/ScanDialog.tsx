@@ -101,9 +101,11 @@ export function ScanDialog({
           health={health}
           withGarments={draft.withGarments}
           setAge={draft.setAge}
+          readBodies={draft.readBodies}
           disabled={false}
           onWithGarments={(withGarments) => setDraft((current) => ({ ...current, withGarments }))}
           onSetAge={(setAge) => setDraft((current) => ({ ...current, setAge }))}
+          onReadBodies={(readBodies) => setDraft((current) => ({ ...current, readBodies }))}
         />
         {noImages ? <p className="text-caption text-warning">This folder has no images and no subfolders.</p> : null}
         {busyLabel ? <p className="text-caption text-text-muted">{busyLabel}</p> : null}

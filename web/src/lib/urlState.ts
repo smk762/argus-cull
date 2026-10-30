@@ -10,7 +10,6 @@ import {
   GARMENTS,
   GENDERS,
   POSES,
-  RACES,
   type ContentRating,
   type ExposedLabel,
   type FaceAge,
@@ -25,7 +24,6 @@ import {
 const FACET_GROUPS = {
   cluster: "cluster",
   pose: "pose",
-  race: "race",
   gender: "gender",
   age: "age",
   scene: "scene",
@@ -75,7 +73,6 @@ export function parseView(params: URLSearchParams): ViewState {
     ...DEFAULT_FILTER,
     faceClusters: [],
     facePoses: [],
-    faceRaces: [],
     faceGenders: [],
     faceAges: [],
     scenes: [],
@@ -96,8 +93,6 @@ export function parseView(params: URLSearchParams): ViewState {
     if (group === FACET_GROUPS.cluster && !filter.faceClusters.includes(term)) filter.faceClusters.push(term);
     const pose = group === FACET_GROUPS.pose ? take(term, POSES) : null;
     if (pose && !filter.facePoses.includes(pose)) filter.facePoses.push(pose);
-    const race = group === FACET_GROUPS.race ? take(term, RACES) : null;
-    if (race && !filter.faceRaces.includes(race)) filter.faceRaces.push(race);
     const gender = group === FACET_GROUPS.gender ? take(term, GENDERS) : null;
     if (gender && !filter.faceGenders.includes(gender)) filter.faceGenders.push(gender);
     const age = group === FACET_GROUPS.age ? take(term, AGE_BRACKETS) : null;
@@ -152,6 +147,7 @@ export function parseView(params: URLSearchParams): ViewState {
     guardVariants: (params.get("variants") ?? "").split(",").map((name) => policyName(name)).filter((name): name is string => name != null),
     withGarments: params.get("garments") === "on",
     setAge: params.get("set") === "1",
+    readBodies: params.get("bodies") === "1",
     faceNames,
     filter,
   };
@@ -211,6 +207,7 @@ export function serializeView(view: ViewState): string {
   if (view.guardVariants.length > 0) params.set("variants", view.guardVariants.join(","));
   if (view.withGarments) params.set("garments", "on");
   if (view.setAge) params.set("set", "1");
+  if (view.readBodies) params.set("bodies", "1");
   const names: Record<string, string> = {};
   for (const [id, name] of Object.entries(view.faceNames)) {
     const parsed = readFaceName(`${id}:${name}`);
@@ -236,7 +233,6 @@ export function serializeView(view: ViewState): string {
   appendFacet(params, "rule", filter.guardRules);
   appendFacet(params, "cluster", filter.faceClusters);
   appendFacet(params, "pose", filter.facePoses);
-  appendFacet(params, "race", filter.faceRaces);
   appendFacet(params, "gender", filter.faceGenders);
   appendFacet(params, "age", filter.faceAges);
   appendFacet(params, "scene", filter.scenes);

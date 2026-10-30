@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { contentRating, exposedLabelsForRequest, guardRuleLabel, isSensitive, rateContent, ratingCounts, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
-import { ageMissing, awaitingChecks, blurFromEnv, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, sortImages, usesSetAge, youngestAge } from "./chunks";
+import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { cascadePath, displayGuardExplanation, finalJudgment, splitGuardExplanation } from "./guardText";
 import { mergeProgress, phaseLabel, progressRatio } from "./progress";
@@ -160,6 +160,10 @@ describe("url state", () => {
     expect(serializeView({ ...DEFAULT_VIEW, withGarments: false })).toBe("");
     expect(parseView(new URLSearchParams("set=1")).setAge).toBe(true);
     expect(serializeView({ ...DEFAULT_VIEW, setAge: true })).toBe("?set=1");
+    expect(parseView(new URLSearchParams("bodies=1")).readBodies).toBe(true);
+    expect(serializeView({ ...DEFAULT_VIEW, readBodies: true })).toBe("?bodies=1");
+    // An old link with a race facet loads without it.
+    expect(serializeView(parseView(new URLSearchParams("f=race:white")))).toBe("");
   });
 
   it("drops an unknown pose and omits the default filter", () => {
@@ -193,17 +197,25 @@ describe("select body", () => {
   it("requests a detector only when its weights are loaded", () => {
     expect(scanBody("shoots", NONE).faces).toEqual({ enabled: false, fairface: false, mivolo: false });
     expect(scanBody("shoots", NONE).scenes).toEqual({ enabled: false });
-    expect(scanBody("shoots", { ...NONE, fairface: true }).faces.enabled).toBe(true);
+    // FairFace is never asked for, even when its weights are loaded: cull does not offer race.
+    expect(scanBody("shoots", { ...NONE, fairface: true }).faces).toEqual({ enabled: false, fairface: false, mivolo: false });
+    expect(scanBody("shoots", DETECTORS).faces.fairface).toBe(false);
     // Fashionpedia is opt in: the slowest local check, and nothing else in the scan waits on it.
     expect(scanBody("", DETECTORS).garments.enabled).toBe(false);
-    expect(scanBody("", DETECTORS, null, { withGarments: true, setAge: false }).garments.enabled).toBe(true);
-    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: false }).scenes.enabled).toBe(true);
+    expect(scanBody("", DETECTORS, null, { withGarments: true, setAge: false, readBodies: false }).garments.enabled).toBe(true);
+    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: false, readBodies: false }).scenes.enabled).toBe(true);
     // Asking for it does nothing when the weights are not loaded.
-    expect(scanBody("", NONE, null, { withGarments: true, setAge: false }).garments.enabled).toBe(false);
+    expect(scanBody("", NONE, null, { withGarments: true, setAge: false, readBodies: false }).garments.enabled).toBe(false);
     // The set age is asked for only with MiVOLO loaded; the field is absent otherwise so an older curator sees nothing new.
-    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: true }).faces.set_age).toBe(true);
-    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: false }).faces).not.toHaveProperty("set_age");
-    expect(scanBody("", { ...DETECTORS, mivolo: false }, null, { withGarments: false, setAge: true }).faces).not.toHaveProperty("set_age");
+    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: true, readBodies: false }).faces.set_age).toBe(true);
+    expect(scanBody("", DETECTORS, null, { withGarments: false, setAge: false, readBodies: false }).faces).not.toHaveProperty("set_age");
+    expect(scanBody("", { ...DETECTORS, mivolo: false }, null, { withGarments: false, setAge: true, readBodies: false }).faces).not.toHaveProperty("set_age");
+    // Bodies are asked for only with MiVOLO and the person detector loaded (curator 0.10).
+    const bodies = { withGarments: false, setAge: false, readBodies: true };
+    expect(scanBody("", { ...DETECTORS, bodies: true }, null, bodies).faces.mivolo_body).toBe(true);
+    expect(scanBody("", { ...DETECTORS, bodies: true }).faces).not.toHaveProperty("mivolo_body");
+    expect(scanBody("", DETECTORS, null, bodies).faces).not.toHaveProperty("mivolo_body");
+    expect(scanBody("", { ...DETECTORS, bodies: true, mivolo: false }, null, bodies).faces).not.toHaveProperty("mivolo_body");
     expect(scanBody("shoots", NONE).nsfw).toEqual({ enabled: false });
     expect(scanBody("shoots", NONE).guard).toEqual({ enabled: false });
     expect(scanBody("shoots", { ...NONE, nudenet: true, singguard: true }).nsfw.enabled).toBe(true);
@@ -310,9 +322,11 @@ function openGates() {
 
 describe("detectors", () => {
   it("names the convert command for a missing ONNX model", () => {
-    const fairface = detectorGroups({ ...DETECTORS, fairface: false }).find((group) => group.id === "fairface");
-    expect(fairface?.ready).toBe(false);
-    expect(fairface?.hint).toContain("fairface-convert");
+    const mivolo = detectorGroups({ ...DETECTORS, mivolo: false }).find((group) => group.id === "mivolo");
+    expect(mivolo?.ready).toBe(false);
+    expect(mivolo?.hint).toContain("mivolo-convert");
+    // FairFace is not offered, so nothing suggests converting it.
+    expect(detectorGroups(DETECTORS).map((group) => group.id)).not.toContain("fairface");
     expect(detectorGroups(DETECTORS).find((group) => group.id === "garments")?.label).toBe("Fashionpedia");
   });
 
@@ -520,24 +534,18 @@ describe("scan chunks", () => {
     expect(filterByAge([older, younger, waiting], 16, 20).map((image) => image.rel_path)).toEqual([]);
     expect(filterByAge([older, younger, waiting], null, 18).map((image) => image.rel_path)).toEqual(["younger.jpg"]);
     expect(filterByAge([older, younger], null, null)).toHaveLength(2);
-    const white = { rel_path: "white.jpg", primary_face_attributes: { race: "white" } } as unknown as ImageResult;
-    const indian = { rel_path: "indian.jpg", primary_face_attributes: { race: "indian" } } as unknown as ImageResult;
-    expect(sortImages([waiting, white, indian], "race").map((image) => image.rel_path)).toEqual(["indian.jpg", "white.jpg", "wait.jpg"]);
-    expect(sortImages([waiting, white, indian], "race", "asc").map((image) => image.rel_path)).toEqual(["white.jpg", "indian.jpg", "wait.jpg"]);
-    expect(filterByRace([white, indian, waiting], "white").map((image) => image.rel_path)).toEqual(["white.jpg"]);
-    expect(filterByRace([white, indian], null)).toHaveLength(2);
     const faceless = { rel_path: "body.jpg", face_count: 0, faces: [] } as unknown as ImageResult;
     const faced = { rel_path: "face.jpg", face_count: 1 } as unknown as ImageResult;
     expect(filterByFaces([faceless, faced], "none").map((image) => image.rel_path)).toEqual(["body.jpg"]);
     expect(filterByFaces([faceless, faced], "some").map((image) => image.rel_path)).toEqual(["face.jpg"]);
     expect(filterByFaces([faceless, faced], "all")).toHaveLength(2);
     const reasons = new Map([
-      ["white.jpg", ""],
-      ["indian.jpg", "below-score"],
+      ["older.jpg", ""],
+      ["younger.jpg", "below-score"],
     ]);
-    expect(filterByKeep([white, indian, waiting], reasons, "kept").map((image) => image.rel_path)).toEqual(["white.jpg"]);
-    expect(filterByKeep([white, indian, waiting], reasons, "left-out").map((image) => image.rel_path)).toEqual(["indian.jpg", "wait.jpg"]);
-    expect(filterByKeep([white, indian], null, "kept")).toHaveLength(2);
+    expect(filterByKeep([older, younger, waiting], reasons, "kept").map((image) => image.rel_path)).toEqual(["older.jpg"]);
+    expect(filterByKeep([older, younger, waiting], reasons, "left-out").map((image) => image.rel_path)).toEqual(["younger.jpg", "wait.jpg"]);
+    expect(filterByKeep([older, younger], null, "kept")).toHaveLength(2);
   });
 
   it("scores the keep set from the signals the scan stored", () => {
@@ -696,5 +704,41 @@ describe("set age", () => {
     const adult = { ...body, set_age: { ...set, years: 24 } } as unknown as ImageResult;
     expect(isMinorExposed(adult)).toBe(false);
     expect(filterByAge([body, adult], 18, null).map((image) => image.set_age?.years)).toEqual([24]);
+  });
+});
+
+describe("body-only ages", () => {
+  const exposed = { labels: { FEMALE_BREAST_EXPOSED: 0.8 }, exposed_score: 0.8 };
+  const person = (age: number, faceIndex: number | null = null) => ({ bbox: [0, 0, 10, 10], det_score: 0.9, face_index: faceIndex, age_years: age, age_source: "mivolo" });
+  it("counts a person with no visible face, and only that person", () => {
+    const faceless = { face_count: 0, faces: [], primary_face_attributes: null, people: [person(15)], people_check: "ok", nsfw: exposed } as unknown as ImageResult;
+    expect(bodyAges(faceless)).toEqual([15]);
+    expect(youngestAge(faceless)).toBe(15);
+    expect(isMinorExposed(faceless)).toBe(true);
+    expect(revealHeld(faceless, [])).toBe(true);
+    expect(shouldBlur(faceless, [], { exposedScore: 0.25, policyBlur: true, unblurNsfw: true })).toBe(true);
+    expect(shownAge(faceless)).toEqual({ text: "15y body", title: "Apparent age of a person with no visible face, MiVOLO from the body alone" });
+    // A person matched to a face is already counted by the face.
+    const matched = { face_count: 1, faces: [{ primary: true, attributes: { age_years: 30, age_source: "mivolo" } }], primary_face_attributes: { age_years: 30, age_source: "mivolo" }, people: [person(16, 0)], nsfw: exposed } as unknown as ImageResult;
+    expect(bodyAges(matched)).toEqual([]);
+    expect(isMinorExposed(matched)).toBe(false);
+  });
+
+  it("only adds holds: a young body beside an adult face still holds, an adult body lifts nothing", () => {
+    const mixed = { face_count: 1, faces: [{ primary: true, attributes: { age_years: 30, age_source: "mivolo" } }], primary_face_attributes: { age_years: 30, age_source: "mivolo" }, people: [person(0, 0), person(14)], nsfw: exposed } as unknown as ImageResult;
+    expect(youngestAge(mixed)).toBe(14);
+    expect(isMinorExposed(mixed)).toBe(true);
+    expect(shownAge(mixed)?.text).toBe("14y body");
+    const young = { face_count: 1, faces: [{ primary: true, attributes: { age_years: 15, age_source: "mivolo" } }], primary_face_attributes: { age_years: 15, age_source: "mivolo" }, people: [person(40)], nsfw: exposed } as unknown as ImageResult;
+    expect(isMinorExposed(young)).toBe(true);
+    expect(shownAge(young)?.text).toBe("15y");
+  });
+
+  it("outranks the set age: the frame has a reading of its own", () => {
+    const set = { years: 30, cluster_id: "face_1", faces: 20, share: 0.95 };
+    const image = { face_count: 0, faces: [], primary_face_attributes: null, set_age: set, people: [person(16)], nsfw: exposed } as unknown as ImageResult;
+    expect(usesSetAge(image)).toBe(false);
+    expect(youngestAge(image)).toBe(16);
+    expect(isMinorExposed(image)).toBe(true);
   });
 });

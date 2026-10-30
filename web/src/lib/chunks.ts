@@ -1,5 +1,5 @@
 import { effectiveUnsafe } from "./policies";
-import { EXPOSED_LABELS, RACES, type FaceRace, type GuardResult, type GuardVariants, type ImageResult, type ScanChunk, type ScanSummary } from "./types";
+import { EXPOSED_LABELS, type GuardResult, type GuardVariants, type ImageResult, type ScanChunk, type ScanSummary } from "./types";
 
 /** MiVOLO ages under this, with any reported exposed detection, stay blurred and are never kept. */
 export const MINOR_AGE_YEARS = 18;
@@ -19,7 +19,7 @@ export interface BlurPolicy {
 
 export const DEFAULT_BLUR: BlurPolicy = { exposedScore: DEFAULT_BLUR_EXPOSED_SCORE, policyBlur: true };
 
-export type GridSort = "scanned" | "nsfw" | "policy" | "age" | "race";
+export type GridSort = "scanned" | "nsfw" | "policy" | "age";
 /** Grid display. Kept and left out follow the current keep set and do not change it. */
 export type KeepView = "all" | "kept" | "left-out";
 export type SortDirection = "desc" | "asc";
@@ -83,20 +83,31 @@ type AgeChecked = {
   primary_face_attributes?: AgedFace;
   faces?: { primary?: boolean; attributes?: AgedFace }[] | null;
   set_age?: { years: number } | null;
+  people?: { face_index?: number | null; age_years?: number | null; age_source?: string | null }[] | null;
 };
 
 /**
- * The ages the under-18 rules read: every face's MiVOLO years, and, on a
- * frame with no face, the set's age when the scan gave it one. The set age
- * is an inference about the set, not a reading of the frame, but a frame
- * with no face had no age at all, so counting it can only add a hold or a
- * delete mark, never lift one. The tile and the detail view show it as the
- * set's.
+ * The ages the under-18 rules read: every face's MiVOLO years, every person
+ * with no visible face that MiVOLO read from the body (curator 0.10,
+ * `faces.mivolo_body`), and, on a frame with neither, the set's age when the
+ * scan gave it one. A body-only age and the set age are weaker readings than
+ * a face, but without them the frame had no age at all, so counting them can
+ * only add a hold or a delete mark, never lift one. The curator also pairs
+ * each age with the exposure on the same person's box; cull has no boxes, so
+ * any young age with exposure holds the frame.
  */
 export function mivoloAges(image: AgeChecked): number[] {
-  const measured = measuredAges(image);
+  const measured = [...measuredAges(image), ...bodyAges(image)];
   if (measured.length === 0 && image.set_age) return [image.set_age.years];
   return measured;
+}
+
+/** MiVOLO ages of people with no visible face, read from the body alone. People matched to a face are already counted by the face. */
+export function bodyAges(image: Pick<AgeChecked, "people">): number[] {
+  return (image.people ?? [])
+    .filter((person) => person.face_index == null)
+    .map((person) => mivoloYears(person))
+    .filter((age): age is number => age != null);
 }
 
 /**
@@ -114,7 +125,7 @@ export function measuredAges(image: Pick<AgeChecked, "primary_face_attributes" |
 
 /** The set age stands in for a measurement: the frame has no face of its own and the scan gave it the set's age. */
 export function usesSetAge(image: AgeChecked): boolean {
-  if (!image.set_age) return false;
+  if (!image.set_age || bodyAges(image).length > 0) return false;
   return mivoloYears(image.primary_face_attributes) == null && !(image.faces ?? []).some((face) => mivoloYears(face.attributes) != null);
 }
 
@@ -197,7 +208,7 @@ export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: 
   return false;
 }
 
-/** Youngest MiVOLO age on the image, counting every face. FairFace brackets are not years. */
+/** Youngest MiVOLO age on the image, counting every face and every body-only person. FairFace brackets are not years. */
 export function youngestAge(image: AgeChecked): number | null {
   const years = mivoloAges(image);
   return years.length > 0 ? Math.min(...years) : null;
@@ -207,8 +218,9 @@ export function youngestAge(image: AgeChecked): number | null {
  * The age a tile or summary shows, and the line behind it. Always the
  * youngest face: the under-18 rule reads the youngest, so the number on
  * screen is the number the rule read, and a younger second face is never
- * hidden behind an older primary one. A frame with no face shows the set's
- * age when it has one; a FairFace bracket stands in when MiVOLO did not run.
+ * hidden behind an older primary one. A person with no visible face counts
+ * by the body-only reading. A frame with neither shows the set's age when it
+ * has one; a FairFace bracket stands in when MiVOLO did not run.
  * Null when there is no age at all; `ageMissing` says why.
  */
 export function shownAge(image: AgeChecked & { primary_face_attributes?: { age?: string | null } | null }): { text: string; title: string } | null {
@@ -216,6 +228,13 @@ export function shownAge(image: AgeChecked & { primary_face_attributes?: { age?:
     return { text: `≈${Math.round(image.set_age.years)}y set`, title: "No face in this frame; the set's median MiVOLO age stands in" };
   }
   const measured = measuredAges(image);
+  const bodies = bodyAges(image);
+  if (bodies.length > 0 && (measured.length === 0 || Math.min(...bodies) < Math.min(...measured))) {
+    const youngest = Math.min(...bodies);
+    const who = bodies.length === 1 ? "a person with no visible face" : `the youngest of ${bodies.length} people with no visible face`;
+    const faces = measured.length > 0 ? `, younger than the ${measured.length === 1 ? "face" : `${measured.length} faces`}` : "";
+    return { text: `${Math.round(youngest)}y body`, title: `Apparent age of ${who}, MiVOLO from the body alone${faces}` };
+  }
   if (measured.length > 0) {
     const youngest = Math.min(...measured);
     const primary = mivoloYears(image.primary_face_attributes);
@@ -269,12 +288,6 @@ export function filterByFaces(images: ImageResult[], view: FaceView): ImageResul
   return images.filter((image) => (view === "none" ? image.face_count === 0 : image.face_count > 0));
 }
 
-/** Hide images whose primary face is not this FairFace race. No selection shows every image. Images with no race drop out once a race is selected. */
-export function filterByRace(images: ImageResult[], race: FaceRace | null): ImageResult[] {
-  if (race == null) return images;
-  return images.filter((image) => image.primary_face_attributes?.race === race);
-}
-
 /** Hide images outside the youngest-age range. An empty bound is open. Images with no MiVOLO age drop out once either bound is set. */
 export function filterByAge(images: ImageResult[], minAge: number | null, maxAge: number | null): ImageResult[] {
   if (minAge == null && maxAge == null) return images;
@@ -289,8 +302,7 @@ export function filterByAge(images: ImageResult[], minAge: number | null, maxAge
 
 /**
  * Order the gallery. Descending keeps the original meaning: highest NudeNet score,
- * policy issues, and oldest ages first. Race descending follows the FairFace label
- * order from the end. Ascending flips those values. Images still waiting on the
+ * policy issues, and oldest ages first. Ascending flips those values. Images still waiting on the
  * value stay last either way. As scanned flips the scan order.
  */
 export function sortImages(images: ImageResult[], sort: GridSort, direction: SortDirection = "desc"): ImageResult[] {
@@ -303,19 +315,10 @@ export function sortImages(images: ImageResult[], sort: GridSort, direction: Sor
           ? compareScore(left.image.nsfw?.exposed_score, right.image.nsfw?.exposed_score, direction)
           : sort === "policy"
             ? comparePolicy(left.image, right.image, direction)
-            : sort === "race"
-            ? compareScore(raceRank(left.image), raceRank(right.image), direction)
             : compareScore(youngestAge(left.image), youngestAge(right.image), direction);
       return by || left.index - right.index;
     })
     .map((row) => row.image);
-}
-
-function raceRank(image: ImageResult): number | null {
-  const race = image.primary_face_attributes?.race;
-  if (race == null) return null;
-  const index = RACES.indexOf(race);
-  return index < 0 ? null : index;
 }
 
 function compareScore(left: number | null | undefined, right: number | null | undefined, direction: SortDirection): number {

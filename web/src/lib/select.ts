@@ -4,7 +4,6 @@ import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, Gu
 
 export interface FilterAvailability {
   faces: boolean;
-  fairface: boolean;
   mivolo: boolean;
   scenes: boolean;
   garments: boolean;
@@ -14,7 +13,6 @@ export interface FilterAvailability {
 
 const NONE: FilterAvailability = {
   faces: false,
-  fairface: false,
   mivolo: false,
   scenes: false,
   garments: false,
@@ -38,7 +36,6 @@ export function availability(detectors: Detectors | null, summary: ScanSummary |
   const garments = summary?.garments_config;
   return {
     faces: detectors.insightface && ran(faces?.enabled, true),
-    fairface: detectors.fairface && ran(faces?.fairface, true),
     mivolo: detectors.mivolo && ran(faces?.mivolo, true),
     scenes: detectors.places365 && ran(scenes?.enabled, true),
     garments: detectors.garments && ran(garments?.enabled, true),
@@ -64,7 +61,6 @@ export function guardPoliciesForRequest(summary: ScanSummary | null, active: boo
 
 /** Export-filter fields only. No dest, mode, max_keep, or diversify flags. */
 export function selectBody(filter: FilterState, gates: FilterAvailability, summary: ScanSummary | null = null): SelectRequest {
-  const gender = gates.fairface || gates.mivolo;
   const threshold = gates.nsfw && filter.nsfwThreshold != null && filter.nsfwExposedLabels.length > 0 ? filter.nsfwThreshold : null;
   const guardActive = gates.guard && (filter.guardUnsafe || filter.guardRules.length > 0);
   return {
@@ -73,9 +69,8 @@ export function selectBody(filter: FilterState, gates: FilterAvailability, summa
     keep_similar: filter.keepSimilar,
     face_clusters: listed(gates.faces, filter.faceClusters),
     face_poses: listed(gates.faces, filter.facePoses),
-    face_races: listed(gates.fairface, filter.faceRaces),
-    face_genders: listed(gender, filter.faceGenders),
-    face_ages: listed(gates.fairface, filter.faceAges),
+    face_genders: listed(gates.mivolo, filter.faceGenders),
+    face_ages: listed(gates.mivolo, filter.faceAges),
     min_age_years: gates.mivolo ? filter.minAgeYears : null,
     max_age_years: gates.mivolo ? filter.maxAgeYears : null,
     min_attribute_conf: filter.minAttributeConf,
@@ -124,21 +119,27 @@ export interface ScanChecks {
   withGarments: boolean;
   /** Ask for the set's age on frames with no face. Sent only when MiVOLO is loaded; an older curator ignores it. */
   setAge: boolean;
+  /** Give MiVOLO each person's body (`faces.mivolo_body`). Sent only when MiVOLO and the person detector are loaded. */
+  readBodies: boolean;
 }
 
-export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false };
+export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false, readBodies: false };
 
-/** Turn a detector on only when /detectors says its weights are loaded. */
+/**
+ * Turn a detector on only when /detectors says its weights are loaded.
+ * FairFace is never asked for: cull does not offer race, and MiVOLO gives the
+ * gender and age.
+ */
 export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null, checks: ScanChecks = DEFAULT_CHECKS): ScanBody {
-  const fairface = detectors.fairface;
   const mivolo = detectors.mivolo;
   return {
     folder,
     faces: {
-      enabled: detectors.insightface || fairface || mivolo,
-      fairface,
+      enabled: detectors.insightface || mivolo,
+      fairface: false,
       mivolo,
       ...(checks.setAge && mivolo ? { set_age: true } : {}),
+      ...(checks.readBodies && mivolo && detectors.bodies ? { mivolo_body: true } : {}),
     },
     scenes: { enabled: detectors.places365 },
     garments: { enabled: detectors.garments && checks.withGarments, min_conf: 0.3 },

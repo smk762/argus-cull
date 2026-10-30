@@ -49,7 +49,7 @@ function image(rel: string, extra: Partial<ImageResult> = {}): ImageResult {
 }
 
 function mivolo(years: number): FaceAttributes {
-  return { race: null, race_conf: null, gender: "female", gender_conf: 0.9, gender_source: "mivolo", age: null, age_conf: null, age_years: years, age_source: "mivolo" };
+  return { gender: "female", gender_conf: 0.9, gender_source: "mivolo", age: null, age_conf: null, age_years: years, age_source: "mivolo" };
 }
 
 function faced(rel: string, years: number, extra: Partial<ImageResult> = {}): ImageResult {
@@ -112,10 +112,10 @@ describe("shown age", () => {
 describe("scan template", () => {
   it("reads the form back out of a finished scan", () => {
     const template = templateFromSummary(SUMMARY, "/data/images", DETECTORS);
-    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true });
+    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false });
     // A scan that ran garments runs them again; one with no recorded policy takes the picker's default.
     const plain = { ...SUMMARY, garments_config: { enabled: true, min_conf: 0.3 }, guard_config: { enabled: false }, faces_config: { enabled: true, fairface: true, mivolo: true } };
-    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false });
+    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false });
     // The curator writes a policy name even when SingGuard was off; that is not a choice to repeat.
     const off: ScanSummary = { ...SUMMARY, guard_config: { enabled: false, policy: "default" } };
     expect(templateFromSummary(off, "/data/images", DETECTORS).policy).toEqual({ policy: "adult", variants: [] });
@@ -141,8 +141,8 @@ describe("scan template", () => {
 
   it("names what a template runs", () => {
     expect(templateSummary(templateFromSummary(SUMMARY, "/data/images", DETECTORS), DETECTORS)).toBe("adult + adult-v2 · set age");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false }, DETECTORS)).toBe("default · garments");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false }, DETECTORS)).toBe("default · garments");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
   });
 });
 

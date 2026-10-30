@@ -222,7 +222,7 @@ describe("policy choice", () => {
 
   it("filters on every policy the scan ran once a guard filter is on", () => {
     const summary = { guard_config: { enabled: true, policy: "adult", variants: ["adult-granular"] }, results: [] } as unknown as ScanSummary;
-    const gates = { faces: false, fairface: false, mivolo: false, scenes: false, garments: false, nsfw: false, guard: true };
+    const gates = { faces: false, mivolo: false, scenes: false, garments: false, nsfw: false, guard: true };
     expect(guardPoliciesForRequest(summary, true)).toEqual(["adult", "adult-granular"]);
     expect(guardPoliciesForRequest({ ...summary, guard_config: { enabled: true, policy: "adult" } } as ScanSummary, true)).toBeUndefined();
     expect(selectBody({ ...DEFAULT_FILTER, guardUnsafe: true }, gates, summary).guard_policies).toEqual(["adult", "adult-granular"]);
