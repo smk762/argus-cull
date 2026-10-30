@@ -147,6 +147,27 @@ export interface Health {
   scan_control?: boolean;
   /** Curator 0.7: frames with no face can take the set's age (`faces.set_age`). */
   set_age?: boolean;
+  /** Curator 0.8: `GET /guard/policies` serves each policy's text. */
+  guard_policy_text?: boolean;
+}
+
+/**
+ * One SingGuard policy `GET /guard/policies` lists. `source` is `builtin`,
+ * `file` (the operator's policy file, for `default`), or `singguard` when
+ * `default` sends no text and SingGuard applies its own rules. `recorded` is
+ * the name results store; `error` names the env var when the file cannot be read.
+ */
+export interface GuardPolicyInfo {
+  name: string;
+  recorded: string | null;
+  source: "builtin" | "file" | "singguard" | string;
+  text: string | null;
+  error: string | null;
+}
+
+export interface GuardPolicies {
+  singguard: boolean;
+  policies: GuardPolicyInfo[];
 }
 
 export interface Detectors {

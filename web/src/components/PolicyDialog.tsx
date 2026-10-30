@@ -3,7 +3,10 @@
 import { useEffect } from "react";
 
 import { BAND_LABELS, BANDS, type CohortCell, type CohortStats } from "@/lib/cohorts";
-import { rate, type PolicyStats } from "@/lib/policies";
+import { policyByName, rate, type PolicyStats } from "@/lib/policies";
+import type { GuardPolicyInfo } from "@/lib/types";
+
+import { PolicyWording } from "./PolicyWording";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -75,6 +78,7 @@ export function PolicyDialog({
   cohortNotes = [],
   onClose,
   onDownloadLabels,
+  catalog = null,
 }: {
   stats: PolicyStats[];
   total: number;
@@ -86,6 +90,8 @@ export function PolicyDialog({
   cohortNotes?: string[];
   onClose: () => void;
   onDownloadLabels: (() => void) | null;
+  /** Curator 0.8: the wording of each named policy. */
+  catalog?: readonly GuardPolicyInfo[] | null;
 }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -156,6 +162,9 @@ export function PolicyDialog({
                 {rules.length > 0 ? (
                   <p className="mt-2 text-caption text-text-muted">Rules: {rules.map(([rule, count]) => `${rule} ×${count}`).join(" · ")}</p>
                 ) : null}
+                <div className="mt-2">
+                  <PolicyWording info={policyByName(catalog, entry.policy)} />
+                </div>
               </section>
             );
           })}

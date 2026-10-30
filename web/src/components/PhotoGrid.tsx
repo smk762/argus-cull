@@ -214,7 +214,7 @@ export function PhotoGrid({
             </select>
           </label>
         ) : null}
-        {onShieldView ? (
+        {onShieldView && (anyShield || shieldView !== "all") ? (
           <label className="flex items-center gap-2">
             Shield
             <select
@@ -422,6 +422,9 @@ function emptyView(keepView: KeepView, race: FaceRace | null, ageFrom: number | 
   const which = keepView === "kept" ? "kept image" : keepView === "left-out" ? "left-out image" : "image";
   if (faceView === "none") return `No ${which} without a face in this view.`;
   if (faceView === "some") return `No ${which} with a face in this view.`;
+  if (shieldView !== "all" && (race || ageFrom != null || ageTo != null)) {
+    return `No ${which} matches this shield and the other filters.`;
+  }
   if (shieldView === "unsafe") return `No ${which} with an unsafe shield in this view.`;
   if (shieldView === "split") return `No ${which} whose policies disagreed in this view.`;
   if (shieldView === "safe") return `No ${which} with a safe shield in this view.`;

@@ -1,4 +1,4 @@
-import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type PurgeResult, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
+import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type GuardPolicies, type Health, type Progress, type PurgeResult, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
 import type { Caption, CohortConfig } from "./cohorts";
 import type { ImageLabel, LabelFile } from "./labels";
 import { exportBody } from "./paths";
@@ -38,6 +38,14 @@ export function imageUrl(scanId: string, relPath: string): string {
 
 export const getHealth = (): Promise<Health> => getJson("/health");
 export const getDetectors = (): Promise<Detectors> => getJson("/detectors");
+
+/** Curator 0.8. An older server answers 404; the page then has names but not wording. */
+export async function getGuardPolicies(): Promise<GuardPolicies | null> {
+  const response = await fetch(`${curatorUrl()}/guard/policies`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as GuardPolicies;
+}
 export const getFolders = (path: string): Promise<FolderListing> =>
   getJson(`/folders?${new URLSearchParams({ path })}`);
 export const getScan = (scanId: string): Promise<ScanSummary> => getJson(`/scan/${encodeURIComponent(scanId)}`);

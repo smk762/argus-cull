@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policySourceLabel, policyStats, policyVerdicts, shieldLabel, shieldState, shieldTitle, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -40,6 +40,23 @@ const single = { rel_path: "single.jpg", guard: unsafe("default"), guard_variant
 /** Official flags; a variant passes. Determined fail, split. */
 const dissent = { rel_path: "dissent.jpg", guard: unsafe("adult"), guard_variants: { "adult-cautious": safe("adult-cautious") } } as unknown as ImageResult;
 const unchecked = { rel_path: "unchecked.jpg" } as unknown as ImageResult;
+
+describe("policy catalog", () => {
+  const catalog = [
+    { name: "default", recorded: "default", source: "singguard" as const, text: null, error: null },
+    { name: "adult", recorded: "adult", source: "builtin" as const, text: "### A. Minors", error: null },
+    { name: "file-broken", recorded: null, source: "file" as const, text: null, error: "set ARGUS_CURATOR_SINGGUARD_POLICY" },
+  ];
+
+  it("looks a policy up by the name a scan uses", () => {
+    expect(policyByName(catalog, "adult")?.text).toBe("### A. Minors");
+    expect(policyByName(catalog, "missing")).toBeNull();
+    expect(policyByName(null, "adult")).toBeNull();
+    expect(policySourceLabel("builtin")).toBe("built in");
+    expect(policySourceLabel("file")).toBe("policy file");
+    expect(policySourceLabel("singguard")).toBe("SingGuard");
+  });
+});
 
 describe("policy verdicts", () => {
   it("lists the official verdict once, then the variants", () => {
@@ -94,10 +111,16 @@ describe("policy verdicts", () => {
     expect(matchesShieldPick("unsafe-split", "unsafe")).toBe(true);
     expect(matchesShieldPick("safe-split", "unsafe")).toBe(false);
     expect(matchesShieldPick("none", "unsafe")).toBe(false);
-    // The same queries hide tiles. All keeps frames with no verdict; Unsafe does not.
+    // The same queries hide tiles. All keeps frames with no verdict; Unsafe/Safe/Split do not.
     expect(filterByShield(images, "all")).toHaveLength(6);
     expect(filterByShield(images, "unsafe").map((image) => image.rel_path)).toEqual(["agreed.jpg", "single.jpg", "dissent.jpg"]);
+    expect(filterByShield(images, "split").map((image) => image.rel_path)).toEqual(["split.jpg", "dissent.jpg"]);
+    expect(filterByShield(images, "safe").map((image) => image.rel_path)).toEqual(["clean.jpg", "split.jpg"]);
     expect(filterByShield(images, "unsafe")).not.toContainEqual(expect.objectContaining({ rel_path: "unchecked.jpg" }));
+    expect(filterByShield([unchecked], "all")).toEqual([unchecked]);
+    expect(filterByShield([unchecked], "unsafe")).toEqual([]);
+    expect(filterByShield([unchecked], "safe")).toEqual([]);
+    expect(filterByShield([unchecked], "split")).toEqual([]);
   });
 
   it("spots a recorded unsafe whose only rule is Safe", () => {
