@@ -132,7 +132,7 @@ export const GUARD_RULES = [
 export type GuardPolicy = string;
 
 /** Rule A under the adult policy; B to G keep the default names. */
-export const ADULT_RULE_A = "A. Illegal or Extreme Sexual Content";
+export const ADULT_RULE_A = "A. Illegal Sexual Content";
 
 export type ExportMode = "copy" | "symlink" | "move";
 
