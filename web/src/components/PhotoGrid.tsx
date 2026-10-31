@@ -1,9 +1,25 @@
 "use client";
 
-import { attributeLine } from "@/lib/attributes";
 import { thumbUrl } from "@/lib/api";
-import { DEFAULT_BLUR, isMinorExposed, shouldBlur, youngestAge, type BlurPolicy, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
-import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import type { ImageLabel } from "@/lib/labels";
+import { pathsByShield, SHIELD_PICK_LABELS, SHIELD_PICKS, shieldState, shieldTitle, type ShieldPick, type ShieldView } from "@/lib/policies";
+import { PAGE_SIZE, type ImageResult } from "@/lib/types";
+
+import { Shield } from "./Shield";
+
+/** The file name alone; the folder is in the tile's tooltip and the detail view. */
+function baseName(relPath: string): string {
+  return relPath.split("/").pop() || relPath;
+}
+
+/** The youngest face's age (see `shownAge`), or, with no age, why: see `ageMissing`. */
+function apparentAge(image: ImageResult, pending: readonly string[], faces: boolean): { text: string; title: string } {
+  const shown = shownAge(image);
+  if (shown) return { ...shown, title: setAgeTitle(image) ?? shown.title };
+  const text = ageMissing(image, pending, faces);
+  return { text, title: text === "no face" ? "No face detected, so no age estimate. MiVOLO reads a face." : text === "…" ? "Face detection is still running" : "No age recorded" };
+}
 
 export function PhotoGrid({
   images,
@@ -11,12 +27,15 @@ export function PhotoGrid({
   scanId,
   page,
   pending,
+  scanning = false,
   blur = DEFAULT_BLUR,
   sort,
   direction,
   ageFrom,
   ageTo,
-  race,
+  faceView = "all",
+  shieldView = "all",
+  facesRan = false,
   keepView,
   keptCount,
   leftOutCount,
@@ -24,7 +43,8 @@ export function PhotoGrid({
   onSort,
   onDirection,
   onAge,
-  onRace,
+  onFaceView,
+  onShieldView,
   onKeepView,
   onPage,
   onOpen,
@@ -32,22 +52,32 @@ export function PhotoGrid({
   onToggleSelected,
   onSelectAll,
   onSelectFlagged,
+  onSelectShield,
   onDeleteSelected,
   deleteConfirm,
   deleting,
   deleteError,
+  labels = null,
+  tag = null,
+  tagOptions = [],
+  onTag,
 }: {
   images: ImageResult[];
   reasons: Map<string, string> | null;
   scanId: string;
   page: number;
   pending: readonly string[];
+  /** The scan on screen is still running, so no keep set exists yet. */
+  scanning?: boolean;
   blur?: BlurPolicy;
   sort: GridSort;
   direction: SortDirection;
   ageFrom: number | null;
   ageTo: number | null;
-  race: FaceRace | null;
+  /** Only the images with no detected face, or only those with one. */
+  faceView?: FaceView;
+  /** Face detection reported on this scan, so a frame with none says "no face" rather than "–". */
+  facesRan?: boolean;
   keepView: KeepView;
   /** Null until the keep set has been calculated. */
   keptCount: number | null;
@@ -57,7 +87,10 @@ export function PhotoGrid({
   onSort: (sort: GridSort) => void;
   onDirection: (direction: SortDirection) => void;
   onAge: (ageFrom: number | null, ageTo: number | null) => void;
-  onRace: (race: FaceRace | null) => void;
+  onFaceView?: (view: FaceView) => void;
+  /** Hide tiles whose shield does not match. All keeps frames with no verdict. */
+  shieldView?: ShieldView;
+  onShieldView?: (view: ShieldView) => void;
   onKeepView: (view: KeepView) => void;
   onPage: (page: number) => void;
   onOpen: (relPath: string) => void;
@@ -65,10 +98,18 @@ export function PhotoGrid({
   onToggleSelected: (relPath: string) => void;
   onSelectAll: () => void;
   onSelectFlagged: () => void;
+  /** Select tiles whose shield matches: determined fail, a disagreement, or determined pass. */
+  onSelectShield?: (pick: ShieldPick) => void;
   onDeleteSelected: () => void;
   deleteConfirm: boolean;
   deleting: boolean;
   deleteError: string | null;
+  /** Labels by rel_path. An override on a label picks the policy the blur follows for that image. */
+  labels?: ReadonlyMap<string, ImageLabel> | null;
+  /** Cohort tag the gallery is narrowed to, and the tags present in this view. */
+  tag?: string | null;
+  tagOptions?: readonly string[];
+  onTag?: (tag: string | null) => void;
 }) {
   const pages = Math.max(1, Math.ceil(images.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -78,6 +119,9 @@ export function PhotoGrid({
   const allSelected = images.length > 0 && images.every((image) => selected.has(image.rel_path));
   const deletableSelected = flagged.filter((image) => selected.has(image.rel_path)).length;
   const selectedHere = images.filter((image) => selected.has(image.rel_path)).length;
+  const shieldOverride = (rel: string) => labels?.get(rel)?.override ?? null;
+  const shieldCounts = Object.fromEntries(SHIELD_PICKS.map((pick) => [pick, pathsByShield(images, pick, shieldOverride).length])) as Record<ShieldPick, number>;
+  const anyShield = SHIELD_PICKS.some((pick) => shieldCounts[pick] > 0);
 
   if (unfilteredCount === 0) {
     return <p className="text-text-secondary">Nothing in this view.</p>;
@@ -103,7 +147,6 @@ export function PhotoGrid({
             <option value="nsfw">NudeNet score</option>
             <option value="policy">Policy</option>
             <option value="age">Age</option>
-            <option value="race">Race</option>
           </select>
         </label>
         <button
@@ -135,31 +178,97 @@ export function PhotoGrid({
             onChange={(event) => onAge(ageFrom, readAge(event.target.value))}
           />
         </label>
-        <label className="flex items-center gap-2">
-          Race
-          <select
-            className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-            aria-label="Race"
-            value={race ?? ""}
-            onChange={(event) => onRace(event.target.value === "" ? null : (event.target.value as FaceRace))}
-          >
-            <option value="">All</option>
-            {RACES.map((option) => (
-              <option key={option} value={option}>
-                {slugLabel(option)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {onFaceView ? (
+          <label className="flex items-center gap-2">
+            Faces
+            <select
+              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+              aria-label="Faces"
+              value={faceView}
+              onChange={(event) => onFaceView(event.target.value as FaceView)}
+            >
+              <option value="all">All</option>
+              <option value="none">No face</option>
+              <option value="some">With a face</option>
+            </select>
+          </label>
+        ) : null}
+        {onShieldView && (anyShield || shieldView !== "all") ? (
+          <label className="flex items-center gap-2">
+            Shield
+            <select
+              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+              aria-label="Shield"
+              title="Hide tiles whose shield does not match. Unsafe is a red shield, Split an orange core, Safe a green shield. All keeps frames with no verdict."
+              value={shieldView}
+              onChange={(event) => onShieldView(event.target.value as ShieldView)}
+            >
+              <option value="all">All</option>
+              {SHIELD_PICKS.map((pick) => (
+                <option key={pick} value={pick}>
+                  {SHIELD_PICK_LABELS[pick]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {onTag && (tagOptions.length > 0 || tag) ? (
+          <label className="flex items-center gap-2">
+            Cohort
+            <select
+              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+              aria-label="Cohort tag"
+              value={tag ?? ""}
+              onChange={(event) => onTag(event.target.value === "" ? null : event.target.value)}
+            >
+              <option value="">All</option>
+              {tag && !tagOptions.includes(tag) ? <option value={tag}>{tag}</option> : null}
+              {tagOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {images.length > 0 ? (
           <button type="button" className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary" onClick={onSelectAll}>
             {allSelected ? "Clear" : `Select all (${images.length})`}
           </button>
         ) : null}
+        {anyShield && onSelectShield ? (
+          <label className="flex items-center gap-2">
+            Policy
+            <select
+              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
+              aria-label="Select by policy verdict"
+              title="Unsafe is a red shield: the official policy (or the override) flagged. A passing variant does not clear it. Split is an orange core: the policies disagreed, including official-safe with a flagging variant. Safe is a green shield."
+              value=""
+              onChange={(event) => {
+                const pick = event.target.value as ShieldPick | "";
+                if (pick) onSelectShield(pick);
+              }}
+            >
+              <option value="" disabled>
+                Select…
+              </option>
+              {SHIELD_PICKS.filter((pick) => shieldCounts[pick] > 0).map((pick) => (
+                <option key={pick} value={pick}>
+                  {SHIELD_PICK_LABELS[pick]} ({shieldCounts[pick]})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {flagged.length > 0 ? (
           <>
-            <button type="button" className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary" onClick={onSelectFlagged}>
-              {flaggedSelected ? "Clear flagged" : `Select flagged (${flagged.length})`}
+            <button
+              type="button"
+              className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary"
+              title="Frames MiVOLO (or the set age) puts under 18 with an exposed reading of at least 0.2. Delete only applies to these."
+              onClick={onSelectFlagged}
+            >
+              {flaggedSelected ? "Clear under-18" : `Select under-18 (${flagged.length})`}
             </button>
             <button
               type="button"
@@ -174,15 +283,16 @@ export function PhotoGrid({
       </div>
       {selectedHere > deletableSelected ? <p className="text-caption text-text-muted">Only under-18 exposed images can be deleted.</p> : null}
       {deleteError ? <p className="text-caption text-warning">{deleteError}</p> : null}
-      {images.length === 0 ? <p className="text-text-secondary">{emptyView(keepView, race, ageFrom, ageTo)}</p> : null}
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+      {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, ageFrom, ageTo, faceView, shieldView)}</p> : null}
+      {/* Tiles are at least 12rem wide, whatever the sidebar leaves, so the quality · nude · age row never gets cut. Phones keep two across. */}
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]">
         {slice.map((image) => {
           const reason = reasons?.get(image.rel_path);
-          const attrs = attributeLine(image.primary_face_attributes);
-          const youngest = youngestAge(image);
           const kept = reason === "";
-          const blurred = shouldBlur(image, pending, blur);
-          const checking = pending.includes("nsfw") && image.nsfw == null;
+          const override = labels?.get(image.rel_path)?.override ?? null;
+          const blurred = shouldBlur(image, pending, blur, override);
+          const checking = awaitingChecks(image, pending);
+          const age = apparentAge(image, pending, facesRan);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
           return (
@@ -202,35 +312,44 @@ export function PhotoGrid({
                 className={`w-full overflow-hidden rounded-lg border bg-base-800 text-left hover:border-accent-primary ${isSelected && deletable ? "border-warning" : isSelected ? "border-accent-primary" : "border-base-700"}`}
                 onClick={() => onOpen(image.rel_path)}
               >
-                {/* Thumbnails are already resized by the curator. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbUrl(scanId, image.rel_path)}
-                  alt=""
-                  className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
-                />
-                <span className="block space-y-1 p-2">
-                  <span className="block truncate text-caption text-text-secondary">{image.rel_path}</span>
-                  <span className="block text-caption text-text-muted">quality {image.score.toFixed(2)}</span>
-                  {image.nsfw ? (
-                    <span className="block text-caption text-text-muted">NudeNet {image.nsfw.exposed_score.toFixed(2)}</span>
-                  ) : null}
-                  {image.guard ? (
-                    <span className={`block text-caption ${image.guard.safe ? "text-text-muted" : "text-warning"}`}>
-                      {image.guard.safe ? "policy safe" : "policy issue"}
+                <span className="relative block">
+                  {/* Thumbnails are already resized by the curator. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={thumbUrl(scanId, image.rel_path)}
+                    alt=""
+                    className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
+                  />
+                  {/* A blur speaks for itself; only a frame still waiting on checks gets a word. */}
+                  {checking ? (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">Scanning…</span>
                     </span>
                   ) : null}
-                  {checking ? <span className="block text-caption text-text-muted">Checking</span> : null}
-                  {blurred && !checking ? <span className="block text-caption text-text-muted">Blurred</span> : null}
-                  {reasons ? (
-                    <span className={`block text-caption ${kept ? "text-success" : "text-warning"}`}>{kept ? "keep" : reason}</span>
-                  ) : (
-                    <span className="block text-caption text-text-muted">Selecting…</span>
-                  )}
-                  {attrs ? <span className="block truncate text-caption text-text-muted">{attrs}</span> : null}
-                  {youngest != null && (image.primary_face_attributes?.age_years == null || youngest < image.primary_face_attributes.age_years) ? (
-                    <span className="block text-caption text-text-muted">youngest {Math.round(youngest)}y</span>
-                  ) : null}
+                </span>
+                <span className="block p-2 text-caption">
+                  <span className="flex items-center gap-1.5">
+                    <Shield state={shieldState(image, override)} title={shieldTitle(image, override)} className="h-3.5 w-3.5" />
+                    <span className="min-w-0 flex-1 truncate text-text-secondary" title={image.rel_path}>
+                      {baseName(image.rel_path)}
+                    </span>
+                  </span>
+                  <span className="mt-1 grid grid-cols-[auto_1fr_auto_1fr] gap-x-1.5 gap-y-0.5 tabular-nums">
+                    <span className="text-text-muted">quality</span>
+                    <span>{image.score.toFixed(2)}</span>
+                    <span className="text-text-muted" title="NudeNet exposed score">
+                      nude
+                    </span>
+                    <span title="NudeNet exposed score">{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
+                    <span className="text-text-muted">age</span>
+                    <span className={`truncate ${age.text === "no face" ? "text-text-muted" : ""}`} title={age.title}>
+                      {age.text}
+                    </span>
+                    {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
+                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reason}>
+                      {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : reason}
+                    </span>
+                  </span>
                 </span>
               </button>
             </li>
@@ -278,12 +397,25 @@ function ShowButton({
   );
 }
 
-function emptyView(keepView: KeepView, race: FaceRace | null, ageFrom: number | null, ageTo: number | null): string {
+function emptyView(keepView: KeepView, ageFrom: number | null, ageTo: number | null, faceView: FaceView = "all", shieldView: ShieldView = "all"): string {
   const which = keepView === "kept" ? "kept image" : keepView === "left-out" ? "left-out image" : "image";
-  if (race && (ageFrom != null || ageTo != null)) return `No ${which} matches this race and age range.`;
-  if (race) return `No ${which} of this race.`;
+  if (faceView === "none") return `No ${which} without a face in this view.`;
+  if (faceView === "some") return `No ${which} with a face in this view.`;
+  if (shieldView !== "all" && (ageFrom != null || ageTo != null)) {
+    return `No ${which} matches this shield and the other filters.`;
+  }
+  if (shieldView === "unsafe") return `No ${which} with an unsafe shield in this view.`;
+  if (shieldView === "split") return `No ${which} whose policies disagreed in this view.`;
+  if (shieldView === "safe") return `No ${which} with a safe shield in this view.`;
   if (ageFrom != null || ageTo != null || keepView !== "all") return keepView === "all" ? "No image in this age range." : `No ${which} in this view.`;
   return "No image in this age range.";
+}
+
+/** Why the tile says "set": no face of its own, and the scan found one subject across the folder. */
+export function setAgeTitle(image: Pick<ImageResult, "set_age" | "primary_face_attributes" | "faces">): string | null {
+  if (!usesSetAge(image) || !image.set_age) return null;
+  const { years, faces, cluster_id, share } = image.set_age;
+  return `No face in this frame. The set's age: median ${years.toFixed(1)} years over ${faces} MiVOLO faces in ${cluster_id} (${Math.round(share * 100)}% of the scan's faces). An inference about the set, not a reading of this frame.`;
 }
 
 function readAge(value: string): number | null {

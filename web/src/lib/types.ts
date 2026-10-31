@@ -1,14 +1,23 @@
 export const CURATOR_URL = process.env.NEXT_PUBLIC_CURATOR_URL || "http://localhost:8101";
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
+
 /** Curator origin for the page the browser actually opened.
 
-The port and scheme come from CURATOR_URL. The host follows the page, so
-http://192.168.30.39:3000 calls http://192.168.30.39:8101 and a localhost page
-keeps calling localhost. */
-export function curatorUrl(pageHost?: string): string {
+The port and scheme come from CURATOR_URL. When that URL names a loopback host
+(the default), the host follows the page, so http://192.168.30.39:3000 calls
+http://192.168.30.39:8101 and a localhost page keeps calling localhost. A
+CURATOR_URL that names another machine is used as written. */
+export function curatorUrl(pageHost?: string, configured: string = CURATOR_URL): string {
   const host = pageHost ?? (typeof window === "undefined" ? "" : window.location.hostname);
-  if (!host) return CURATOR_URL;
-  const url = new URL(CURATOR_URL);
+  if (!host) return configured;
+  let url: URL;
+  try {
+    url = new URL(configured);
+  } catch {
+    return configured;
+  }
+  if (!LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
   url.hostname = host;
   return url.origin;
 }
@@ -17,17 +26,6 @@ export const PAGE_SIZE = 48;
 
 export const POSES = ["frontal", "three_quarter", "profile"] as const;
 export type FacePose = (typeof POSES)[number];
-
-export const RACES = [
-  "white",
-  "black",
-  "latino_hispanic",
-  "east_asian",
-  "southeast_asian",
-  "indian",
-  "middle_eastern",
-] as const;
-export type FaceRace = (typeof RACES)[number];
 
 export const GENDERS = ["male", "female"] as const;
 export type FaceGender = (typeof GENDERS)[number];
@@ -102,6 +100,18 @@ export const EXPOSED_LABELS = [
 ] as const satisfies readonly NudeNetLabel[];
 export type ExposedLabel = (typeof EXPOSED_LABELS)[number];
 
+/** Covered intimate classes. A detection here, with none of the exposed set, is suggestive. */
+export const SUGGESTIVE_LABELS = [
+  "FEMALE_BREAST_COVERED",
+  "FEMALE_GENITALIA_COVERED",
+  "BUTTOCKS_COVERED",
+  "ANUS_COVERED",
+] as const satisfies readonly NudeNetLabel[];
+
+/** NudeNet content rating on an image the detector checked. Unchecked images have none. */
+export const CONTENT_RATINGS = ["safe", "suggestive", "explicit"] as const;
+export type ContentRating = (typeof CONTENT_RATINGS)[number];
+
 /** SingGuard's default policy, addressed by letter the way `--guard-rules` accepts. */
 export const GUARD_RULES = [
   { id: "A", label: "A. Sexual Content Risk" },
@@ -113,6 +123,17 @@ export const GUARD_RULES = [
   { id: "G", label: "G. Animal Abuse" },
 ] as const;
 
+/**
+ * A SingGuard policy name the curator lists in `singguard_policies`: `default`,
+ * `adult` (rule A covers only apparent minors, non-consent and sexual violence,
+ * and consensual adult nudity is safe), and the variants under evaluation.
+ * Letters B to G mean the same thing under every policy.
+ */
+export type GuardPolicy = string;
+
+/** Rule A under the adult policy; B to G keep the default names. */
+export const ADULT_RULE_A = "A. Illegal or Extreme Sexual Content";
+
 export type ExportMode = "copy" | "symlink" | "move";
 
 export interface Health {
@@ -123,6 +144,31 @@ export interface Health {
   source_root: string | null;
   export_root: string | null;
   allow_move: boolean;
+  /** Curator 0.6: it can stop a running scan and purge the scan cache. */
+  scan_control?: boolean;
+  /** Curator 0.7: frames with no face can take the set's age (`faces.set_age`). */
+  set_age?: boolean;
+  /** Curator 0.8: `GET /guard/policies` serves each policy's text. */
+  guard_policy_text?: boolean;
+}
+
+/**
+ * One SingGuard policy `GET /guard/policies` lists. `source` is `builtin`,
+ * `file` (the operator's policy file, for `default`), or `singguard` when
+ * `default` sends no text and SingGuard applies its own rules. `recorded` is
+ * the name results store; `error` names the env var when the file cannot be read.
+ */
+export interface GuardPolicyInfo {
+  name: string;
+  recorded: string | null;
+  source: "builtin" | "file" | "singguard" | string;
+  text: string | null;
+  error: string | null;
+}
+
+export interface GuardPolicies {
+  singguard: boolean;
+  policies: GuardPolicyInfo[];
 }
 
 export interface Detectors {
@@ -135,14 +181,24 @@ export interface Detectors {
   mivolo: boolean;
   places365: boolean;
   garments: boolean;
+  /** Curator 0.10: InsightFace's person detector is loaded, so a scan can give MiVOLO bodies (`faces.mivolo_body`). */
+  bodies?: boolean;
   /** A NudeNet server is configured (ARGUS_CURATOR_NUDENET_URL). */
   nudenet?: boolean;
   /** A SingGuard server is configured (ARGUS_CURATOR_SINGGUARD_URL). */
   singguard?: boolean;
+  /** Policies a scan can pass as `guard.policy`, in the curator's order (curator 0.5+; empty without SingGuard). */
+  singguard_policies?: string[];
 }
 
 export interface CheckConfig {
   enabled: boolean | null;
+}
+
+/** SingGuard on a scan: the official policy, plus variants run beside it for comparison. */
+export interface GuardConfig extends CheckConfig {
+  policy?: GuardPolicy;
+  variants?: GuardPolicy[];
 }
 
 export interface NsfwDetection {
@@ -165,6 +221,13 @@ export interface GuardResult {
   policy?: string;
 }
 
+/**
+ * Verdicts from the variant policies a scan ran, by policy name. A variant
+ * whose check failed is left out and reads as unknown. Only `lib/policies.ts`
+ * reads this; `guard` stays the official verdict.
+ */
+export type GuardVariants = Record<string, GuardResult>;
+
 export interface FolderEntry {
   name: string;
   rel_path: string;
@@ -183,8 +246,6 @@ export interface FolderListing {
 }
 
 export interface FaceAttributes {
-  race: FaceRace | null;
-  race_conf: number | null;
   gender: FaceGender | null;
   gender_conf: number | null;
   gender_source: "fairface" | "mivolo" | null;
@@ -241,10 +302,36 @@ export interface ImageResult {
   primary_face_cluster: string | null;
   primary_face_pose: FacePose | null;
   primary_face_attributes: FaceAttributes | null;
+  /** Only on a passing frame with no face, when the scan asked for `faces.set_age` and found one subject. */
+  set_age?: SetAge | null;
   scene: SceneTags | null;
   garments: GarmentDetection[] | null;
   nsfw?: NsfwResult | null;
+  /** Curator #18: derived from NudeNet. Missing on an older server; null when NudeNet did not check the image. */
+  content_rating?: ContentRating | null;
   guard?: GuardResult | null;
+  guard_variants?: GuardVariants;
+  /** Curator 0.10, when the scan asked for `faces.mivolo_body`: one entry per person box. */
+  people?: PersonDetection[];
+  /** How the person check went. Null when it was not asked for; an empty `people` means "none found" only when it is `ok`. */
+  people_check?: PeopleCheck | null;
+  people_error?: string | null;
+}
+
+export type PeopleCheck = "ok" | "detection_failed" | "body_ages_failed";
+
+/**
+ * A person box from the curator's body detector. `face_index` is the face it
+ * was matched to; null is a person with no visible face, whose `age_years` is
+ * MiVOLO reading the body alone.
+ */
+export interface PersonDetection {
+  bbox: number[];
+  det_score: number;
+  face_index?: number | null;
+  age_years?: number | null;
+  age_source?: "mivolo" | "fairface" | null;
+  age_body?: boolean | null;
 }
 
 export interface FaceCluster {
@@ -259,6 +346,23 @@ export interface FaceConfig {
   enabled: boolean;
   fairface: boolean;
   mivolo: boolean;
+  /** Curator 0.7: give frames with no face the set's age when one identity holds the scan. */
+  set_age?: boolean;
+  /** Curator 0.10: MiVOLO reads each person's body too, and a person with no face gets a body-only age. */
+  mivolo_body?: boolean;
+}
+
+/**
+ * An age for a frame with no face, read off the set it belongs to: the median
+ * MiVOLO age of the scan's dominant identity. An inference about the set, not
+ * a reading of the frame; shown as such, and counted where a wrong age would
+ * be the costlier mistake (the under-18 hold and the delete mark).
+ */
+export interface SetAge {
+  years: number;
+  cluster_id: string;
+  faces: number;
+  share: number;
 }
 
 export interface SceneConfig {
@@ -285,12 +389,15 @@ export interface ScanSummary {
   garments_config: GarmentConfig;
   /** Present on curator 0.4 scans. `enabled` is whether that check actually ran. */
   nsfw_config?: CheckConfig;
-  guard_config?: CheckConfig;
+  guard_config?: GuardConfig;
   total: number;
   passed: number;
   rejected: number;
   duplicates: number;
   face_clusters: FaceCluster[];
+  /** When `faces.set_age` was asked: the set age given to the faceless frames, or why none was. */
+  set_age?: SetAge | null;
+  set_age_skipped?: string | null;
   results: ImageResult[];
 }
 
@@ -298,6 +405,8 @@ export interface Progress {
   phase: string;
   done: number;
   total: number;
+  /** Checks still running (curator 0.5.1 and later): faces, nsfw, guard. */
+  pending_checks?: string[];
 }
 
 /** One batch of images from a scan that is still running. */
@@ -319,6 +428,13 @@ export interface ActiveScan {
   done: number;
   total: number;
   pending_checks: string[];
+  /** Asked to stop; the slot frees once the checks in flight return. */
+  cancelling?: boolean;
+}
+
+export interface PurgeResult {
+  cancelled: string | null;
+  deleted: number;
 }
 
 export interface ScanListItem {
@@ -339,7 +455,6 @@ export interface FilterState {
   keepSimilar: boolean;
   faceClusters: string[];
   facePoses: FacePose[];
-  faceRaces: FaceRace[];
   faceGenders: FaceGender[];
   faceAges: FaceAge[];
   minAgeYears: number | null;
@@ -355,6 +470,8 @@ export interface FilterState {
   /** Null leaves the exposed score unused. Inclusive, and never below 0.2. */
   nsfwThreshold: number | null;
   nsfwExposedLabels: NudeNetLabel[];
+  /** Keep only these NudeNet ratings. Empty leaves the rating unused. Unchecked images drop once any are set. */
+  contentRatings: ContentRating[];
   guardUnsafe: boolean;
   guardRules: string[];
 }
@@ -366,6 +483,18 @@ export interface ViewState {
   photo: string | null;
   view: "grid" | "people";
   cluster: string | null;
+  /** The official SingGuard policy the next scan asks for. Null takes the curator's `adult` when offered, else its first. */
+  guardPolicy: GuardPolicy | null;
+  /** Policies run beside the official one, for comparison. */
+  guardVariants: GuardPolicy[];
+  /** Run Fashionpedia on the next scan. Off unless asked for: it is the slowest local check and nothing else waits on it. */
+  withGarments: boolean;
+  /** The folder is one set of one person: frames with no face may take the set's age. */
+  setAge: boolean;
+  /** MiVOLO reads bodies on the next scan, so a person with no visible face gets an age. Under evaluation; off unless asked for. */
+  readBodies: boolean;
+  /** Person names by cluster id, for export (`face_names`). The cached scan is not changed. */
+  faceNames: Record<string, string>;
   filter: FilterState;
 }
 
@@ -375,7 +504,6 @@ export interface SelectRequest {
   keep_similar: boolean;
   face_clusters: string[] | null;
   face_poses: FacePose[] | null;
-  face_races: FaceRace[] | null;
   face_genders: FaceGender[] | null;
   face_ages: FaceAge[] | null;
   min_age_years: number | null;
@@ -392,8 +520,12 @@ export interface SelectRequest {
   nsfw_label_thresholds: Record<string, number> | null;
   /** Omitted when the selection is the server's default exposed set. */
   nsfw_exposed_labels?: NudeNetLabel[];
+  /** Keep only these ratings. Omitted or null leaves the rating unused. Unchecked images are excluded once this is set. */
+  content_ratings?: ContentRating[] | null;
   guard_unsafe: boolean;
   guard_rules: string[] | null;
+  /** Policies the unsafe and rule filters read. Omitted means the official verdict only; listed means any of them. */
+  guard_policies?: string[];
 }
 
 export interface SelectRow {
@@ -419,6 +551,8 @@ export interface ExportResult {
   selected_rel_paths: string[];
   exported_paths: Record<string, string>;
   exported_abs_paths: Record<string, string>;
+  /** Sidecars written beside exported files (`write_xmp`). Absent on an older curator. */
+  xmp_written?: number;
 }
 
 export const DEFAULT_FILTER: FilterState = {
@@ -427,7 +561,6 @@ export const DEFAULT_FILTER: FilterState = {
   keepSimilar: false,
   faceClusters: [],
   facePoses: [],
-  faceRaces: [],
   faceGenders: [],
   faceAges: [],
   minAgeYears: null,
@@ -442,6 +575,7 @@ export const DEFAULT_FILTER: FilterState = {
   garmentsUncropped: false,
   nsfwThreshold: null,
   nsfwExposedLabels: [...EXPOSED_LABELS],
+  contentRatings: [],
   guardUnsafe: false,
   guardRules: [],
 };
@@ -453,6 +587,12 @@ export const DEFAULT_VIEW: ViewState = {
   photo: null,
   view: "grid",
   cluster: null,
+  guardPolicy: null,
+  guardVariants: [],
+  withGarments: false,
+  setAge: false,
+  readBodies: false,
+  faceNames: {},
   filter: DEFAULT_FILTER,
 };
 

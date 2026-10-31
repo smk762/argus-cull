@@ -1,9 +1,9 @@
 import { exposedLabelsForRequest } from "./moderation";
-import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
+import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
+import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
-  fairface: boolean;
   mivolo: boolean;
   scenes: boolean;
   garments: boolean;
@@ -13,7 +13,6 @@ export interface FilterAvailability {
 
 const NONE: FilterAvailability = {
   faces: false,
-  fairface: false,
   mivolo: false,
   scenes: false,
   garments: false,
@@ -37,7 +36,6 @@ export function availability(detectors: Detectors | null, summary: ScanSummary |
   const garments = summary?.garments_config;
   return {
     faces: detectors.insightface && ran(faces?.enabled, true),
-    fairface: detectors.fairface && ran(faces?.fairface, true),
     mivolo: detectors.mivolo && ran(faces?.mivolo, true),
     scenes: detectors.places365 && ran(scenes?.enabled, true),
     garments: detectors.garments && ran(garments?.enabled, true),
@@ -50,19 +48,29 @@ function listed<T>(active: boolean, values: readonly T[]): T[] | null {
   return active && values.length > 0 ? [...values] : null;
 }
 
+/**
+ * Policies the unsafe and rule filters read. Every policy the scan ran, so the
+ * curator drops an image when any of them flags it, the way the shield does.
+ * Omitted when only the official policy ran, which is what the curator assumes.
+ */
+export function guardPoliciesForRequest(summary: ScanSummary | null, active: boolean): string[] | undefined {
+  if (!active) return undefined;
+  const run = policiesRun(summary);
+  return run.length > 1 ? run : undefined;
+}
+
 /** Export-filter fields only. No dest, mode, max_keep, or diversify flags. */
-export function selectBody(filter: FilterState, gates: FilterAvailability): SelectRequest {
-  const gender = gates.fairface || gates.mivolo;
+export function selectBody(filter: FilterState, gates: FilterAvailability, summary: ScanSummary | null = null): SelectRequest {
   const threshold = gates.nsfw && filter.nsfwThreshold != null && filter.nsfwExposedLabels.length > 0 ? filter.nsfwThreshold : null;
+  const guardActive = gates.guard && (filter.guardUnsafe || filter.guardRules.length > 0);
   return {
     min_score: filter.minScore,
     include_rejected: filter.includeRejected,
     keep_similar: filter.keepSimilar,
     face_clusters: listed(gates.faces, filter.faceClusters),
     face_poses: listed(gates.faces, filter.facePoses),
-    face_races: listed(gates.fairface, filter.faceRaces),
-    face_genders: listed(gender, filter.faceGenders),
-    face_ages: listed(gates.fairface, filter.faceAges),
+    face_genders: listed(gates.mivolo, filter.faceGenders),
+    face_ages: listed(gates.mivolo, filter.faceAges),
     min_age_years: gates.mivolo ? filter.minAgeYears : null,
     max_age_years: gates.mivolo ? filter.maxAgeYears : null,
     min_attribute_conf: filter.minAttributeConf,
@@ -76,8 +84,10 @@ export function selectBody(filter: FilterState, gates: FilterAvailability): Sele
     nsfw_threshold: threshold,
     nsfw_label_thresholds: null,
     nsfw_exposed_labels: exposedLabelsForRequest(filter, threshold != null),
+    content_ratings: listed(gates.nsfw, filter.contentRatings),
     guard_unsafe: gates.guard ? filter.guardUnsafe : false,
     guard_rules: filter.guardUnsafe ? null : listed(gates.guard, filter.guardRules),
+    guard_policies: guardPoliciesForRequest(summary, guardActive),
   };
 }
 
@@ -87,25 +97,55 @@ export interface ScanBody {
   scenes: SceneConfig;
   garments: GarmentConfig;
   nsfw: CheckConfig;
-  guard: CheckConfig;
+  guard: GuardConfig;
 }
 
-/** Turn a detector on only when /detectors says its weights are loaded. */
-export function scanBody(folder: string, detectors: Detectors): ScanBody {
-  const fairface = detectors.fairface;
+/**
+ * SingGuard config for a scan. Names are sent only when the curator lists
+ * them: an older curator ignores the field and would judge the scan under its
+ * default policy without saying so, so it sees `{ enabled }` only.
+ */
+export function guardBody(detectors: Detectors, choice: PolicyChoice | null): GuardConfig {
+  const enabled = Boolean(detectors.singguard);
+  const available = detectors.singguard_policies ?? [];
+  if (!enabled || !choice || available.length === 0) return { enabled };
+  const { policy, variants } = normalisePolicyChoice(choice, available);
+  return variants.length > 0 ? { enabled, policy, variants } : { enabled, policy };
+}
+
+/** What the viewer asked for beyond the curator's defaults. Every check named here is off unless asked for, and runs only when its weights are loaded. */
+export interface ScanChecks {
+  /** Run Fashionpedia. It is the slowest local check and nothing else in the scan waits on it. */
+  withGarments: boolean;
+  /** Ask for the set's age on frames with no face. Sent only when MiVOLO is loaded; an older curator ignores it. */
+  setAge: boolean;
+  /** Give MiVOLO each person's body (`faces.mivolo_body`). Sent only when MiVOLO and the person detector are loaded. */
+  readBodies: boolean;
+}
+
+export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false, readBodies: false };
+
+/**
+ * Turn a detector on only when /detectors says its weights are loaded.
+ * FairFace is never asked for: cull does not offer race, and MiVOLO gives the
+ * gender and age.
+ */
+export function scanBody(folder: string, detectors: Detectors, policies: PolicyChoice | null = null, checks: ScanChecks = DEFAULT_CHECKS): ScanBody {
   const mivolo = detectors.mivolo;
   return {
     folder,
     faces: {
-      enabled: detectors.insightface || fairface || mivolo,
-      fairface,
+      enabled: detectors.insightface || mivolo,
+      fairface: false,
       mivolo,
+      ...(checks.setAge && mivolo ? { set_age: true } : {}),
+      ...(checks.readBodies && mivolo && detectors.bodies ? { mivolo_body: true } : {}),
     },
     scenes: { enabled: detectors.places365 },
-    garments: { enabled: detectors.garments, min_conf: 0.3 },
+    garments: { enabled: detectors.garments && checks.withGarments, min_conf: 0.3 },
     // NudeNet and SingGuard are remote servers. Ask only when /detectors says the URL is set.
     nsfw: { enabled: Boolean(detectors.nudenet) },
-    guard: { enabled: Boolean(detectors.singguard) },
+    guard: guardBody(detectors, policies),
   };
 }
 

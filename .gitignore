@@ -6,3 +6,5 @@ out
 __pycache__
 .venv
 out/
+/labels/
+compose.override.yaml

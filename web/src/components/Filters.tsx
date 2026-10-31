@@ -3,37 +3,39 @@
 import type { ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
-import { nudeNetLabel, recordedGuardRules } from "@/lib/moderation";
+import { guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
 import { recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
   AGE_BRACKETS,
+  CONTENT_RATINGS,
   ENVIRONMENTS,
   NUDENET_LABELS,
   GARMENTS,
   GENDERS,
   GUARD_RULES,
   POSES,
-  RACES,
   poseLabel,
   slugLabel,
   type Detectors,
   type FilterState,
   type ScanSummary,
 } from "@/lib/types";
-import { toggleValue } from "@/lib/urlState";
+import { clusterLabel, toggleValue } from "@/lib/urlState";
 
 const APPEARANCE =
-  "Race, gender, and age are appearance guesses from a model, not facts about a person. gender_source and age_source name which model made the guess.";
+  "Gender and age are appearance guesses from MiVOLO, not facts about a person. The age bracket is read off MiVOLO's years.";
 
 function CheckList<T extends string>({
   options,
   selected,
   label,
+  counts,
   onToggle,
 }: {
   options: readonly T[];
   selected: readonly T[];
   label: (value: T) => string;
+  counts?: Partial<Record<T, number>>;
   onToggle: (value: T) => void;
 }) {
   if (options.length === 0) return <p className="text-caption text-text-muted">Nothing recorded in this scan.</p>;
@@ -43,7 +45,10 @@ function CheckList<T extends string>({
         <li key={option}>
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} />
-            <span className="capitalize">{label(option)}</span>
+            <span className="capitalize">
+              {label(option)}
+              {counts?.[option] != null ? ` (${counts[option]})` : ""}
+            </span>
           </label>
         </li>
       ))}
@@ -99,6 +104,7 @@ export function Filters({
   detectors,
   summary,
   gates,
+  faceNames,
   onChange,
   unblurNsfw,
   onUnblurNsfw,
@@ -107,6 +113,7 @@ export function Filters({
   detectors: Detectors | null;
   summary: ScanSummary | null;
   gates: FilterAvailability;
+  faceNames: Record<string, string>;
   onChange: (patch: Partial<FilterState>) => void;
   unblurNsfw: boolean;
   onUnblurNsfw: (unblurNsfw: boolean) => void;
@@ -121,18 +128,6 @@ export function Filters({
   };
   const scenes = recordedScenes(summary);
   const clusters = summary?.face_clusters.map((cluster) => cluster.cluster_id) ?? [];
-  const appearanceHint = (): string | null => {
-    if (!detectors) return "Waiting for detector status.";
-    const fairfaceReady = Boolean(missing("fairface")?.ready);
-    const mivoloReady = Boolean(missing("mivolo")?.ready);
-    if (!fairfaceReady && !mivoloReady) {
-      return `${missing("fairface")?.hint ?? ""} ${missing("mivolo")?.hint ?? ""}`.trim();
-    }
-    if (summary && !summary.faces_config.fairface && !summary.faces_config.mivolo) {
-      return "This scan did not run FairFace or MiVOLO. Scan again to record it.";
-    }
-    return null;
-  };
 
   return (
     <section className="space-y-3">
@@ -143,7 +138,7 @@ export function Filters({
         <input type="checkbox" checked={unblurNsfw} onChange={(event) => onUnblurNsfw(event.target.checked)} />
         Unblur NSFW
       </label>
-      <p className="text-caption text-text-muted">Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred.</p>
+      <p className="text-caption text-text-muted">Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame the scan has not finished checking.</p>
       <label className="flex items-center gap-2 text-small">
         <input type="checkbox" checked={filter.includeRejected} onChange={(event) => onChange({ includeRejected: event.target.checked })} />
         Keep hard rejects
@@ -160,7 +155,7 @@ export function Filters({
         <CheckList
           options={clusters}
           selected={filter.faceClusters}
-          label={(id) => id}
+          label={(id) => clusterLabel(id, faceNames)}
           onToggle={(id) => onChange({ faceClusters: toggleValue(filter.faceClusters, id) })}
         />
         <p className="text-caption text-text-muted">Head pose</p>
@@ -172,22 +167,8 @@ export function Filters({
         />
       </Group>
 
-      <Group title="Appearance" hint={appearanceHint()}>
+      <Group title="Appearance" hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo")}>
         <p className="text-caption text-text-secondary">{APPEARANCE}</p>
-        {gates.fairface ? (
-          <>
-            <p className="text-caption text-text-muted">Race</p>
-            <CheckList options={RACES} selected={filter.faceRaces} label={slugLabel} onToggle={(race) => onChange({ faceRaces: toggleValue(filter.faceRaces, race) })} />
-            <p className="text-caption text-text-muted">FairFace age bracket</p>
-            <CheckList options={AGE_BRACKETS} selected={filter.faceAges} label={(age) => age} onToggle={(age) => onChange({ faceAges: toggleValue(filter.faceAges, age) })} />
-          </>
-        ) : (
-          <p className="text-caption text-text-muted">
-            {summary && detectors?.fairface && !summary.faces_config.fairface
-              ? "This scan did not run FairFace. Scan again to record it."
-              : missing("fairface")?.hint}
-          </p>
-        )}
         <p className="text-caption text-text-muted">Gender</p>
         <CheckList
           options={GENDERS}
@@ -195,6 +176,8 @@ export function Filters({
           label={(gender) => gender}
           onToggle={(gender) => onChange({ faceGenders: toggleValue(filter.faceGenders, gender) })}
         />
+        <p className="text-caption text-text-muted">Age bracket</p>
+        <CheckList options={AGE_BRACKETS} selected={filter.faceAges} label={(age) => age} onToggle={(age) => onChange({ faceAges: toggleValue(filter.faceAges, age) })} />
         {gates.mivolo ? (
           <div className="grid grid-cols-2 gap-2">
             <label className="text-caption">
@@ -293,6 +276,17 @@ export function Filters({
           <p className="text-caption text-text-secondary">
             Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too. The first five are the usual exposed set; the rest are faces, covered parts, and other exposed areas.
           </p>
+          <p className="text-caption text-text-muted">Content rating</p>
+          <CheckList
+            options={CONTENT_RATINGS}
+            selected={filter.contentRatings}
+            counts={ratingCounts(summary?.results ?? [])}
+            label={(rating) => rating}
+            onToggle={(rating) => onChange({ contentRatings: toggleValue(filter.contentRatings, rating) })}
+          />
+          <p className="text-caption text-text-muted">
+            Explicit is an exposed class at 0.2 or above; suggestive is a covered intimate class without that; safe is neither. An image NudeNet did not check is dropped once a rating is selected.
+          </p>
           <label className="flex items-center gap-2 text-small">
             <input
               type="checkbox"
@@ -352,7 +346,7 @@ export function Filters({
           <CheckList
             options={[...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))]}
             selected={filter.guardRules}
-            label={(id) => GUARD_RULES.find((rule) => rule.id === id)?.label ?? id}
+            label={(id) => guardRuleLabel(id, summary)}
             onToggle={(rule) => onChange({ guardUnsafe: false, guardRules: toggleValue(filter.guardRules, rule) })}
           />
         </Group>

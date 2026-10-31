@@ -1,4 +1,5 @@
 import { youngestAge } from "./chunks";
+import { effectiveUnsafe } from "./policies";
 import type { FacePose, ImageResult, ScanSummary } from "./types";
 
 export interface SubsetStat {
@@ -103,10 +104,10 @@ export function evaluateSubset(summary: ScanSummary, reasons: ReadonlyMap<string
     stats.push({ label: "Exposed", value: `${exposed} of ${checked.length} at 0.2 or above` });
   }
   if (summary.guard_config?.enabled) {
-    const checked = kept.filter((image) => image.guard != null);
-    const unsafe = checked.filter((image) => image.guard?.safe === false).length;
+    const checked = kept.filter((image) => effectiveUnsafe(image) != null);
+    const unsafe = checked.filter((image) => effectiveUnsafe(image) === true).length;
     stats.push({ label: "Policy", value: `${unsafe} unsafe of ${checked.length}` });
-    if (unsafe > 0) notes.push(`${unsafe} kept ${unsafe === 1 ? "image is" : "images are"} marked unsafe by SingGuard.`);
+    if (unsafe > 0) notes.push(`${unsafe} kept ${unsafe === 1 ? "image is" : "images are"} marked unsafe by a SingGuard policy.`);
   }
   if (summary.faces_config.mivolo) {
     const young = kept.filter((image) => {

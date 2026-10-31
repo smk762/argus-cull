@@ -39,11 +39,12 @@ export function ExportDialog({
   error: string | null;
   result: ExportResult | null;
   onClose: () => void;
-  onExport: (dest: string, mode: ExportMode) => void;
+  onExport: (dest: string, mode: ExportMode, writeXmp: boolean) => void;
   onDownloadExported: () => void;
 }) {
   const [dest, setDest] = useState("selection");
   const [mode, setMode] = useState<ExportMode>("copy");
+  const [writeXmp, setWriteXmp] = useState(false);
   const problem = destProblem(dest);
   const chosen = MODES.find((item) => item.id === mode) ?? MODES[0];
 
@@ -87,12 +88,20 @@ export function ExportDialog({
           ))}
         </fieldset>
         <p className={mode === "move" ? "text-small text-warning" : "text-small text-text-secondary"}>{chosen.detail}</p>
+        <label className="flex items-center gap-2 text-small">
+          <input type="checkbox" checked={writeXmp} disabled={busy} onChange={(event) => setWriteXmp(event.target.checked)} />
+          Write XMP sidecars
+        </label>
+        <p className="text-caption text-text-muted">
+          Writes face regions, the names from People, and the NudeNet content rating beside each exported file, merged onto the source&apos;s sidecar. Ages are never written. The source sidecar is not changed.
+        </p>
         {problem ? <p className="text-caption text-error">{problem}</p> : null}
         {error ? <p className="text-caption text-error">{error}</p> : null}
         {progress ? <ProgressBar progress={progress} /> : null}
         {result ? (
           <p className="text-small text-success">
-            {result.mode} wrote {result.copied} files ({result.skipped} skipped).
+            {result.mode} wrote {result.copied} files ({result.skipped} skipped)
+            {result.xmp_written != null ? `, ${result.xmp_written} ${result.xmp_written === 1 ? "sidecar" : "sidecars"}` : ""}.
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2">
@@ -100,7 +109,7 @@ export function ExportDialog({
             type="button"
             className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40"
             disabled={busy || problem !== null || (mode === "move" && !allowMove)}
-            onClick={() => onExport(dest.trim(), mode)}
+            onClick={() => onExport(dest.trim(), mode, writeXmp)}
           >
             {busy ? "Exporting…" : `${chosen.label} into the export root`}
           </button>

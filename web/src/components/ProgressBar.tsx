@@ -1,11 +1,11 @@
 import { phaseLabel, progressRatio } from "@/lib/progress";
 import type { Progress } from "@/lib/types";
 
-export function ProgressBar({ progress }: { progress: Progress }) {
+function Row({ progress }: { progress: Progress }) {
   const ratio = progressRatio(progress);
   const pct = ratio == null ? null : Math.round(ratio * 100);
   return (
-    <div className="space-y-1" role="status" aria-live="polite">
+    <div className="space-y-1">
       <div className="flex items-baseline justify-between gap-3 text-caption">
         <span>{phaseLabel(progress.phase)}</span>
         <span className="tabular-nums text-text-muted">
@@ -18,6 +18,18 @@ export function ProgressBar({ progress }: { progress: Progress }) {
           style={pct == null ? undefined : { width: `${pct}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+/** One row per phase in flight. Face detection and NudeNet run together, so there can be two. */
+export function ProgressBar({ progress }: { progress: Progress | readonly Progress[] }) {
+  const rows = Array.isArray(progress) ? (progress as readonly Progress[]) : [progress as Progress];
+  return (
+    <div className="space-y-2" role="status" aria-live="polite">
+      {rows.map((row) => (
+        <Row key={row.phase} progress={row} />
+      ))}
     </div>
   );
 }

@@ -6,3 +6,6 @@ services:
     build:
       context: ../argus-curator
       dockerfile: Dockerfile
+      args:
+        # The CUDA image, as the published one; CURATOR_GPU=0 builds the CPU image.
+        GPU: ${CURATOR_GPU:-1}

@@ -1,9 +1,15 @@
-import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type Health, type Progress, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
-import { exportBody } from "./paths";
-import { scanBody } from "./select";
+import { curatorUrl, type Detectors, type ExportMode, type ExportResult, type FolderListing, type GuardPolicies, type Health, type Progress, type PurgeResult, type ScanChunk, type ScanList, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
+import type { Caption, CohortConfig } from "./cohorts";
+import type { ImageLabel, LabelFile } from "./labels";
+import { exportBody, type ExportExtras } from "./paths";
+import type { PolicyChoice } from "./policies";
+import { scanBody, type ScanChecks } from "./select";
 import { parseSseFrames } from "./sse";
 
 export class ApiError extends Error {}
+
+/** The scan stream ended because someone stopped the scan. Not a failure. */
+export class ScanStopped extends ApiError {}
 
 export async function readError(response: Response): Promise<string> {
   try {
@@ -32,6 +38,14 @@ export function imageUrl(scanId: string, relPath: string): string {
 
 export const getHealth = (): Promise<Health> => getJson("/health");
 export const getDetectors = (): Promise<Detectors> => getJson("/detectors");
+
+/** Curator 0.8. An older server answers 404; the page then has names but not wording. */
+export async function getGuardPolicies(): Promise<GuardPolicies | null> {
+  const response = await fetch(`${curatorUrl()}/guard/policies`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as GuardPolicies;
+}
 export const getFolders = (path: string): Promise<FolderListing> =>
   getJson(`/folders?${new URLSearchParams({ path })}`);
 export const getScan = (scanId: string): Promise<ScanSummary> => getJson(`/scan/${encodeURIComponent(scanId)}`);
@@ -72,31 +86,77 @@ async function postSse<T>(
   if (!response.ok) throw new ApiError(await readError(response));
   let result: T | null = null;
   let failure: string | null = null;
+  let stopped = false;
   await readSse(response, (event, data) => {
     if (event === "progress") onProgress(data as Progress);
     else if (event === "chunk") onChunk?.(data as ScanChunk);
     else if (event === "complete") result = data as T;
+    else if (event === "cancelled") stopped = true;
     else if (event === "error") failure = (data as { detail?: string }).detail || "The curator reported an error.";
   });
+  if (stopped) throw new ScanStopped("The scan was stopped.");
   if (failure) throw new ApiError(failure);
   if (result == null) throw new ApiError("The curator ended the stream without a result.");
   return result;
 }
 
-/** Delete cached scans from the previous folder. A missing route is ignored. */
-export async function purgeScans(): Promise<void> {
-  const response = await fetch("/api/purge", { method: "POST" });
-  if (response.status === 404) return;
+/** Stop the running scan (curator 0.6). The curator drops its partial summary. */
+export async function cancelScan(scanId: string): Promise<void> {
+  const response = await fetch(`${curatorUrl()}/scan/${encodeURIComponent(scanId)}/cancel`, { method: "POST" });
   if (!response.ok) throw new ApiError(await readError(response));
+}
+
+/** Stop the running scan, if any, and delete every cached scan (curator 0.6). Source images stay. */
+export async function purgeScans(): Promise<PurgeResult> {
+  const response = await fetch(`${curatorUrl()}/scans/purge`, { method: "POST" });
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as PurgeResult;
 }
 
 export function scanFolder(
   folder: string,
   detectors: Detectors,
+  policies: PolicyChoice | null,
+  checks: ScanChecks,
   onProgress: (progress: Progress) => void,
   onChunk: (chunk: ScanChunk) => void,
 ): Promise<ScanSummary> {
-  return postSse("/scan/folder/stream", scanBody(folder, detectors), onProgress, onChunk);
+  return postSse("/scan/folder/stream", scanBody(folder, detectors, policies, checks), onProgress, onChunk);
+}
+
+/** Labels live on this page's server, not the curator. The folder is the one the scan reports. */
+export async function getLabels(folder: string): Promise<LabelFile> {
+  const response = await fetch(`/api/labels?${new URLSearchParams({ folder })}`);
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as LabelFile;
+}
+
+export async function putLabel(folder: string, relPath: string, label: Omit<ImageLabel, "updated_at"> | null): Promise<LabelFile> {
+  const response = await fetch("/api/labels", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder, rel_path: relPath, label }),
+  });
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as LabelFile;
+}
+
+/** The setting and wardrobe rules from cohorts.json, as this page's server read them. */
+export async function getCohorts(): Promise<CohortConfig & { source: string | null; error: string | null }> {
+  const response = await fetch("/api/cohorts");
+  if (!response.ok) throw new ApiError(await readError(response));
+  return (await response.json()) as CohortConfig & { source: string | null; error: string | null };
+}
+
+/** Caption sidecars for these image paths (`abs_path`). A path with no sidecar maps to null. */
+export async function getCaptions(paths: string[]): Promise<Record<string, Caption | null>> {
+  const response = await fetch("/api/captions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths }),
+  });
+  if (!response.ok) throw new ApiError(await readError(response));
+  return ((await response.json()) as { captions: Record<string, Caption | null> }).captions;
 }
 
 export async function deleteImage(scanId: string, relPath: string): Promise<void> {
@@ -128,6 +188,7 @@ export function exportScan(
   mode: ExportMode,
   filter: SelectRequest,
   onProgress: (progress: Progress) => void,
+  extras: ExportExtras = {},
 ): Promise<ExportResult> {
-  return postSse("/export/stream", exportBody(scanId, dest, mode, filter), onProgress);
+  return postSse("/export/stream", exportBody(scanId, dest, mode, filter, extras), onProgress);
 }

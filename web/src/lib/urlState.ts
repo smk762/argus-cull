@@ -1,6 +1,7 @@
 import { sameMembers } from "./moderation";
 import {
   AGE_BRACKETS,
+  CONTENT_RATINGS,
   DEFAULT_FILTER,
   DEFAULT_VIEW,
   ENVIRONMENTS,
@@ -9,7 +10,7 @@ import {
   GARMENTS,
   GENDERS,
   POSES,
-  RACES,
+  type ContentRating,
   type ExposedLabel,
   type FaceAge,
   type FaceGender,
@@ -23,7 +24,6 @@ import {
 const FACET_GROUPS = {
   cluster: "cluster",
   pose: "pose",
-  race: "race",
   gender: "gender",
   age: "age",
   scene: "scene",
@@ -31,6 +31,7 @@ const FACET_GROUPS = {
   garment: "garment",
   exclude: "exclude",
   exposed: "exposed",
+  rating: "rating",
   rule: "rule",
 } as const;
 
@@ -61,12 +62,17 @@ function readFlag(params: URLSearchParams, key: string): boolean {
   return raw === "1" || raw === "true";
 }
 
+/** A SingGuard policy name as the curator spells them. The scan body drops any the curator does not list. */
+function policyName(value: string | null): string | null {
+  const name = (value ?? "").trim();
+  return /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(name) ? name : null;
+}
+
 export function parseView(params: URLSearchParams): ViewState {
   const filter: FilterState = {
     ...DEFAULT_FILTER,
     faceClusters: [],
     facePoses: [],
-    faceRaces: [],
     faceGenders: [],
     faceAges: [],
     scenes: [],
@@ -74,6 +80,7 @@ export function parseView(params: URLSearchParams): ViewState {
     garments: [],
     excludeGarments: [],
     nsfwExposedLabels: [...EXPOSED_LABELS],
+    contentRatings: [],
     guardRules: [],
   };
   let exposedCustom = false;
@@ -86,8 +93,6 @@ export function parseView(params: URLSearchParams): ViewState {
     if (group === FACET_GROUPS.cluster && !filter.faceClusters.includes(term)) filter.faceClusters.push(term);
     const pose = group === FACET_GROUPS.pose ? take(term, POSES) : null;
     if (pose && !filter.facePoses.includes(pose)) filter.facePoses.push(pose);
-    const race = group === FACET_GROUPS.race ? take(term, RACES) : null;
-    if (race && !filter.faceRaces.includes(race)) filter.faceRaces.push(race);
     const gender = group === FACET_GROUPS.gender ? take(term, GENDERS) : null;
     if (gender && !filter.faceGenders.includes(gender)) filter.faceGenders.push(gender);
     const age = group === FACET_GROUPS.age ? take(term, AGE_BRACKETS) : null;
@@ -108,6 +113,8 @@ export function parseView(params: URLSearchParams): ViewState {
       if (!filter.nsfwExposedLabels.includes(exposed)) filter.nsfwExposedLabels.push(exposed);
     }
     if (group === FACET_GROUPS.rule && !filter.guardRules.includes(term)) filter.guardRules.push(term);
+    const rating = group === FACET_GROUPS.rating ? take(term, CONTENT_RATINGS) : null;
+    if (rating && !filter.contentRatings.includes(rating)) filter.contentRatings.push(rating);
   }
   filter.minScore = readNumber(params, "min_score", DEFAULT_FILTER.minScore);
   filter.includeRejected = readFlag(params, "include_rejected");
@@ -124,6 +131,11 @@ export function parseView(params: URLSearchParams): ViewState {
 
   const page = readNumber(params, "page", 1);
   const view = params.get("view") === "people" ? "people" : "grid";
+  const faceNames: Record<string, string> = {};
+  for (const raw of params.getAll("name")) {
+    const parsed = readFaceName(raw);
+    if (parsed) faceNames[parsed.id] = parsed.name;
+  }
   return {
     scan: params.get("scan") || null,
     folder: params.get("folder") ?? "",
@@ -131,8 +143,51 @@ export function parseView(params: URLSearchParams): ViewState {
     photo: params.get("photo") || null,
     view,
     cluster: params.get("cluster") || null,
+    guardPolicy: policyName(params.get("policy")),
+    guardVariants: (params.get("variants") ?? "").split(",").map((name) => policyName(name)).filter((name): name is string => name != null),
+    withGarments: params.get("garments") === "on",
+    setAge: params.get("set") === "1",
+    readBodies: params.get("bodies") === "1",
+    faceNames,
     filter,
   };
+}
+
+/**
+ * `face_1:Ada` as the URL stores a cluster name. The name is not trimmed: a
+ * trailing space is how "Mary Jane" is typed, because each keystroke writes
+ * the query string and a trim would eat the space. Empty-after-trim is dropped.
+ * A name is at most 200 characters, matching the input and the curator.
+ */
+function readFaceName(raw: string): { id: string; name: string } | null {
+  const i = raw.indexOf(":");
+  if (i <= 0) return null;
+  const id = raw.slice(0, i).trim();
+  const name = raw.slice(i + 1);
+  if (!id || !name.trim() || name.length > 200) return null;
+  return { id, name };
+}
+
+/** Names that survive the curator's 1–200 character check, keyed by cluster id. */
+export function namedFaces(names: Record<string, string>): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  for (const [id, name] of Object.entries(names)) {
+    const parsed = readFaceName(`${id}:${name.trim()}`);
+    if (parsed) out[parsed.id] = parsed.name;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+export function clusterLabel(id: string, names: Record<string, string>): string {
+  const name = names[id]?.trim();
+  return name || id;
+}
+
+export function withFaceName(view: ViewState, clusterId: string, name: string): ViewState {
+  const faceNames = { ...view.faceNames };
+  if (name) faceNames[clusterId] = name;
+  else delete faceNames[clusterId];
+  return { ...view, faceNames };
 }
 
 function appendFacet(params: URLSearchParams, group: string, terms: readonly string[]): void {
@@ -148,6 +203,17 @@ export function serializeView(view: ViewState): string {
   if (view.photo) params.set("photo", view.photo);
   if (view.view === "people") params.set("view", "people");
   if (view.cluster) params.set("cluster", view.cluster);
+  if (view.guardPolicy) params.set("policy", view.guardPolicy);
+  if (view.guardVariants.length > 0) params.set("variants", view.guardVariants.join(","));
+  if (view.withGarments) params.set("garments", "on");
+  if (view.setAge) params.set("set", "1");
+  if (view.readBodies) params.set("bodies", "1");
+  const names: Record<string, string> = {};
+  for (const [id, name] of Object.entries(view.faceNames)) {
+    const parsed = readFaceName(`${id}:${name}`);
+    if (parsed) names[parsed.id] = parsed.name;
+  }
+  for (const id of Object.keys(names).sort()) params.append("name", `${id}:${names[id]}`);
   if (filter.minScore !== DEFAULT_FILTER.minScore) params.set("min_score", String(filter.minScore));
   if (filter.includeRejected) params.set("include_rejected", "1");
   if (filter.keepSimilar) params.set("keep_similar", "1");
@@ -167,13 +233,13 @@ export function serializeView(view: ViewState): string {
   appendFacet(params, "rule", filter.guardRules);
   appendFacet(params, "cluster", filter.faceClusters);
   appendFacet(params, "pose", filter.facePoses);
-  appendFacet(params, "race", filter.faceRaces);
   appendFacet(params, "gender", filter.faceGenders);
   appendFacet(params, "age", filter.faceAges);
   appendFacet(params, "scene", filter.scenes);
   appendFacet(params, "env", filter.sceneEnvironments);
   appendFacet(params, "garment", filter.garments);
   appendFacet(params, "exclude", filter.excludeGarments);
+  appendFacet(params, "rating", filter.contentRatings);
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -186,5 +252,5 @@ export function withFilter(view: ViewState, patch: Partial<FilterState>): ViewSt
   return { ...view, page: 1, filter: { ...view.filter, ...patch } };
 }
 
-export type { ExposedLabel, FaceAge, FaceGender, FacePose, GarmentLabel, SceneEnvironment };
+export type { ContentRating, ExposedLabel, FaceAge, FaceGender, FacePose, GarmentLabel, SceneEnvironment };
 export { DEFAULT_VIEW };

@@ -1,11 +1,14 @@
 services:
   argus-curator:
-    # Published 0.4.0 image with the local scan-batch overlay. The sibling
-    # argus-curator checkout has to be next to this repo.
-    image: argus-cull-curator:local
-    build:
-      context: ../argus-curator
-      dockerfile: Dockerfile.overlay
+    # Published CUDA image. Releases tag :latest (CPU) and :latest-gpu.
+    # This stack uses the GPU build: face detection, MiVOLO, Places365 and
+    # Fashionpedia. The host needs the NVIDIA container runtime and a
+    # driver for CUDA 13; on a host without one, use :latest and drop `gpus`
+    # below. Pull after a curator release (`docker compose pull argus-curator`);
+    # Compose will not notice a moved latest tag on its own. No sibling
+    # checkout is needed; docker-compose.local-curator.yaml builds one instead.
+    image: ghcr.io/smk762/argus-curator:latest-gpu
+    gpus: all
     ports:
       - "${CURATOR_PORT:-8101}:8101"
     environment:
@@ -13,24 +16,41 @@ services:
       - CURATOR_EXPORT_PATH=/data/out
       - CURATOR_CACHE_DIR=/root/.cache/argus_curator/scans
       - HF_HOME=/root/.cache/huggingface
-      - ARGUS_CURATOR_FAIRFACE_MODEL=/root/.cache/argus_curator/models/fairface_res34_race7.onnx
       - ARGUS_CURATOR_MIVOLO_MODEL=/root/.cache/argus_curator/models/mivolo_v2_d1_384.onnx
       - ARGUS_CURATOR_PLACES365_MODEL=/root/.cache/argus_curator/models/places365_resnet18.onnx
       - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
       # Both checks are on unless .env sets the URL empty.
       - ARGUS_CURATOR_NUDENET_URL=${ARGUS_CURATOR_NUDENET_URL-http://nudenet:8080}
-      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://singguard:9150}
-      - ARGUS_CURATOR_SINGGUARD_THINKING=${ARGUS_CURATOR_SINGGUARD_THINKING-fast}
+      # Darkroom's guard: agent-composer on the LAN. Empty turns the check off.
+      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://192.168.1.198:9150}
+      # cascade: fast on every frame (about a second), slow on the frames
+      # fast flags and on a MiVOLO age under 18 with an exposed score of at
+      # least 0.2; slow's verdict stands. fast is a verdict and rule only;
+      # fast-slow and slow also write why.
+      - ARGUS_CURATOR_SINGGUARD_THINKING=${ARGUS_CURATOR_SINGGUARD_THINKING-cascade}
+      # What the scan already knows, sent to SingGuard as recorded context:
+      # age (MiVOLO estimate per face), folder, caption (a lens sidecar).
+      # Empty sends the image alone.
+      - ARGUS_CURATOR_SINGGUARD_CONTEXT=${ARGUS_CURATOR_SINGGUARD_CONTEXT-age,folder,caption}
       # Empty keeps the curator's localhost:3000 allow-list. A set value replaces
       # that list, so name every origin the page is opened as.
       - CURATOR_CORS_ORIGINS=${CURATOR_CORS_ORIGINS-}
       # - CURATOR_ALLOW_MOVE=1
+      # Take turns on the GPU with argus-lens: one argus job at a time, each
+      # waiting for free VRAM (argus_cortex.gpu). lens must mount the same host
+      # directory (ARGUS_GPU_LOCK_DIR) and use the same lock file in it.
+      # ARGUS_GPU_COORDINATOR=none in .env turns it off.
+      - ARGUS_GPU_COORDINATOR=${ARGUS_GPU_COORDINATOR:-lease}
+      - ARGUS_GPU_LEASE_PATH=/run/argus-gpu/argus-gpu.lock
+      - ARGUS_GPU_LEASE_TIMEOUT_S=${ARGUS_GPU_LEASE_TIMEOUT_S:-300}
     volumes:
       - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images
       - ${CURATOR_OUTPUT_PATH:-./out}:/data/out
       - ~/.cache/argus_curator:/root/.cache/argus_curator
       - ~/.cache/huggingface:/root/.cache/huggingface
       - ~/.insightface:/root/.insightface
+      # The host-wide GPU lease's lock directory, shared with argus-lens.
+      - ${ARGUS_GPU_LOCK_DIR:-/tmp/argus-gpu}:/run/argus-gpu
     restart: unless-stopped
 
   # NudeNet detector server (AGPL-3.0). Curator only talks to it over HTTP.
@@ -41,15 +61,29 @@ services:
       nofile: 1000000
     restart: unless-stopped
 
-  # SingGuard (inclusionAI/Sing-Guard-4b). Curator calls POST /api/guard/check.
-  # The first start downloads the weights into the named volume. Needs an NVIDIA GPU.
+  # Optional local Sing-Guard-4b. Off unless `--profile local-singguard`.
+  # Prefer agent-composer (`ARGUS_CURATOR_SINGGUARD_URL`); this copy cannot
+  # do text-only checks and holds a GPU darkroom wants for ComfyUI.
   singguard:
+    profiles: ["local-singguard"]
     build:
       context: ./singguard
     environment:
       - HF_HOME=/data/hf
       - SINGGUARD_MODEL=${SINGGUARD_MODEL:-inclusionAI/Sing-Guard-4b}
+      # Hub commit sha to pin. The model loads with trust_remote_code, so this
+      # also pins the code that runs. Empty follows the branch head.
+      - SINGGUARD_REVISION=${SINGGUARD_REVISION:-}
       - SINGGUARD_LOAD_IN_4BIT=${SINGGUARD_LOAD_IN_4BIT:-0}
+      # Generation budget for the reasoning modes (fast-slow, slow) and for
+      # fast. A generation cut off before its <answer> tag is a failed check.
+      - SINGGUARD_MAX_NEW_TOKENS=${SINGGUARD_MAX_NEW_TOKENS:-2048}
+      - SINGGUARD_MAX_NEW_TOKENS_FAST=${SINGGUARD_MAX_NEW_TOKENS_FAST:-256}
+      # fast, fast-slow, slow or cascade: judge every request in this mode
+      # whatever the client asked for. Curator 0.5 can only ask for fast or
+      # fast-slow, so this is how it gets slow or cascade (fast for every
+      # frame, slow for the ones fast flags). Empty honours the request.
+      - SINGGUARD_FORCE_THINKING=${SINGGUARD_FORCE_THINKING:-}
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - singguard_hf:/data/hf
@@ -79,12 +113,22 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - SCAN_CACHE_DIR=/scans
       # Read at request time. A change needs the web container recreated, not a rebuild.
       - ARGUS_CULL_BLUR_EXPOSED_SCORE=${ARGUS_CULL_BLUR_EXPOSED_SCORE-0.25}
       - ARGUS_CULL_POLICY_BLUR=${ARGUS_CULL_POLICY_BLUR-1}
+      - CULL_LABELS_DIR=/labels
+      - CULL_COHORTS_FILE=/config/cohorts.json
+      - CULL_SOURCE_DIR=/data/images
     volumes:
-      - ~/.cache/argus_curator/scans:/scans
+      # Verdict labels (hard, ambiguous, adult, other, safe) by folder and path.
+      # They are an evaluation record, not scan state, so they live here and
+      # outlive the browser and the scan cache.
+      - ${CULL_LABELS_PATH:-./labels}:/labels
+      # Setting and wardrobe cohort rules. Edit the file and reload the page.
+      - ${CULL_COHORTS_PATH:-./cohorts.json}:/config/cohorts.json:ro
+      # The curator's source folder, read-only and at the same path, so the
+      # page can read argus-lens caption sidecars (<image>.txt, <image>.xmp).
+      - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images:ro
     depends_on:
       - argus-curator
     restart: unless-stopped
