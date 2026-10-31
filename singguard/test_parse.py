@@ -114,6 +114,14 @@ class ParseGenerationTest(unittest.TestCase):
         with self.assertRaises(NoVerdict):
             parse_generation("")
 
+    def test_a_long_writeup_is_not_cut_at_4000(self) -> None:
+        body = "[Step 1] Content Summary\n" + ("A posed adult. " * 400) + "\n[Step 3] Final Judgment\nSafe.\n"
+        text = body + "<answer>Safe</answer>"
+        _, _, explanation, _ = parse_generation(text)
+        self.assertGreater(len(explanation), 4000)
+        self.assertTrue(explanation.endswith("Safe."))
+        self.assertLessEqual(len(explanation), 16384)
+
     def test_unsafe_without_a_rule_is_a_failure(self) -> None:
         with self.assertRaises(NoVerdict):
             parse_generation("unsafe\nno tag here")

@@ -27,7 +27,9 @@ _CONCLUDE_RE = re.compile(
     r"final judgment[:\s]+)\s+(safe|unsafe)\b",
     re.IGNORECASE,
 )
-_EXPLANATION_MAX = 4000
+# A 2048-token slow writeup is about 8k characters; 4000 cut cascade
+# reasoning mid-sentence (composer also prefixes a cascade note).
+_EXPLANATION_MAX = 16384
 
 
 class NoVerdict(ValueError):
