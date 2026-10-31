@@ -243,7 +243,7 @@ describe("select body", () => {
     expect(parseView(new URLSearchParams("policy=anything&variants=,bad%20name,ok")).guardPolicy).toBe("anything");
     expect(parseView(new URLSearchParams("variants=,bad%20name,ok")).guardVariants).toEqual(["ok"]);
     const adult = { guard_config: { enabled: true, policy: "adult" } } as unknown as ScanSummary;
-    expect(guardRuleLabel("A", adult)).toBe("A. Illegal or Extreme Sexual Content");
+    expect(guardRuleLabel("A", adult)).toBe("A. Illegal Sexual Content");
     expect(guardRuleLabel("A", null)).toBe("A. Sexual Content Risk");
     expect(guardRuleLabel("B", adult)).toBe("B. Real-World Crimes & Public Safety");
   });
