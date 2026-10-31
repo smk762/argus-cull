@@ -5,7 +5,7 @@ import type { Detectors, ScanSummary, ViewState } from "./types";
 
 /**
  * What the scan form asks for. The same fields live in the URL (`folder`,
- * `policy`, `variants`, `garments=off`, `set=1`), so a shared link opens the
+ * `policy`, `variants`, `garments=off`, `set=1`, `bodies=1`), so a shared link opens the
  * form filled the same way, and a scan already run can be read back into it
  * to run again with one change.
  */
@@ -15,16 +15,18 @@ export interface ScanTemplate {
   policy: PolicyChoice;
   withGarments: boolean;
   setAge: boolean;
+  readBodies: boolean;
 }
 
 /** The form as the URL has it. The policy falls back the way the picker does when the URL names none. */
-export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" | "guardVariants" | "withGarments" | "setAge">, detectors: Detectors | null): ScanTemplate {
+export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" | "guardVariants" | "withGarments" | "setAge" | "readBodies">, detectors: Detectors | null): ScanTemplate {
   const base = defaultPolicyChoice(detectors?.singguard_policies);
   return {
     folder: view.folder,
     policy: { policy: view.guardPolicy ?? base.policy, variants: [...view.guardVariants] },
     withGarments: view.withGarments,
     setAge: view.setAge,
+    readBodies: view.readBodies,
   };
 }
 
@@ -44,6 +46,7 @@ export function templateFromSummary(summary: ScanSummary, root: string | null, d
     policy: { policy, variants: (guard?.variants ?? []).filter((name) => name !== policy) },
     withGarments: summary.garments_config.enabled === true,
     setAge: summary.faces_config.set_age === true,
+    readBodies: summary.faces_config.mivolo_body === true,
   };
 }
 
@@ -59,6 +62,7 @@ export function viewWithTemplate(view: ViewState, template: ScanTemplate): ViewS
     guardVariants: [...template.policy.variants],
     withGarments: template.withGarments,
     setAge: template.setAge,
+    readBodies: template.readBodies,
     view: "grid",
   };
 }
@@ -71,5 +75,6 @@ export function templateSummary(template: ScanTemplate, detectors: Detectors | n
   }
   if (detectors?.garments && template.withGarments) parts.push("garments");
   if (template.setAge) parts.push("set age");
+  if (template.readBodies) parts.push("bodies");
   return parts.join(" · ");
 }

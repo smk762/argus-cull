@@ -27,17 +27,6 @@ export const PAGE_SIZE = 48;
 export const POSES = ["frontal", "three_quarter", "profile"] as const;
 export type FacePose = (typeof POSES)[number];
 
-export const RACES = [
-  "white",
-  "black",
-  "latino_hispanic",
-  "east_asian",
-  "southeast_asian",
-  "indian",
-  "middle_eastern",
-] as const;
-export type FaceRace = (typeof RACES)[number];
-
 export const GENDERS = ["male", "female"] as const;
 export type FaceGender = (typeof GENDERS)[number];
 
@@ -192,6 +181,8 @@ export interface Detectors {
   mivolo: boolean;
   places365: boolean;
   garments: boolean;
+  /** Curator 0.10: InsightFace's person detector is loaded, so a scan can give MiVOLO bodies (`faces.mivolo_body`). */
+  bodies?: boolean;
   /** A NudeNet server is configured (ARGUS_CURATOR_NUDENET_URL). */
   nudenet?: boolean;
   /** A SingGuard server is configured (ARGUS_CURATOR_SINGGUARD_URL). */
@@ -255,8 +246,6 @@ export interface FolderListing {
 }
 
 export interface FaceAttributes {
-  race: FaceRace | null;
-  race_conf: number | null;
   gender: FaceGender | null;
   gender_conf: number | null;
   gender_source: "fairface" | "mivolo" | null;
@@ -322,6 +311,27 @@ export interface ImageResult {
   content_rating?: ContentRating | null;
   guard?: GuardResult | null;
   guard_variants?: GuardVariants;
+  /** Curator 0.10, when the scan asked for `faces.mivolo_body`: one entry per person box. */
+  people?: PersonDetection[];
+  /** How the person check went. Null when it was not asked for; an empty `people` means "none found" only when it is `ok`. */
+  people_check?: PeopleCheck | null;
+  people_error?: string | null;
+}
+
+export type PeopleCheck = "ok" | "detection_failed" | "body_ages_failed";
+
+/**
+ * A person box from the curator's body detector. `face_index` is the face it
+ * was matched to; null is a person with no visible face, whose `age_years` is
+ * MiVOLO reading the body alone.
+ */
+export interface PersonDetection {
+  bbox: number[];
+  det_score: number;
+  face_index?: number | null;
+  age_years?: number | null;
+  age_source?: "mivolo" | "fairface" | null;
+  age_body?: boolean | null;
 }
 
 export interface FaceCluster {
@@ -338,6 +348,8 @@ export interface FaceConfig {
   mivolo: boolean;
   /** Curator 0.7: give frames with no face the set's age when one identity holds the scan. */
   set_age?: boolean;
+  /** Curator 0.10: MiVOLO reads each person's body too, and a person with no face gets a body-only age. */
+  mivolo_body?: boolean;
 }
 
 /**
@@ -443,7 +455,6 @@ export interface FilterState {
   keepSimilar: boolean;
   faceClusters: string[];
   facePoses: FacePose[];
-  faceRaces: FaceRace[];
   faceGenders: FaceGender[];
   faceAges: FaceAge[];
   minAgeYears: number | null;
@@ -480,6 +491,8 @@ export interface ViewState {
   withGarments: boolean;
   /** The folder is one set of one person: frames with no face may take the set's age. */
   setAge: boolean;
+  /** MiVOLO reads bodies on the next scan, so a person with no visible face gets an age. Under evaluation; off unless asked for. */
+  readBodies: boolean;
   /** Person names by cluster id, for export (`face_names`). The cached scan is not changed. */
   faceNames: Record<string, string>;
   filter: FilterState;
@@ -491,7 +504,6 @@ export interface SelectRequest {
   keep_similar: boolean;
   face_clusters: string[] | null;
   face_poses: FacePose[] | null;
-  face_races: FaceRace[] | null;
   face_genders: FaceGender[] | null;
   face_ages: FaceAge[] | null;
   min_age_years: number | null;
@@ -549,7 +561,6 @@ export const DEFAULT_FILTER: FilterState = {
   keepSimilar: false,
   faceClusters: [],
   facePoses: [],
-  faceRaces: [],
   faceGenders: [],
   faceAges: [],
   minAgeYears: null,
@@ -580,6 +591,7 @@ export const DEFAULT_VIEW: ViewState = {
   guardVariants: [],
   withGarments: false,
   setAge: false,
+  readBodies: false,
   faceNames: {},
   filter: DEFAULT_FILTER,
 };

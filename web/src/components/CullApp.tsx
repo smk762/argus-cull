@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByRace, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
@@ -17,7 +17,6 @@ import {
   PAGE_SIZE,
   type Detectors,
   type ExportMode,
-  type FaceRace,
   type ExportResult,
   type GuardPolicyInfo,
   type Health,
@@ -325,7 +324,6 @@ export function CullApp() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [ageFrom, setAgeFrom] = useState<number | null>(null);
   const [ageTo, setAgeTo] = useState<number | null>(null);
-  const [race, setRace] = useState<FaceRace | null>(null);
   const [faceView, setFaceView] = useState<FaceView>("all");
   const [shieldView, setShieldView] = useState<ShieldView>("all");
   const [keepView, setKeepView] = useState<KeepView>("all");
@@ -357,8 +355,8 @@ export function CullApp() {
   const tagOptions = useMemo(() => cohorts.tags.map((rule) => rule.tag).filter((name) => visible.some((image) => (tags.get(image.rel_path) ?? []).includes(name))), [cohorts, visible, tags]);
   const shieldOverride = useCallback((rel: string) => labels.get(rel)?.override ?? null, [labels]);
   const viewed = useMemo(
-    () => filterByTag(filterByShield(filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), shieldView, shieldOverride), tags, tag),
-    [visible, ageFrom, ageTo, race, faceView, shieldView, shieldOverride, tags, tag],
+    () => filterByTag(filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride), tags, tag),
+    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride, tags, tag],
   );
   const facesKnown = useMemo(() => facesRan(summary), [summary]);
   const gallery = useMemo(() => sortImages(filterByKeep(viewed, reasons, keepView), sort, sortDirection), [viewed, reasons, keepView, sort, sortDirection]);
@@ -373,8 +371,8 @@ export function CullApp() {
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
   const cohortBase = useMemo(
-    () => filterByShield(filterByFaces(filterByRace(filterByAge(visible, ageFrom, ageTo), race), faceView), shieldView, shieldOverride),
-    [visible, ageFrom, ageTo, race, faceView, shieldView, shieldOverride],
+    () => filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride),
+    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride],
   );
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
@@ -450,7 +448,7 @@ export function CullApp() {
         template.folder,
         live,
         template.policy,
-        { withGarments: template.withGarments, setAge: template.setAge },
+        { withGarments: template.withGarments, setAge: template.setAge, readBodies: template.readBodies },
         (event) => {
           setProgress((current) => mergeProgress(current ?? [], event));
           // Curator 0.5.1 says on every progress event which checks are still running.
@@ -655,12 +653,11 @@ export function CullApp() {
     }
   }
 
-  function changeGallery(patch: { sort?: GridSort; direction?: SortDirection; ageFrom?: number | null; ageTo?: number | null; race?: FaceRace | null; faceView?: FaceView; shieldView?: ShieldView; tag?: string | null }) {
+  function changeGallery(patch: { sort?: GridSort; direction?: SortDirection; ageFrom?: number | null; ageTo?: number | null; faceView?: FaceView; shieldView?: ShieldView; tag?: string | null }) {
     if (patch.sort != null) setSort(patch.sort);
     if (patch.direction != null) setSortDirection(patch.direction);
     if ("ageFrom" in patch) setAgeFrom(patch.ageFrom ?? null);
     if ("ageTo" in patch) setAgeTo(patch.ageTo ?? null);
-    if ("race" in patch) setRace(patch.race ?? null);
     if (patch.faceView != null) setFaceView(patch.faceView);
     if (patch.shieldView != null) setShieldView(patch.shieldView);
     if ("tag" in patch) setTag(patch.tag ?? null);
@@ -875,8 +872,6 @@ export function CullApp() {
             onSort={(next) => changeGallery({ sort: next })}
             onDirection={(next) => changeGallery({ direction: next })}
             onAge={(from, to) => changeGallery({ ageFrom: from, ageTo: to })}
-            race={race}
-            onRace={(next) => changeGallery({ race: next })}
             faceView={faceView}
             onFaceView={(next) => changeGallery({ faceView: next })}
             shieldView={shieldView}
@@ -923,8 +918,6 @@ export function CullApp() {
             onSort={(next) => changeGallery({ sort: next })}
             onDirection={(next) => changeGallery({ direction: next })}
             onAge={(from, to) => changeGallery({ ageFrom: from, ageTo: to })}
-            race={race}
-            onRace={(next) => changeGallery({ race: next })}
             faceView={faceView}
             onFaceView={(next) => changeGallery({ faceView: next })}
             shieldView={shieldView}

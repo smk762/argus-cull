@@ -1,11 +1,13 @@
 services:
   argus-curator:
-    # Published 0.10.0, the CUDA image: face detection, MiVOLO, Places365 and
-    # Fashionpedia on the GPU. The host needs the NVIDIA container runtime and a
-    # driver for CUDA 13; on a host without one, use the CPU image
-    # (ghcr.io/smk762/argus-curator:0.10.0) and drop `gpus` below. No sibling
+    # Published CUDA image. Releases tag :latest (CPU) and :latest-gpu.
+    # This stack uses the GPU build: face detection, MiVOLO, Places365 and
+    # Fashionpedia. The host needs the NVIDIA container runtime and a
+    # driver for CUDA 13; on a host without one, use :latest and drop `gpus`
+    # below. Pull after a curator release (`docker compose pull argus-curator`);
+    # Compose will not notice a moved latest tag on its own. No sibling
     # checkout is needed; docker-compose.local-curator.yaml builds one instead.
-    image: ghcr.io/smk762/argus-curator:0.10.0-gpu
+    image: ghcr.io/smk762/argus-curator:latest-gpu
     gpus: all
     ports:
       - "${CURATOR_PORT:-8101}:8101"
@@ -14,7 +16,6 @@ services:
       - CURATOR_EXPORT_PATH=/data/out
       - CURATOR_CACHE_DIR=/root/.cache/argus_curator/scans
       - HF_HOME=/root/.cache/huggingface
-      - ARGUS_CURATOR_FAIRFACE_MODEL=/root/.cache/argus_curator/models/fairface_res34_race7.onnx
       - ARGUS_CURATOR_MIVOLO_MODEL=/root/.cache/argus_curator/models/mivolo_v2_d1_384.onnx
       - ARGUS_CURATOR_PLACES365_MODEL=/root/.cache/argus_curator/models/places365_resnet18.onnx
       - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
@@ -41,6 +42,7 @@ services:
       # ARGUS_GPU_COORDINATOR=none in .env turns it off.
       - ARGUS_GPU_COORDINATOR=${ARGUS_GPU_COORDINATOR:-lease}
       - ARGUS_GPU_LEASE_PATH=/run/argus-gpu/argus-gpu.lock
+      - ARGUS_GPU_LEASE_TIMEOUT_S=${ARGUS_GPU_LEASE_TIMEOUT_S:-300}
     volumes:
       - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images
       - ${CURATOR_OUTPUT_PATH:-./out}:/data/out

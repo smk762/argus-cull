@@ -4,7 +4,7 @@ import { thumbUrl } from "@/lib/api";
 import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
 import { pathsByShield, SHIELD_PICK_LABELS, SHIELD_PICKS, shieldState, shieldTitle, type ShieldPick, type ShieldView } from "@/lib/policies";
-import { PAGE_SIZE, RACES, slugLabel, type FaceRace, type ImageResult } from "@/lib/types";
+import { PAGE_SIZE, type ImageResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
 
@@ -33,7 +33,6 @@ export function PhotoGrid({
   direction,
   ageFrom,
   ageTo,
-  race,
   faceView = "all",
   shieldView = "all",
   facesRan = false,
@@ -44,7 +43,6 @@ export function PhotoGrid({
   onSort,
   onDirection,
   onAge,
-  onRace,
   onFaceView,
   onShieldView,
   onKeepView,
@@ -76,7 +74,6 @@ export function PhotoGrid({
   direction: SortDirection;
   ageFrom: number | null;
   ageTo: number | null;
-  race: FaceRace | null;
   /** Only the images with no detected face, or only those with one. */
   faceView?: FaceView;
   /** Face detection reported on this scan, so a frame with none says "no face" rather than "–". */
@@ -90,7 +87,6 @@ export function PhotoGrid({
   onSort: (sort: GridSort) => void;
   onDirection: (direction: SortDirection) => void;
   onAge: (ageFrom: number | null, ageTo: number | null) => void;
-  onRace: (race: FaceRace | null) => void;
   onFaceView?: (view: FaceView) => void;
   /** Hide tiles whose shield does not match. All keeps frames with no verdict. */
   shieldView?: ShieldView;
@@ -151,7 +147,6 @@ export function PhotoGrid({
             <option value="nsfw">NudeNet score</option>
             <option value="policy">Policy</option>
             <option value="age">Age</option>
-            <option value="race">Race</option>
           </select>
         </label>
         <button
@@ -182,22 +177,6 @@ export function PhotoGrid({
             value={ageTo ?? ""}
             onChange={(event) => onAge(ageFrom, readAge(event.target.value))}
           />
-        </label>
-        <label className="flex items-center gap-2">
-          Race
-          <select
-            className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-            aria-label="Race"
-            value={race ?? ""}
-            onChange={(event) => onRace(event.target.value === "" ? null : (event.target.value as FaceRace))}
-          >
-            <option value="">All</option>
-            {RACES.map((option) => (
-              <option key={option} value={option}>
-                {slugLabel(option)}
-              </option>
-            ))}
-          </select>
         </label>
         {onFaceView ? (
           <label className="flex items-center gap-2">
@@ -304,7 +283,7 @@ export function PhotoGrid({
       </div>
       {selectedHere > deletableSelected ? <p className="text-caption text-text-muted">Only under-18 exposed images can be deleted.</p> : null}
       {deleteError ? <p className="text-caption text-warning">{deleteError}</p> : null}
-      {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, race, ageFrom, ageTo, faceView, shieldView)}</p> : null}
+      {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, ageFrom, ageTo, faceView, shieldView)}</p> : null}
       {/* Tiles are at least 12rem wide, whatever the sidebar leaves, so the quality · nude · age row never gets cut. Phones keep two across. */}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]">
         {slice.map((image) => {
@@ -418,18 +397,16 @@ function ShowButton({
   );
 }
 
-function emptyView(keepView: KeepView, race: FaceRace | null, ageFrom: number | null, ageTo: number | null, faceView: FaceView = "all", shieldView: ShieldView = "all"): string {
+function emptyView(keepView: KeepView, ageFrom: number | null, ageTo: number | null, faceView: FaceView = "all", shieldView: ShieldView = "all"): string {
   const which = keepView === "kept" ? "kept image" : keepView === "left-out" ? "left-out image" : "image";
   if (faceView === "none") return `No ${which} without a face in this view.`;
   if (faceView === "some") return `No ${which} with a face in this view.`;
-  if (shieldView !== "all" && (race || ageFrom != null || ageTo != null)) {
+  if (shieldView !== "all" && (ageFrom != null || ageTo != null)) {
     return `No ${which} matches this shield and the other filters.`;
   }
   if (shieldView === "unsafe") return `No ${which} with an unsafe shield in this view.`;
   if (shieldView === "split") return `No ${which} whose policies disagreed in this view.`;
   if (shieldView === "safe") return `No ${which} with a safe shield in this view.`;
-  if (race && (ageFrom != null || ageTo != null)) return `No ${which} matches this race and age range.`;
-  if (race) return `No ${which} of this race.`;
   if (ageFrom != null || ageTo != null || keepView !== "all") return keepView === "all" ? "No image in this age range." : `No ${which} in this view.`;
   return "No image in this age range.";
 }
