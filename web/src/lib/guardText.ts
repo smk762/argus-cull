@@ -15,7 +15,7 @@ const RULE_LINE = /^\s*-\s*([A-G])\.\s+([^:]+):\s*(.*)$/;
 const CASCADE_HEAD = /Cascade:\s*fast flagged this;\s*the slow pass is the verdict\.?/i;
 const PARSER_NOTES = [
   /SingGuard did not give a safe or unsafe verdict\.\s*The check is unsafe so an unreadable result is not treated as safe\.?/i,
-  /SingGuard's reply ended before its <answer>[\s\S]*?\.\s*The check is unsafe so an incomplete result is not treated as safe\.?/i,
+  /SingGuard's reply ended before (?:its <answer>|a Final Judgment or <answer>)[\s\S]*?\.\s*The check is unsafe so an incomplete result is not treated as safe\.?/i,
   /The first line says unsafe, but the answer is Safe\.\s*Those signals disagree, so the check is unsafe\.?/i,
   /The first line says safe, but the answer names [\s\S]*?\.\s*Those signals disagree, so the check is unsafe\.?/i,
 ];
