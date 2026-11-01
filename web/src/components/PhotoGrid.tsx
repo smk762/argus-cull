@@ -3,7 +3,7 @@
 import { thumbUrl } from "@/lib/api";
 import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
-import { pathsByShield, SHIELD_PICK_LABELS, SHIELD_PICKS, shieldState, shieldTitle, type ShieldPick, type ShieldView } from "@/lib/policies";
+import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
@@ -58,6 +58,7 @@ export function PhotoGrid({
   deleting,
   deleteError,
   labels = null,
+  policies = [],
   tag = null,
   tagOptions = [],
   onTag,
@@ -106,6 +107,8 @@ export function PhotoGrid({
   deleteError: string | null;
   /** Labels by rel_path. An override on a label picks the policy the blur follows for that image. */
   labels?: ReadonlyMap<string, ImageLabel> | null;
+  /** Policies the scan ran, official first: one shield each on every tile. */
+  policies?: readonly string[];
   /** Cohort tag the gallery is narrowed to, and the tags present in this view. */
   tag?: string | null;
   tagOptions?: readonly string[];
@@ -295,6 +298,7 @@ export function PhotoGrid({
           const age = apparentAge(image, pending, facesRan);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
+          const shields = policyShields(image, policies, override, pending.includes("guard"));
           return (
             <li key={image.rel_path} className="relative">
               <label className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-base-800/90 px-1.5 py-1 text-caption text-text-secondary">
@@ -326,13 +330,18 @@ export function PhotoGrid({
                       <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">Scanning…</span>
                     </span>
                   ) : null}
+                  {/* One shield per policy the scan ran; hover one for the policy and the rules it fired. */}
+                  {shields.length > 0 ? (
+                    <span className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5 rounded-md bg-base-900/80 px-1 py-0.5">
+                      {shields.map((shield) => (
+                        <Shield key={shield.policy} state={shield.state} title={shield.title} className="h-4 w-4" />
+                      ))}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="block p-2 text-caption">
-                  <span className="flex items-center gap-1.5">
-                    <Shield state={shieldState(image, override)} title={shieldTitle(image, override)} className="h-3.5 w-3.5" />
-                    <span className="min-w-0 flex-1 truncate text-text-secondary" title={image.rel_path}>
-                      {baseName(image.rel_path)}
-                    </span>
+                  <span className="block truncate text-text-secondary" title={image.rel_path}>
+                    {baseName(image.rel_path)}
                   </span>
                   <span className="mt-1 grid grid-cols-[auto_1fr_auto_1fr] gap-x-1.5 gap-y-0.5 tabular-nums">
                     <span className="text-text-muted">quality</span>

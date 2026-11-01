@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
 import { guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
+import { checkStage, checkStageNote } from "@/lib/progress";
 import { recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
   AGE_BRACKETS,
@@ -18,6 +19,7 @@ import {
   slugLabel,
   type Detectors,
   type FilterState,
+  type Progress,
   type ScanSummary,
 } from "@/lib/types";
 import { clusterLabel, toggleValue } from "@/lib/urlState";
@@ -108,6 +110,7 @@ export function Filters({
   onChange,
   unblurNsfw,
   onUnblurNsfw,
+  live,
 }: {
   filter: FilterState;
   detectors: Detectors | null;
@@ -117,12 +120,17 @@ export function Filters({
   onChange: (patch: Partial<FilterState>) => void;
   unblurNsfw: boolean;
   onUnblurNsfw: (unblurNsfw: boolean) => void;
+  /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
+  live: { phases: readonly Progress[]; pending: readonly string[] } | null;
 }) {
+  // A running scan's summary is partial and records no check as run yet, so say where the scan is instead.
+  const liveNote = (...checks: string[]): string | null => (live ? checkStageNote(checkStage(checks, live.phases, live.pending)) : null);
   const groups = detectors ? detectorGroups(detectors) : [];
   const missing = (id: (typeof groups)[number]["id"]) => groups.find((group) => group.id === id);
-  const blocked = (ready: boolean | undefined, ran: boolean, id: (typeof groups)[number]["id"]): string | null => {
+  const blocked = (ready: boolean | undefined, ran: boolean, id: (typeof groups)[number]["id"], checks: string[]): string | null => {
     if (!detectors) return "Waiting for detector status.";
     if (!ready) return missing(id)?.hint ?? "This model is not loaded.";
+    if (live) return liveNote(...checks);
     if (summary && !ran) return "This scan did not run it. Scan again to record it.";
     return null;
   };
@@ -150,7 +158,7 @@ export function Filters({
       </label>
       <p className="text-caption text-text-muted">Adds near-duplicate frames to the keep set. It does not hide them in the grid.</p>
 
-      <Group title="People" hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface")}>
+      <Group title="People" hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
         <p className="text-caption text-text-muted">Face cluster</p>
         <CheckList
           options={clusters}
@@ -167,7 +175,7 @@ export function Filters({
         />
       </Group>
 
-      <Group title="Appearance" hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo")}>
+      <Group title="Appearance" hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
         <p className="text-caption text-text-secondary">{APPEARANCE}</p>
         <p className="text-caption text-text-muted">Gender</p>
         <CheckList
@@ -203,7 +211,9 @@ export function Filters({
           </div>
         ) : (
           <p className="text-caption text-text-muted">
-            {summary && detectors?.mivolo && !summary.faces_config.mivolo
+            {live
+              ? liveNote("faces")
+              : summary && detectors?.mivolo && !summary.faces_config.mivolo
               ? "This scan did not run MiVOLO. Scan again to record it."
               : missing("mivolo")?.hint}
           </p>
@@ -218,7 +228,7 @@ export function Filters({
         />
       </Group>
 
-      <Group title="Places365" hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365")}>
+      <Group title="Places365" hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
         <CheckList options={scenes} selected={filter.scenes} label={(scene) => scene} onToggle={(scene) => onChange({ scenes: toggleValue(filter.scenes, scene) })} />
         <CheckList
           options={ENVIRONMENTS}
@@ -229,7 +239,7 @@ export function Filters({
         <RangeField label="Scene confidence" value={filter.minSceneConf} min={0} max={1} step={0.05} onChange={(minSceneConf) => onChange({ minSceneConf })} />
       </Group>
 
-      <Group title="Fashionpedia" hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments")}>
+      <Group title="Fashionpedia" hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
         <p className="text-caption text-text-muted">Garment present</p>
         <CheckList
           options={GARMENTS}
@@ -266,7 +276,9 @@ export function Filters({
         <Group
           title="NudeNet"
           hint={
-            summary?.nsfw_config?.enabled === true
+            live
+              ? liveNote("nsfw")
+              : summary?.nsfw_config?.enabled === true
               ? null
               : summary
                 ? "This scan did not run NudeNet. Scan again to record it."
@@ -324,7 +336,9 @@ export function Filters({
         <Group
           title="SingGuard"
           hint={
-            summary?.guard_config?.enabled === true
+            live
+              ? liveNote("guard")
+              : summary?.guard_config?.enabled === true
               ? null
               : summary
                 ? "This scan did not run SingGuard. Scan again to record it."

@@ -6,7 +6,7 @@ import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from ".
 import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { cascadePath, displayGuardExplanation, finalJudgment, splitGuardExplanation } from "./guardText";
-import { mergeProgress, phaseLabel, progressRatio } from "./progress";
+import { checkStage, mergeProgress, phaseLabel, progressRatio } from "./progress";
 import { withoutScan } from "./purge";
 import { availability, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
@@ -394,6 +394,16 @@ describe("progress", () => {
     expect(phaseLabel("guard")).toBe("Checking policy");
     expect(phaseLabel("transferring")).toBe("Writing the export");
     expect(phaseLabel("near_dup")).toBe("near dup");
+  });
+
+  it("says whether a live scan has a check queued, running, or behind it", () => {
+    const scoring = [{ phase: "scoring", done: 1, total: 4 }];
+    expect(checkStage(["nsfw"], scoring, [])).toBe("queued");
+    expect(checkStage(["nsfw"], [], [])).toBe("queued");
+    expect(checkStage(["nsfw"], [{ phase: "faces", done: 1, total: 4 }], ["faces", "nsfw"])).toBe("running");
+    expect(checkStage(["scenes"], [{ phase: "scenes", done: 1, total: 4 }], [])).toBe("running");
+    expect(checkStage(["scenes"], [{ phase: "guard", done: 1, total: 4 }], [])).toBe("waiting");
+    expect(checkStage(["faces", "identities"], [{ phase: "identities", done: 0, total: 0 }], [])).toBe("running");
   });
 
   it("reports a fraction only once the phase has a total", () => {
