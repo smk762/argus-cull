@@ -1,3 +1,16 @@
+# /health probe shared by the nudenet and erax sidecars.
+x-sidecar-health: &sidecar-health
+  test:
+    [
+      "CMD",
+      "python",
+      "-c",
+      "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()",
+    ]
+  interval: 30s
+  timeout: 10s
+  retries: 10
+
 services:
   argus-curator:
     # Published CUDA image. Releases tag :latest (CPU) and :latest-gpu.
@@ -21,6 +34,9 @@ services:
       - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
       # Both checks are on unless .env sets the URL empty.
       - ARGUS_CURATOR_NUDENET_URL=${ARGUS_CURATOR_NUDENET_URL-http://nudenet:8080}
+      # Optional second detector. Empty turns it off. When NudeNet returns
+      # nothing useful, curator maps EraX hits onto the same exposed labels.
+      - ARGUS_CURATOR_ERAX_URL=${ARGUS_CURATOR_ERAX_URL-http://erax:8080}
       # Darkroom's guard: agent-composer on the LAN. Empty turns the check off.
       - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://192.168.1.198:9150}
       # cascade: fast on every frame (about a second), slow on the frames
@@ -52,14 +68,66 @@ services:
       # The host-wide GPU lease's lock directory, shared with argus-lens.
       - ${ARGUS_GPU_LOCK_DIR:-/tmp/argus-gpu}:/run/argus-gpu
     restart: unless-stopped
+    # Wait until NudeNet or EraX answers, so the first scan does not record
+    # failed checks while the sidecars load. One is enough: curator fills
+    # from EraX when NudeNet fails. Neither up within the gate's retries only
+    # warns, and curator starts anyway (its NSFW checks then fail).
+    depends_on:
+      nsfw-ready:
+        condition: service_healthy
+        required: false
 
-  # NudeNet detector server (AGPL-3.0). Curator only talks to it over HTTP.
-  # Pinned by digest because upstream publishes only `latest`. No host port.
+  # NudeNet 640m (AGPL-3.0). Same /infer API as the official 320n image;
+  # curator only talks to it over HTTP. No host port.
   nudenet:
-    image: ghcr.io/notai-tech/nudenet@sha256:5d8fb3a20980680b73b7776745ee5b1983851c201a706cbdf3dd827c143783e9
+    build:
+      context: ./nudenet
+      additional_contexts:
+        common: ./sidecar-common
     ulimits:
       nofile: 1000000
     restart: unless-stopped
+    healthcheck:
+      <<: *sidecar-health
+      start_period: 60s
+
+  # EraX-NSFW-V1.0 (Apache-2.0, YOLO11s on CPU). Optional: set
+  # ARGUS_CURATOR_ERAX_URL empty to stop the curator calling it.
+  erax:
+    build:
+      context: ./erax
+      additional_contexts:
+        common: ./sidecar-common
+    restart: unless-stopped
+    healthcheck:
+      <<: *sidecar-health
+      start_period: 180s
+
+  # Healthy while either NSFW sidecar answers /health. Compose depends_on
+  # cannot say "one of", so curator waits on this instead.
+  nsfw-ready:
+    image: python:3.12-slim
+    command: ["sleep", "infinity"]
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          def up(host):
+              try:
+                  urllib.request.urlopen(f"http://{host}:8080/health", timeout=5).read()
+                  return True
+              except Exception:
+                  return False
+          sys.exit(0 if up("nudenet") or up("erax") else 1)
+      interval: 5s
+      timeout: 12s
+      # About five minutes: past both sidecars' start_period.
+      retries: 60
 
   # Optional local Sing-Guard-4b. Off unless `--profile local-singguard`.
   # Prefer agent-composer (`ARGUS_CURATOR_SINGGUARD_URL`); this copy cannot
