@@ -19,7 +19,10 @@ export interface BlurPolicy {
 
 export const DEFAULT_BLUR: BlurPolicy = { exposedScore: DEFAULT_BLUR_EXPOSED_SCORE, policyBlur: true };
 
-export type GridSort = "scanned" | "nsfw" | "policy" | "age";
+export type GridSort = "scanned" | "filename" | "quality" | "nsfw" | "policy" | "age" | "pose" | "cluster";
+
+/** Sorts that read naturally A to Z (or first to last) and start ascending. */
+export const ASCENDING_SORTS: readonly GridSort[] = ["filename", "pose"];
 /** Grid display. Kept and left out follow the current keep set and do not change it. */
 export type KeepView = "all" | "kept" | "left-out";
 export type SortDirection = "desc" | "asc";
@@ -304,24 +307,69 @@ export function filterByAge(images: ImageResult[], minAge: number | null, maxAge
 }
 
 /**
- * Order the gallery. Descending keeps the original meaning: highest NudeNet score,
- * policy issues, and oldest ages first. Ascending flips those values. Images still waiting on the
- * value stay last either way. As scanned flips the scan order.
+ * Order the gallery. Descending puts the highest value first: quality, NudeNet score,
+ * policy issues, oldest ages, the largest face cluster, Z to A file names, and profile
+ * before frontal. Ascending flips those. Images with no value (no face, a check still
+ * running) stay last either way. As scanned flips the scan order.
  */
 export function sortImages(images: ImageResult[], sort: GridSort, direction: SortDirection = "desc"): ImageResult[] {
   if (sort === "scanned") return direction === "desc" ? images : [...images].reverse();
+  // A cluster's rank is its size, so the largest identity leads when descending.
+  const clusterSize = new Map<string, number>();
+  if (sort === "cluster") for (const image of images) if (image.primary_face_cluster) clusterSize.set(image.primary_face_cluster, (clusterSize.get(image.primary_face_cluster) ?? 0) + 1);
   return images
     .map((image, index) => ({ image, index }))
     .sort((left, right) => {
-      const by =
-        sort === "nsfw"
-          ? compareScore(left.image.nsfw?.exposed_score, right.image.nsfw?.exposed_score, direction)
-          : sort === "policy"
-            ? comparePolicy(left.image, right.image, direction)
-            : compareScore(youngestAge(left.image), youngestAge(right.image), direction);
+      const a = left.image;
+      const b = right.image;
+      let by: number;
+      switch (sort) {
+        case "filename":
+          by = FILENAME.compare(fileName(a.rel_path), fileName(b.rel_path)) || FILENAME.compare(a.rel_path, b.rel_path);
+          if (direction === "desc") by = -by;
+          break;
+        case "quality":
+          by = compareScore(a.score, b.score, direction);
+          break;
+        case "nsfw":
+          by = compareScore(a.nsfw?.exposed_score, b.nsfw?.exposed_score, direction);
+          break;
+        case "policy":
+          by = comparePolicy(a, b, direction);
+          break;
+        case "pose":
+          // Ascending runs frontal, three-quarter, profile; a frame with no face stays last.
+          by = compareScore(poseRank(a), poseRank(b), direction);
+          break;
+        case "cluster":
+          by =
+            compareScore(clusterSize.get(a.primary_face_cluster ?? ""), clusterSize.get(b.primary_face_cluster ?? ""), direction) ||
+            FILENAME.compare(a.primary_face_cluster ?? "", b.primary_face_cluster ?? "");
+          break;
+        default:
+          by = compareScore(youngestAge(a), youngestAge(b), direction);
+      }
       return by || left.index - right.index;
     })
     .map((row) => row.image);
+}
+
+const FILENAME = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+function fileName(relPath: string): string {
+  return relPath.split("/").pop() || relPath;
+}
+
+const POSE_ORDER = ["frontal", "three_quarter", "profile"];
+
+function poseRank(image: ImageResult): number | null {
+  const rank = image.primary_face_pose ? POSE_ORDER.indexOf(image.primary_face_pose) : -1;
+  return rank < 0 ? null : rank;
+}
+
+/** Drop hard rejects (failed blur, size or aspect) from the grid. The keep set is unchanged. */
+export function filterByPassed(images: ImageResult[], hideRejected: boolean): ImageResult[] {
+  return hideRejected ? images.filter((image) => image.passed) : images;
 }
 
 function compareScore(left: number | null | undefined, right: number | null | undefined, direction: SortDirection): number {
