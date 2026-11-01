@@ -730,6 +730,19 @@ describe("set age", () => {
   });
 });
 
+describe("EraX fill-in", () => {
+  const blur = { exposedScore: 0.25, policyBlur: true };
+  it("keeps a frame blurred when NudeNet failed and EraX alone scored it low", () => {
+    const eraxAlone = { nsfw: { labels: { FEMALE_BREAST_EXPOSED: 0.21 }, exposed_score: 0.21 }, erax_filled: true, nudenet_failed: true } as unknown as ImageResult;
+    expect(shouldBlur(eraxAlone, [], blur)).toBe(true);
+    // Unblur NSFW still reveals it: no under-18 age, so no hold.
+    expect(shouldBlur(eraxAlone, [], { ...blur, unblurNsfw: true })).toBe(false);
+    // Filled beside a working NudeNet, the score lifts the blur as usual.
+    const filled = { ...eraxAlone, nudenet_failed: false } as unknown as ImageResult;
+    expect(shouldBlur(filled, [], blur)).toBe(false);
+  });
+});
+
 describe("body-only ages", () => {
   const exposed = { labels: { FEMALE_BREAST_EXPOSED: 0.8 }, exposed_score: 0.8 };
   const person = (age: number, faceIndex: number | null = null) => ({ bbox: [0, 0, 10, 10], det_score: 0.9, face_index: faceIndex, age_years: age, age_source: "mivolo" });
