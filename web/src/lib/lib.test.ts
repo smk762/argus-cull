@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { contentRating, exposedLabelsForRequest, guardRuleLabel, isSensitive, rateContent, ratingCounts, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
-import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
+import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, filterByPassed, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { cascadePath, displayGuardExplanation, finalJudgment, splitGuardExplanation } from "./guardText";
-import { mergeProgress, phaseLabel, progressRatio } from "./progress";
+import { checkStage, mergeProgress, phaseLabel, progressRatio } from "./progress";
 import { withoutScan } from "./purge";
-import { availability, recordedScenes, scanBody, selectBody } from "./select";
+import { availability, facetCounts, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
 import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
 import { clusterLabel, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
@@ -243,7 +243,7 @@ describe("select body", () => {
     expect(parseView(new URLSearchParams("policy=anything&variants=,bad%20name,ok")).guardPolicy).toBe("anything");
     expect(parseView(new URLSearchParams("variants=,bad%20name,ok")).guardVariants).toEqual(["ok"]);
     const adult = { guard_config: { enabled: true, policy: "adult" } } as unknown as ScanSummary;
-    expect(guardRuleLabel("A", adult)).toBe("A. Illegal or Extreme Sexual Content");
+    expect(guardRuleLabel("A", adult)).toBe("A. Illegal Sexual Content");
     expect(guardRuleLabel("A", null)).toBe("A. Sexual Content Risk");
     expect(guardRuleLabel("B", adult)).toBe("B. Real-World Crimes & Public Safety");
   });
@@ -396,6 +396,16 @@ describe("progress", () => {
     expect(phaseLabel("near_dup")).toBe("near dup");
   });
 
+  it("says whether a live scan has a check queued, running, or behind it", () => {
+    const scoring = [{ phase: "scoring", done: 1, total: 4 }];
+    expect(checkStage(["nsfw"], scoring, [])).toBe("queued");
+    expect(checkStage(["nsfw"], [], [])).toBe("queued");
+    expect(checkStage(["nsfw"], [{ phase: "faces", done: 1, total: 4 }], ["faces", "nsfw"])).toBe("running");
+    expect(checkStage(["scenes"], [{ phase: "scenes", done: 1, total: 4 }], [])).toBe("running");
+    expect(checkStage(["scenes"], [{ phase: "guard", done: 1, total: 4 }], [])).toBe("waiting");
+    expect(checkStage(["faces", "identities"], [{ phase: "identities", done: 0, total: 0 }], [])).toBe("running");
+  });
+
   it("reports a fraction only once the phase has a total", () => {
     expect(progressRatio({ phase: "collecting", done: 0, total: 0 })).toBeNull();
     expect(progressRatio({ phase: "scoring", done: 1, total: 4 })).toBe(0.25);
@@ -516,6 +526,39 @@ describe("scan chunks", () => {
     ).toBe(true);
   });
 
+  it("sorts by file name, quality, head pose and face cluster", () => {
+    const img = (rel: string, extra: Partial<ImageResult> = {}) => ({ rel_path: rel, score: 0.5, primary_face_pose: null, primary_face_cluster: null, ...extra }) as unknown as ImageResult;
+    const names = (list: ImageResult[]) => list.map((image) => image.rel_path);
+    const a10 = img("b/img10.jpg", { score: 0.9, primary_face_pose: "profile", primary_face_cluster: "c1" });
+    const a2 = img("a/img2.jpg", { score: 0.2, primary_face_pose: "frontal", primary_face_cluster: "c0" });
+    const a3 = img("img3.jpg", { score: 0.6, primary_face_cluster: "c1" });
+    expect(names(sortImages([a10, a3, a2], "filename", "asc"))).toEqual(["a/img2.jpg", "img3.jpg", "b/img10.jpg"]);
+    expect(names(sortImages([a10, a3, a2], "filename", "desc"))).toEqual(["b/img10.jpg", "img3.jpg", "a/img2.jpg"]);
+    expect(names(sortImages([a2, a3, a10], "quality"))).toEqual(["b/img10.jpg", "img3.jpg", "a/img2.jpg"]);
+    expect(names(sortImages([a10, a3, a2], "pose", "asc"))).toEqual(["a/img2.jpg", "b/img10.jpg", "img3.jpg"]);
+    expect(names(sortImages([a10, a3, a2], "pose", "desc"))).toEqual(["b/img10.jpg", "a/img2.jpg", "img3.jpg"]);
+    expect(names(sortImages([a2, a10, img("none.jpg"), a3], "cluster"))).toEqual(["b/img10.jpg", "img3.jpg", "a/img2.jpg", "none.jpg"]);
+  });
+
+  it("hides hard rejects from the grid only when asked", () => {
+    const pass = { rel_path: "pass.jpg", passed: true } as unknown as ImageResult;
+    const fail = { rel_path: "fail.jpg", passed: false } as unknown as ImageResult;
+    expect(filterByPassed([pass, fail], false)).toHaveLength(2);
+    expect(filterByPassed([pass, fail], true).map((image) => image.rel_path)).toEqual(["pass.jpg"]);
+  });
+
+  it("counts images per scene, environment and garment at the sidebar confidence", () => {
+    const results = [
+      { scene: { categories: [{ label: "airport", conf: 0.6 }, { label: "alcove", conf: 0.05 }], environment: "indoor", environment_conf: 0.9 }, garments: [{ label: "dress", conf: 0.8 }, { label: "dress", conf: 0.7 }] },
+      { scene: { categories: [{ label: "airport", conf: 0.3 }], environment: "outdoor", environment_conf: 0.05 }, garments: [{ label: "shoe", conf: 0.3 }] },
+      { scene: null, garments: null },
+    ] as unknown as ImageResult[];
+    const counts = facetCounts(results, 0.1, 0.5);
+    expect([...counts.scenes]).toEqual([["airport", 2]]);
+    expect([...counts.environments]).toEqual([["indoor", 1]]);
+    expect([...counts.garments]).toEqual([["dress", 1]]);
+  });
+
   it("sorts scored images above ones still waiting", () => {
     const waiting = { rel_path: "wait.jpg" } as unknown as ImageResult;
     const low = { rel_path: "low.jpg", nsfw: { detections: [], labels: {}, exposed_score: 0.1 } } as unknown as ImageResult;
@@ -605,6 +648,19 @@ describe("SingGuard explanation", () => {
     expect(shown).toContain("Final Judgment");
     expect(shown).not.toContain("Cascade:");
     expect(shown).not.toContain("unreadable");
+  });
+
+  it("hides the cutoff note whether it names <answer> or Final Judgment", () => {
+    const text = [
+      "SingGuard's reply ended before a Final Judgment or <answer>, so it may have been cut off. The check is unsafe so an incomplete result is not treated as safe.",
+      "",
+      "[Step 2] Check Risk Categories",
+      "The image is Safe.",
+    ].join("\n");
+    const shown = displayGuardExplanation(text);
+    expect(shown).toContain("The image is Safe.");
+    expect(shown).not.toContain("cut off");
+    expect(shown).not.toContain("incomplete result");
   });
 
   it("splits steps and marks the fired rule", () => {
@@ -704,6 +760,19 @@ describe("set age", () => {
     const adult = { ...body, set_age: { ...set, years: 24 } } as unknown as ImageResult;
     expect(isMinorExposed(adult)).toBe(false);
     expect(filterByAge([body, adult], 18, null).map((image) => image.set_age?.years)).toEqual([24]);
+  });
+});
+
+describe("EraX fill-in", () => {
+  const blur = { exposedScore: 0.25, policyBlur: true };
+  it("keeps a frame blurred when NudeNet failed and EraX alone scored it low", () => {
+    const eraxAlone = { nsfw: { labels: { FEMALE_BREAST_EXPOSED: 0.21 }, exposed_score: 0.21 }, erax_filled: true, nudenet_failed: true } as unknown as ImageResult;
+    expect(shouldBlur(eraxAlone, [], blur)).toBe(true);
+    // Unblur NSFW still reveals it: no under-18 age, so no hold.
+    expect(shouldBlur(eraxAlone, [], { ...blur, unblurNsfw: true })).toBe(false);
+    // Filled beside a working NudeNet, the score lifts the blur as usual.
+    const filled = { ...eraxAlone, nudenet_failed: false } as unknown as ImageResult;
+    expect(shouldBlur(filled, [], blur)).toBe(false);
   });
 });
 

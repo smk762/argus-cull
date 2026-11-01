@@ -3,10 +3,11 @@
 import { thumbUrl } from "@/lib/api";
 import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
-import { pathsByShield, SHIELD_PICK_LABELS, SHIELD_PICKS, shieldState, shieldTitle, type ShieldPick, type ShieldView } from "@/lib/policies";
+import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
+import { Info } from "./Tooltip";
 
 /** The file name alone; the folder is in the tile's tooltip and the detail view. */
 function baseName(relPath: string): string {
@@ -58,6 +59,8 @@ export function PhotoGrid({
   deleting,
   deleteError,
   labels = null,
+  deleteAny = false,
+  policies = [],
   tag = null,
   tagOptions = [],
   onTag,
@@ -106,6 +109,10 @@ export function PhotoGrid({
   deleteError: string | null;
   /** Labels by rel_path. An override on a label picks the policy the blur follows for that image. */
   labels?: ReadonlyMap<string, ImageLabel> | null;
+  /** The curator deletes any image in the scan (`delete_any` on /health), not only under-18 exposed ones. */
+  deleteAny?: boolean;
+  /** Policies the scan ran, official first: one shield each on every tile. */
+  policies?: readonly string[];
   /** Cohort tag the gallery is narrowed to, and the tags present in this view. */
   tag?: string | null;
   tagOptions?: readonly string[];
@@ -117,7 +124,7 @@ export function PhotoGrid({
   const flagged = images.filter((image) => isMinorExposed(image));
   const flaggedSelected = flagged.length > 0 && flagged.every((image) => selected.has(image.rel_path));
   const allSelected = images.length > 0 && images.every((image) => selected.has(image.rel_path));
-  const deletableSelected = flagged.filter((image) => selected.has(image.rel_path)).length;
+  const deletableSelected = (deleteAny ? images : flagged).filter((image) => selected.has(image.rel_path)).length;
   const selectedHere = images.filter((image) => selected.has(image.rel_path)).length;
   const shieldOverride = (rel: string) => labels?.get(rel)?.override ?? null;
   const shieldCounts = Object.fromEntries(SHIELD_PICKS.map((pick) => [pick, pathsByShield(images, pick, shieldOverride).length])) as Record<ShieldPick, number>;
@@ -129,159 +136,149 @@ export function PhotoGrid({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 text-caption text-text-secondary">
-        <div className="flex items-center gap-2" role="group" aria-label="Show">
-          Show
-          <ShowButton current={keepView} view="all" label="All" onKeepView={onKeepView} />
-          <ShowButton current={keepView} view="kept" label={keptCount == null ? "Kept" : `Kept (${keptCount})`} disabled={keptCount == null} onKeepView={onKeepView} />
-          <ShowButton current={keepView} view="left-out" label={leftOutCount == null ? "Left out" : `Left out (${leftOutCount})`} disabled={leftOutCount == null} onKeepView={onKeepView} />
-        </div>
-        <label className="flex items-center gap-2">
-          Sort
-          <select
-            className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-            value={sort}
-            onChange={(event) => onSort(event.target.value as GridSort)}
-          >
-            <option value="scanned">As scanned</option>
-            <option value="nsfw">NudeNet score</option>
-            <option value="policy">Policy</option>
-            <option value="age">Age</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary"
-          aria-label={direction === "desc" ? "Descending. Reverse sort." : "Ascending. Reverse sort."}
-          onClick={() => onDirection(direction === "desc" ? "asc" : "desc")}
-        >
-          {direction === "desc" ? "↓" : "↑"}
-        </button>
-        <label className="flex items-center gap-2">
-          Age
-          <input
-            className="w-16 rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-            type="number"
-            min={0}
-            placeholder="from"
-            aria-label="Youngest age from"
-            value={ageFrom ?? ""}
-            onChange={(event) => onAge(readAge(event.target.value), ageTo)}
-          />
-          <input
-            className="w-16 rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-            type="number"
-            min={0}
-            placeholder="to"
-            aria-label="Youngest age to"
-            value={ageTo ?? ""}
-            onChange={(event) => onAge(ageFrom, readAge(event.target.value))}
-          />
-        </label>
-        {onFaceView ? (
-          <label className="flex items-center gap-2">
-            Faces
-            <select
-              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-              aria-label="Faces"
-              value={faceView}
-              onChange={(event) => onFaceView(event.target.value as FaceView)}
-            >
-              <option value="all">All</option>
-              <option value="none">No face</option>
-              <option value="some">With a face</option>
+      <div className="space-y-2 rounded-lg border border-base-700 bg-base-800/40 p-2 text-caption text-text-secondary">
+        {/* View changes what the grid shows; nothing here changes the keep set or the selection. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="View">
+          <span className="flex w-14 items-center gap-1 font-semibold text-text-primary">
+            View
+            <Info text="What the grid shows and in what order. These narrow the grid only: the keep set, Download paths and Export do not change." />
+          </span>
+          <div className="flex items-center gap-1" role="group" aria-label="Show">
+            <ShowButton current={keepView} view="all" label="All" onKeepView={onKeepView} />
+            <ShowButton current={keepView} view="kept" label={keptCount == null ? "Kept" : `Kept (${keptCount})`} disabled={keptCount == null} onKeepView={onKeepView} />
+            <ShowButton current={keepView} view="left-out" label={leftOutCount == null ? "Left out" : `Left out (${leftOutCount})`} disabled={leftOutCount == null} onKeepView={onKeepView} />
+          </div>
+          <label className="flex items-center gap-1.5">
+            Sort
+            <select className={SELECT} value={sort} onChange={(event) => onSort(event.target.value as GridSort)}>
+              <option value="scanned">As scanned</option>
+              <option value="filename">File name</option>
+              <option value="quality">Quality</option>
+              <option value="nsfw">NudeNet score</option>
+              <option value="policy">Policy</option>
+              <option value="age">Age</option>
+              <option value="pose">Head pose</option>
+              <option value="cluster">Face cluster</option>
             </select>
-          </label>
-        ) : null}
-        {onShieldView && (anyShield || shieldView !== "all") ? (
-          <label className="flex items-center gap-2">
-            Shield
-            <select
-              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-              aria-label="Shield"
-              title="Hide tiles whose shield does not match. Unsafe is a red shield, Split an orange core, Safe a green shield. All keeps frames with no verdict."
-              value={shieldView}
-              onChange={(event) => onShieldView(event.target.value as ShieldView)}
-            >
-              <option value="all">All</option>
-              {SHIELD_PICKS.map((pick) => (
-                <option key={pick} value={pick}>
-                  {SHIELD_PICK_LABELS[pick]}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        {onTag && (tagOptions.length > 0 || tag) ? (
-          <label className="flex items-center gap-2">
-            Cohort
-            <select
-              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-              aria-label="Cohort tag"
-              value={tag ?? ""}
-              onChange={(event) => onTag(event.target.value === "" ? null : event.target.value)}
-            >
-              <option value="">All</option>
-              {tag && !tagOptions.includes(tag) ? <option value={tag}>{tag}</option> : null}
-              {tagOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        {images.length > 0 ? (
-          <button type="button" className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary" onClick={onSelectAll}>
-            {allSelected ? "Clear" : `Select all (${images.length})`}
-          </button>
-        ) : null}
-        {anyShield && onSelectShield ? (
-          <label className="flex items-center gap-2">
-            Policy
-            <select
-              className="rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary"
-              aria-label="Select by policy verdict"
-              title="Unsafe is a red shield: the official policy (or the override) flagged. A passing variant does not clear it. Split is an orange core: the policies disagreed, including official-safe with a flagging variant. Safe is a green shield."
-              value=""
-              onChange={(event) => {
-                const pick = event.target.value as ShieldPick | "";
-                if (pick) onSelectShield(pick);
-              }}
-            >
-              <option value="" disabled>
-                Select…
-              </option>
-              {SHIELD_PICKS.filter((pick) => shieldCounts[pick] > 0).map((pick) => (
-                <option key={pick} value={pick}>
-                  {SHIELD_PICK_LABELS[pick]} ({shieldCounts[pick]})
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        {flagged.length > 0 ? (
-          <>
             <button
               type="button"
               className="rounded-md border border-base-600 px-2 py-1 text-small text-text-primary"
-              title="Frames MiVOLO (or the set age) puts under 18 with an exposed reading of at least 0.2. Delete only applies to these."
-              onClick={onSelectFlagged}
+              aria-label={direction === "desc" ? "Descending. Reverse sort." : "Ascending. Reverse sort."}
+              title={direction === "desc" ? "Descending" : "Ascending"}
+              onClick={() => onDirection(direction === "desc" ? "asc" : "desc")}
             >
-              {flaggedSelected ? "Clear under-18" : `Select under-18 (${flagged.length})`}
+              {direction === "desc" ? "↓" : "↑"}
             </button>
-            <button
-              type="button"
-              className="rounded-md border border-warning px-2 py-1 text-small text-warning disabled:opacity-40"
-              disabled={deletableSelected === 0 || deleting}
-              onClick={onDeleteSelected}
-            >
-              {deleting ? "Deleting…" : deleteConfirm ? `Confirm delete (${deletableSelected})` : `Delete selected (${deletableSelected})`}
+          </label>
+          <label className="flex items-center gap-1.5">
+            Age
+            <input className={`w-14 ${SELECT}`} type="number" min={0} placeholder="from" aria-label="Youngest age from" value={ageFrom ?? ""} onChange={(event) => onAge(readAge(event.target.value), ageTo)} />
+            <input className={`w-14 ${SELECT}`} type="number" min={0} placeholder="to" aria-label="Youngest age to" value={ageTo ?? ""} onChange={(event) => onAge(ageFrom, readAge(event.target.value))} />
+          </label>
+          {onFaceView ? (
+            <label className="flex items-center gap-1.5">
+              Faces
+              <select className={SELECT} aria-label="Faces" value={faceView} onChange={(event) => onFaceView(event.target.value as FaceView)}>
+                <option value="all">All</option>
+                <option value="none">No face</option>
+                <option value="some">With a face</option>
+              </select>
+            </label>
+          ) : null}
+          {onShieldView && (anyShield || shieldView !== "all") ? (
+            <label className="flex items-center gap-1.5">
+              Verdict
+              <select className={SELECT} aria-label="Show by policy verdict" value={shieldView} onChange={(event) => onShieldView(event.target.value as ShieldView)}>
+                <option value="all">All</option>
+                {SHIELD_PICKS.map((pick) => (
+                  <option key={pick} value={pick}>
+                    {SHIELD_PICK_LABELS[pick]}
+                  </option>
+                ))}
+              </select>
+              <Info text={`Shows only tiles with this combined verdict. ${VERDICT_HELP} All also shows frames with no verdict.`} />
+            </label>
+          ) : null}
+          {onTag && (tagOptions.length > 0 || tag) ? (
+            <label className="flex items-center gap-1.5">
+              Cohort
+              <select className={SELECT} aria-label="Cohort tag" value={tag ?? ""} onChange={(event) => onTag(event.target.value === "" ? null : event.target.value)}>
+                <option value="">All</option>
+                {tag && !tagOptions.includes(tag) ? <option value={tag}>{tag}</option> : null}
+                {tagOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {/* Select ticks tiles for a batch action; it never hides anything. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-base-700 pt-2" role="group" aria-label="Select">
+          <span className="flex w-14 items-center gap-1 font-semibold text-text-primary">
+            Select
+            <Info text="Ticks tiles for a batch action. Picks apply to the images in the current view; nothing is hidden." />
+          </span>
+          <span className="tabular-nums">{selectedHere} selected</span>
+          {images.length > 0 ? (
+            <button type="button" className={BUTTON} onClick={onSelectAll}>
+              {allSelected ? "Clear" : `All in view (${images.length})`}
             </button>
-          </>
-        ) : null}
+          ) : null}
+          {anyShield && onSelectShield ? (
+            <label className="flex items-center gap-1.5">
+              <select
+                className={SELECT}
+                aria-label="Select by policy verdict"
+                value=""
+                onChange={(event) => {
+                  const pick = event.target.value as ShieldPick | "";
+                  if (pick) onSelectShield(pick);
+                }}
+              >
+                <option value="" disabled>
+                  By verdict…
+                </option>
+                {SHIELD_PICKS.filter((pick) => shieldCounts[pick] > 0).map((pick) => (
+                  <option key={pick} value={pick}>
+                    {SHIELD_PICK_LABELS[pick]} ({shieldCounts[pick]})
+                  </option>
+                ))}
+              </select>
+              <Info text={`Ticks every tile in view with this combined verdict, replacing the selection. ${VERDICT_HELP}`} />
+            </label>
+          ) : null}
+          {flagged.length > 0 ? (
+            <span className="flex items-center gap-1.5">
+              <button type="button" className={BUTTON} onClick={onSelectFlagged}>
+                {flaggedSelected ? "Clear under-18" : `Under-18 exposed (${flagged.length})`}
+              </button>
+              <Info text="Frames MiVOLO (or the set age) puts under 18 with an exposed reading of at least 0.2. They are never kept or exported; delete is the only action for them." />
+            </span>
+          ) : null}
+          {deleteAny || flagged.length > 0 ? (
+            <span className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className="rounded-md border border-warning px-2 py-1 text-small text-warning disabled:opacity-40"
+                disabled={deletableSelected === 0 || deleting}
+                onClick={onDeleteSelected}
+              >
+                {deleting ? "Deleting…" : deleteConfirm ? `Confirm delete (${deletableSelected})` : `Delete selected (${deletableSelected})`}
+              </button>
+              <Info
+                text={
+                  deleteAny
+                    ? "Deletes the selected files from the source folder and drops them from this scan. It asks once more before deleting, and cannot be undone."
+                    : "Deletes the selected under-18 exposed files from the source folder. This curator deletes only those; update it to delete any image."
+                }
+              />
+            </span>
+          ) : null}
+        </div>
       </div>
-      {selectedHere > deletableSelected ? <p className="text-caption text-text-muted">Only under-18 exposed images can be deleted.</p> : null}
+      {!deleteAny && selectedHere > deletableSelected ? <p className="text-caption text-text-muted">This curator deletes only under-18 exposed images.</p> : null}
       {deleteError ? <p className="text-caption text-warning">{deleteError}</p> : null}
       {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, ageFrom, ageTo, faceView, shieldView)}</p> : null}
       {/* Tiles are at least 12rem wide, whatever the sidebar leaves, so the quality · nude · age row never gets cut. Phones keep two across. */}
@@ -295,6 +292,7 @@ export function PhotoGrid({
           const age = apparentAge(image, pending, facesRan);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
+          const shields = policyShields(image, policies, override, pending.includes("guard"));
           return (
             <li key={image.rel_path} className="relative">
               <label className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-base-800/90 px-1.5 py-1 text-caption text-text-secondary">
@@ -326,13 +324,18 @@ export function PhotoGrid({
                       <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">Scanning…</span>
                     </span>
                   ) : null}
+                  {/* One shield per policy the scan ran; hover one for the policy and the rules it fired. */}
+                  {shields.length > 0 ? (
+                    <span className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5 rounded-md bg-base-900/80 px-1 py-0.5">
+                      {shields.map((shield) => (
+                        <Shield key={shield.policy} state={shield.state} title={shield.title} className="h-4 w-4" />
+                      ))}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="block p-2 text-caption">
-                  <span className="flex items-center gap-1.5">
-                    <Shield state={shieldState(image, override)} title={shieldTitle(image, override)} className="h-3.5 w-3.5" />
-                    <span className="min-w-0 flex-1 truncate text-text-secondary" title={image.rel_path}>
-                      {baseName(image.rel_path)}
-                    </span>
+                  <span className="block truncate text-text-secondary" title={image.rel_path}>
+                    {baseName(image.rel_path)}
                   </span>
                   <span className="mt-1 grid grid-cols-[auto_1fr_auto_1fr] gap-x-1.5 gap-y-0.5 tabular-nums">
                     <span className="text-text-muted">quality</span>
@@ -370,6 +373,11 @@ export function PhotoGrid({
     </div>
   );
 }
+
+const SELECT = "rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary";
+const BUTTON = "rounded-md border border-base-600 px-2 py-1 text-small text-text-primary";
+const VERDICT_HELP =
+  "Unsafe: the official policy (or the label's override) flagged, whatever the variants said. Safe: it passed. Split: the policies disagreed, so Split overlaps both.";
 
 function ShowButton({
   current,

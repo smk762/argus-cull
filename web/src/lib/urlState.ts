@@ -1,6 +1,5 @@
 import { sameMembers } from "./moderation";
 import {
-  AGE_BRACKETS,
   CONTENT_RATINGS,
   DEFAULT_FILTER,
   DEFAULT_VIEW,
@@ -74,7 +73,6 @@ export function parseView(params: URLSearchParams): ViewState {
     faceClusters: [],
     facePoses: [],
     faceGenders: [],
-    faceAges: [],
     scenes: [],
     sceneEnvironments: [],
     garments: [],
@@ -95,8 +93,6 @@ export function parseView(params: URLSearchParams): ViewState {
     if (pose && !filter.facePoses.includes(pose)) filter.facePoses.push(pose);
     const gender = group === FACET_GROUPS.gender ? take(term, GENDERS) : null;
     if (gender && !filter.faceGenders.includes(gender)) filter.faceGenders.push(gender);
-    const age = group === FACET_GROUPS.age ? take(term, AGE_BRACKETS) : null;
-    if (age && !filter.faceAges.includes(age)) filter.faceAges.push(age);
     if (group === FACET_GROUPS.scene && !filter.scenes.includes(term)) filter.scenes.push(term);
     const env = group === FACET_GROUPS.env ? take(term, ENVIRONMENTS) : null;
     if (env && !filter.sceneEnvironments.includes(env)) filter.sceneEnvironments.push(env);
@@ -234,7 +230,6 @@ export function serializeView(view: ViewState): string {
   appendFacet(params, "cluster", filter.faceClusters);
   appendFacet(params, "pose", filter.facePoses);
   appendFacet(params, "gender", filter.faceGenders);
-  appendFacet(params, "age", filter.faceAges);
   appendFacet(params, "scene", filter.scenes);
   appendFacet(params, "env", filter.sceneEnvironments);
   appendFacet(params, "garment", filter.garments);

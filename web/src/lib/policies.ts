@@ -77,11 +77,15 @@ export function policyVerdicts(image: Guarded): PolicyVerdict[] {
   return out;
 }
 
-/** Policy names a scan ran, official first. Taken from the config when it says, else from the results. */
-export function policiesRun(summary: { guard_config?: { policy?: string; variants?: string[] }; results: Guarded[] } | null): string[] {
+/**
+ * Policy names a scan ran, official first. Taken from the config when it says,
+ * else from the results. The curator records a policy name even when SingGuard
+ * did not run, so a config marked not run names none.
+ */
+export function policiesRun(summary: { guard_config?: { enabled?: boolean | null; policy?: string; variants?: string[] }; results: Guarded[] } | null): string[] {
   if (!summary) return [];
   const config = summary.guard_config;
-  if (config?.policy) return [config.policy, ...(config.variants ?? []).filter((name) => name !== config.policy)];
+  if (config?.policy && config.enabled !== false) return [config.policy, ...(config.variants ?? []).filter((name) => name !== config.policy)];
   const names: string[] = [];
   for (const image of summary.results) {
     for (const verdict of policyVerdicts(image)) if (!names.includes(verdict.policy)) names.push(verdict.policy);
@@ -282,4 +286,37 @@ function rank(order: readonly string[], name: string): number {
 export function rate(part: number, whole: number): string {
   if (whole <= 0) return "–";
   return `${Math.round((100 * part) / whole)}%`;
+}
+
+/** One shield per policy on a tile: that policy's own verdict, not the combined one. */
+export interface PolicyShield {
+  policy: string;
+  official: boolean;
+  state: "none" | "safe" | "unsafe";
+  /** Tooltip: the policy, its verdict, and the rules it fired. */
+  title: string;
+}
+
+/**
+ * A shield for every policy the scan ran, in the scan's order, so a tile shows
+ * at a glance how many policies ran and what each said. Grey means queued: a
+ * policy with no verdict on this image gets one only while SingGuard is still
+ * running, and none once the scan is done. A verdict from a policy the list
+ * does not name still gets a shield, after the named ones.
+ */
+export function policyShields(image: Guarded, policies: readonly string[], override?: string | null, checking = false): PolicyShield[] {
+  const verdicts = policyVerdicts(image);
+  const names = [...policies];
+  for (const verdict of verdicts) if (!names.includes(verdict.policy)) names.push(verdict.policy);
+  return names.flatMap((policy, index): PolicyShield[] => {
+    const verdict = verdicts.find((entry) => entry.policy === policy) ?? null;
+    if (!verdict && !checking) return [];
+    const official = verdict ? verdict.official : index === 0 && policies.length > 0;
+    const name = `${policy}${official ? " (official)" : ""}`;
+    const follows = override === policy ? " The blur follows this policy." : "";
+    if (!verdict) return [{ policy, official, state: "none", title: `${name}: queued` }];
+    if (verdict.result.safe) return [{ policy, official, state: "safe", title: `${name}: safe.${follows}` }];
+    const rules = verdict.result.rules.length > 0 ? verdict.result.rules.join("; ") : "no rule named";
+    return [{ policy, official, state: "unsafe", title: `${name}: unsafe. ${rules}.${follows}` }];
+  });
 }

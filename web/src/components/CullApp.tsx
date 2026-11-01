@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByPassed, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
@@ -11,7 +11,7 @@ import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
 import { filterByShield, pathsByShield, policiesRun, policyStats, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
-import { availability, selectBody } from "@/lib/select";
+import { availability, guardBody, selectBody } from "@/lib/select";
 import { evaluateSubset } from "@/lib/subset";
 import {
   PAGE_SIZE,
@@ -33,6 +33,7 @@ import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch 
 import { ExportDialog } from "./ExportDialog";
 import { SubsetDialog } from "./SubsetDialog";
 import { Filters } from "./Filters";
+import { Tooltip } from "./Tooltip";
 import { People } from "./People";
 import { PhotoDialog } from "./PhotoDialog";
 import { PhotoGrid } from "./PhotoGrid";
@@ -81,6 +82,8 @@ export function CullApp() {
   const [stopping, setStopping] = useState(false);
   const [purging, setPurging] = useState(false);
   const [pendingChecks, setPendingChecks] = useState<string[]>([]);
+  /** Policies this tab's running scan asked SingGuard for. Its partial summary names none until the scan ends. */
+  const [scanPolicies, setScanPolicies] = useState<string[]>([]);
   const [blur, setBlur] = useState<BlurPolicy>(DEFAULT_BLUR);
   const [unblurNsfw, setUnblurNsfw] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -327,6 +330,7 @@ export function CullApp() {
   const [faceView, setFaceView] = useState<FaceView>("all");
   const [shieldView, setShieldView] = useState<ShieldView>("all");
   const [keepView, setKeepView] = useState<KeepView>("all");
+  const [hideRejected, setHideRejected] = useState(false);
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -355,8 +359,8 @@ export function CullApp() {
   const tagOptions = useMemo(() => cohorts.tags.map((rule) => rule.tag).filter((name) => visible.some((image) => (tags.get(image.rel_path) ?? []).includes(name))), [cohorts, visible, tags]);
   const shieldOverride = useCallback((rel: string) => labels.get(rel)?.override ?? null, [labels]);
   const viewed = useMemo(
-    () => filterByTag(filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride), tags, tag),
-    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride, tags, tag],
+    () => filterByTag(filterByShield(filterByFaces(filterByAge(filterByPassed(visible, hideRejected), ageFrom, ageTo), faceView), shieldView, shieldOverride), tags, tag),
+    [visible, hideRejected, ageFrom, ageTo, faceView, shieldView, shieldOverride, tags, tag],
   );
   const facesKnown = useMemo(() => facesRan(summary), [summary]);
   const gallery = useMemo(() => sortImages(filterByKeep(viewed, reasons, keepView), sort, sortDirection), [viewed, reasons, keepView, sort, sortDirection]);
@@ -368,11 +372,13 @@ export function CullApp() {
   }, [viewed, reasons]);
   const subset = useMemo(() => (summary && reasons ? evaluateSubset(summary, reasons, view.filter.minScore) : null), [summary, reasons, view.filter.minScore]);
   const policyNames = useMemo(() => policiesRun(summary), [summary]);
+  // While this tab's scan runs, its tiles show the policies it asked for, so a verdict still to come reads as queued.
+  const gridPolicies = scanning && scanPolicies.length > 0 ? scanPolicies : policyNames;
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
   const cohortBase = useMemo(
-    () => filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride),
-    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride],
+    () => filterByShield(filterByFaces(filterByAge(filterByPassed(visible, hideRejected), ageFrom, ageTo), faceView), shieldView, shieldOverride),
+    [visible, hideRejected, ageFrom, ageTo, faceView, shieldView, shieldOverride],
   );
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
@@ -444,6 +450,8 @@ export function CullApp() {
     try {
       const live = await getDetectors();
       setDetectors(live);
+      const asked = guardBody(live, template.policy);
+      setScanPolicies(asked.enabled && asked.policy ? [asked.policy, ...(asked.variants ?? [])] : []);
       const next = await scanFolder(
         template.folder,
         live,
@@ -486,6 +494,7 @@ export function CullApp() {
       }
     } finally {
       setScanning(false);
+      setScanPolicies([]);
       setStopping(false);
       setProgress(null);
       void getScans().then((body) => {
@@ -522,6 +531,7 @@ export function CullApp() {
   }
 
   const scanControl = Boolean(health?.scan_control);
+  const deleteAny = Boolean(health?.delete_any);
   // The bar for our own scan, or for the one running in another tab when that is the scan on screen.
   const liveProgress: Progress | readonly Progress[] | null =
     progress ?? (scanList?.active && (!summary || summary.scan_id === scanList.active.scan_id) ? scanList.active : null);
@@ -633,7 +643,8 @@ export function CullApp() {
 
   async function deleteSelected() {
     if (!summary) return;
-    const paths = flagged.filter((rel) => selected.has(rel));
+    // An older curator deletes only under-18 exposed images; one with `delete_any` takes any selected image in view.
+    const paths = (deleteAny ? gallery.map((image) => image.rel_path) : flagged).filter((rel) => selected.has(rel));
     if (paths.length === 0) return;
     if (!deleteConfirm) {
       setDeleteConfirm(true);
@@ -655,6 +666,8 @@ export function CullApp() {
 
   function changeGallery(patch: { sort?: GridSort; direction?: SortDirection; ageFrom?: number | null; ageTo?: number | null; faceView?: FaceView; shieldView?: ShieldView; tag?: string | null }) {
     if (patch.sort != null) setSort(patch.sort);
+    // File name and head pose read first-to-last; the rest lead with the highest value.
+    if (patch.sort != null && patch.direction == null) setSortDirection(ASCENDING_SORTS.includes(patch.sort) ? "asc" : "desc");
     if (patch.direction != null) setSortDirection(patch.direction);
     if ("ageFrom" in patch) setAgeFrom(patch.ageFrom ?? null);
     if ("ageTo" in patch) setAgeTo(patch.ageTo ?? null);
@@ -749,6 +762,12 @@ export function CullApp() {
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
+          hideRejected={hideRejected}
+          onHideRejected={(next) => {
+            setHideRejected(next);
+            if (view.page !== 1) replaceView({ ...view, page: 1 });
+          }}
+          live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
         />
       </aside>
       <main className="space-y-4 overflow-y-auto p-4 lg:max-h-dvh">
@@ -766,52 +785,60 @@ export function CullApp() {
                   : "No scan yet"}
           </p>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={`rounded-md border px-3 py-1.5 text-small ${view.view === "grid" ? "border-accent-primary" : "border-base-600"}`}
-              onClick={() => replaceView({ ...view, view: "grid", page: 1 })}
-            >
-              Grid
-            </button>
-            <button
-              type="button"
-              className={`rounded-md border px-3 py-1.5 text-small disabled:opacity-40 ${view.view === "people" ? "border-accent-primary" : "border-base-600"}`}
-              disabled={!peopleEnabled}
-              onClick={() => replaceView({ ...view, view: "people", page: 1 })}
-            >
-              People
-            </button>
-            <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!subset} onClick={() => setSubsetOpen(true)}>
-              Evaluate keep set
-            </button>
-            <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={policyNames.length === 0} onClick={() => setPolicyOpen(true)}>
-              Policies
-            </button>
-            <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!selection} onClick={downloadPaths}>
-              Download paths
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40"
-              disabled={!summary || liveScan}
-              title="A JSON file of this run: pass and fail counts, the ages read, NudeNet bands, each policy's flag rate, and the setting, wardrobe and prop tags that moved it"
-              onClick={downloadRunStats}
-            >
-              Run stats
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40"
-              disabled={!selection}
-              onClick={() => {
-                setExportResult(null);
-                setExportError(null);
-                setExportProgress(null);
-                setExportOpen(true);
-              }}
-            >
-              Export
-            </button>
+            <Tooltip text="Every image in the scan, as tiles you can filter, sort and select.">
+              <button
+                type="button"
+                className={`rounded-md border px-3 py-1.5 text-small ${view.view === "grid" ? "border-accent-primary" : "border-base-600"}`}
+                onClick={() => replaceView({ ...view, view: "grid", page: 1 })}
+              >
+                Grid
+              </button>
+            </Tooltip>
+            <Tooltip text={peopleEnabled ? "Images grouped by face cluster. Open a cluster to see and name that identity." : "Needs a scan with face detection."}>
+              <button
+                type="button"
+                className={`rounded-md border px-3 py-1.5 text-small disabled:opacity-40 ${view.view === "people" ? "border-accent-primary" : "border-base-600"}`}
+                disabled={!peopleEnabled}
+                onClick={() => replaceView({ ...view, view: "people", page: 1 })}
+              >
+                People
+              </button>
+            </Tooltip>
+            <Tooltip text={subset ? "Scores the keep set as a training subset: how many are kept, mean quality, sharpness and size, with warnings such as near-duplicates or frames near the quality floor." : "Available once the keep set is calculated, after the scan."}>
+              <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!subset} onClick={() => setSubsetOpen(true)}>
+                Evaluate keep set
+              </button>
+            </Tooltip>
+            <Tooltip text={policyNames.length > 0 ? "Each SingGuard policy this scan ran: flag rate, rules fired, agreement with the official policy, and accuracy against your labels." : "Needs a scan that ran SingGuard."}>
+              <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={policyNames.length === 0} onClick={() => setPolicyOpen(true)}>
+                Policies
+              </button>
+            </Tooltip>
+            <Tooltip text={selection ? "Two files: paths.txt lists every kept image, one per line; paths.jsonl has every image with the reason it was kept or left out." : "Available once the keep set is calculated, after the scan."}>
+              <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!selection} onClick={downloadPaths}>
+                Download paths
+              </button>
+            </Tooltip>
+            <Tooltip text="A JSON file of this run: pass and fail counts, the ages read, NudeNet bands, each policy's flag rate, and the setting, wardrobe and prop tags that moved it.">
+              <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small disabled:opacity-40" disabled={!summary || liveScan} onClick={downloadRunStats}>
+                Run stats
+              </button>
+            </Tooltip>
+            <Tooltip text={selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
+              <button
+                type="button"
+                className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40"
+                disabled={!selection}
+                onClick={() => {
+                  setExportResult(null);
+                  setExportError(null);
+                  setExportProgress(null);
+                  setExportOpen(true);
+                }}
+              >
+                Export
+              </button>
+            </Tooltip>
           </div>
           </div>
           {liveProgress ? (
@@ -899,6 +926,8 @@ export function CullApp() {
             deleting={batchDeleting}
             deleteError={batchError}
             labels={labels}
+            policies={gridPolicies}
+            deleteAny={deleteAny}
           />
         ) : null}
         {summary && view.view === "people" && view.cluster ? (
@@ -945,6 +974,8 @@ export function CullApp() {
             deleting={batchDeleting}
             deleteError={batchError}
             labels={labels}
+            policies={gridPolicies}
+            deleteAny={deleteAny}
           />
         ) : null}
         <p className="text-caption text-text-muted">

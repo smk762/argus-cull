@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
 import { guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
-import { recordedScenes, type FilterAvailability } from "@/lib/select";
+import { checkStage, checkStageNote } from "@/lib/progress";
+import { facetCounts, recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
-  AGE_BRACKETS,
   CONTENT_RATINGS,
   ENVIRONMENTS,
   NUDENET_LABELS,
@@ -18,36 +18,43 @@ import {
   slugLabel,
   type Detectors,
   type FilterState,
+  type Progress,
   type ScanSummary,
 } from "@/lib/types";
 import { clusterLabel, toggleValue } from "@/lib/urlState";
 
-const APPEARANCE =
-  "Gender and age are appearance guesses from MiVOLO, not facts about a person. The age bracket is read off MiVOLO's years.";
+import { Info } from "./Tooltip";
+
+const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
 
 function CheckList<T extends string>({
   options,
   selected,
   label,
   counts,
+  hideEmpty = false,
   onToggle,
 }: {
   options: readonly T[];
   selected: readonly T[];
   label: (value: T) => string;
-  counts?: Partial<Record<T, number>>;
+  counts?: Partial<Record<T, number>> | ReadonlyMap<string, number>;
+  /** Only list options with a match (or already ticked), so a long vocabulary shows what this scan holds. */
+  hideEmpty?: boolean;
   onToggle: (value: T) => void;
 }) {
-  if (options.length === 0) return <p className="text-caption text-text-muted">Nothing recorded in this scan.</p>;
+  const count = (option: T): number | undefined => (counts instanceof Map ? counts.get(option) : (counts as Partial<Record<T, number>> | undefined)?.[option]);
+  const shown = hideEmpty ? options.filter((option) => (count(option) ?? 0) > 0 || selected.includes(option)) : options;
+  if (shown.length === 0) return <p className="text-caption text-text-muted">Nothing recorded in this scan.</p>;
   return (
     <ul className="max-h-36 space-y-1 overflow-auto pr-1">
-      {options.map((option) => (
+      {shown.map((option) => (
         <li key={option}>
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={selected.includes(option)} onChange={() => onToggle(option)} />
             <span className="capitalize">
               {label(option)}
-              {counts?.[option] != null ? ` (${counts[option]})` : ""}
+              {count(option) != null ? ` (${count(option)})` : ""}
             </span>
           </label>
         </li>
@@ -56,10 +63,13 @@ function CheckList<T extends string>({
   );
 }
 
-function Group({ title, hint, children }: { title: string; hint: string | null; children?: ReactNode }) {
+function Group({ title, hint, info, children }: { title: string; hint: string | null; info?: string; children?: ReactNode }) {
   return (
     <fieldset disabled={hint !== null} className="space-y-2 border-t border-base-700 pt-3">
-      <legend className="font-display text-small font-semibold">{title}</legend>
+      <legend className="flex items-center gap-1.5 font-display text-small font-semibold">
+        {title}
+        {info ? <Info text={info} /> : null}
+      </legend>
       {hint ? <p className="text-caption text-text-muted">{hint}</p> : children}
     </fieldset>
   );
@@ -67,6 +77,7 @@ function Group({ title, hint, children }: { title: string; hint: string | null; 
 
 function RangeField({
   label,
+  info,
   value,
   min,
   max,
@@ -74,6 +85,7 @@ function RangeField({
   onChange,
 }: {
   label: string;
+  info?: string;
   value: number;
   min: number;
   max: number;
@@ -82,8 +94,11 @@ function RangeField({
 }) {
   return (
     <label className="block text-small">
-      <span className="flex justify-between">
-        {label}
+      <span className="flex items-center justify-between gap-1.5">
+        <span className="flex items-center gap-1.5">
+          {label}
+          {info ? <Info text={info} /> : null}
+        </span>
         <span className="text-text-secondary">{value.toFixed(2)}</span>
       </span>
       <input
@@ -99,6 +114,27 @@ function RangeField({
   );
 }
 
+function Toggle({ label, info, checked, onChange }: { label: string; info: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <div className="flex items-center gap-1.5 text-small">
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+        {label}
+      </label>
+      <Info text={info} />
+    </div>
+  );
+}
+
+function Caption({ text, info }: { text: string; info?: string }) {
+  return (
+    <p className="flex items-center gap-1.5 text-caption text-text-muted">
+      {text}
+      {info ? <Info text={info} /> : null}
+    </p>
+  );
+}
+
 export function Filters({
   filter,
   detectors,
@@ -108,6 +144,9 @@ export function Filters({
   onChange,
   unblurNsfw,
   onUnblurNsfw,
+  hideRejected,
+  onHideRejected,
+  live,
 }: {
   filter: FilterState;
   detectors: Detectors | null;
@@ -117,67 +156,103 @@ export function Filters({
   onChange: (patch: Partial<FilterState>) => void;
   unblurNsfw: boolean;
   onUnblurNsfw: (unblurNsfw: boolean) => void;
+  /** Grid only: hide images that failed blur, size or aspect. */
+  hideRejected: boolean;
+  onHideRejected: (hideRejected: boolean) => void;
+  /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
+  live: { phases: readonly Progress[]; pending: readonly string[] } | null;
 }) {
+  // A running scan's summary is partial and records no check as run yet, so say where the scan is instead.
+  const liveNote = (...checks: string[]): string | null => (live ? checkStageNote(checkStage(checks, live.phases, live.pending)) : null);
   const groups = detectors ? detectorGroups(detectors) : [];
   const missing = (id: (typeof groups)[number]["id"]) => groups.find((group) => group.id === id);
-  const blocked = (ready: boolean | undefined, ran: boolean, id: (typeof groups)[number]["id"]): string | null => {
+  const blocked = (ready: boolean | undefined, ran: boolean, id: (typeof groups)[number]["id"], checks: string[]): string | null => {
     if (!detectors) return "Waiting for detector status.";
     if (!ready) return missing(id)?.hint ?? "This model is not loaded.";
+    if (live) return liveNote(...checks);
     if (summary && !ran) return "This scan did not run it. Scan again to record it.";
     return null;
   };
   const scenes = recordedScenes(summary);
   const clusters = summary?.face_clusters.map((cluster) => cluster.cluster_id) ?? [];
+  const clusterCounts = new Map(summary?.face_clusters.map((cluster) => [cluster.cluster_id, cluster.size]) ?? []);
+  const poseCounts = new Map<string, number>();
+  for (const image of summary?.results ?? []) if (image.primary_face_pose) poseCounts.set(image.primary_face_pose, (poseCounts.get(image.primary_face_pose) ?? 0) + 1);
+  const facets = facetCounts(summary?.results ?? [], filter.minSceneConf, filter.minGarmentConf);
 
   return (
     <section className="space-y-3">
-      <h2 className="font-display text-small font-semibold">Filters</h2>
-      <RangeField label="Quality score" value={filter.minScore} min={0} max={1} step={0.05} onChange={(minScore) => onChange({ minScore })} />
-      <p className="text-caption text-text-muted">Curator quality score, from sharpness, resolution, and artifacts. NudeNet score is separate and does not move this slider.</p>
-      <label className="flex items-center gap-2 text-small">
-        <input type="checkbox" checked={unblurNsfw} onChange={(event) => onUnblurNsfw(event.target.checked)} />
-        Unblur NSFW
-      </label>
-      <p className="text-caption text-text-muted">Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame the scan has not finished checking.</p>
-      <label className="flex items-center gap-2 text-small">
-        <input type="checkbox" checked={filter.includeRejected} onChange={(event) => onChange({ includeRejected: event.target.checked })} />
-        Keep hard rejects
-      </label>
-      <p className="text-caption text-text-muted">Adds images that failed blur, size, or aspect to the keep set when they pass the other filters. Show, on the grid, hides kept or left-out frames without changing this.</p>
-      <label className="flex items-center gap-2 text-small">
-        <input type="checkbox" checked={filter.keepSimilar} onChange={(event) => onChange({ keepSimilar: event.target.checked })} />
-        Keep near-duplicates
-      </label>
-      <p className="text-caption text-text-muted">Adds near-duplicate frames to the keep set. It does not hide them in the grid.</p>
+      <h2 className="flex items-center gap-1.5 font-display text-small font-semibold">
+        Display
+        <Info text="Changes what the grid shows. The keep set and export do not change." />
+      </h2>
+      <Toggle
+        label="Unblur NSFW"
+        info="Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame the scan has not finished checking."
+        checked={unblurNsfw}
+        onChange={onUnblurNsfw}
+      />
+      <Toggle
+        label="Hide rejected"
+        info="Hides images that failed blur, size or aspect from the grid, together with the grid's own filters. Keep hard rejects, below, decides whether they can be kept."
+        checked={hideRejected}
+        onChange={onHideRejected}
+      />
 
-      <Group title="People" hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface")}>
-        <p className="text-caption text-text-muted">Face cluster</p>
+      <h2 className="flex items-center gap-1.5 border-t border-base-700 pt-3 font-display text-small font-semibold">
+        Keep set
+        <Info text="These filters decide which images are kept, for Kept and Left out on the grid, Download paths, and Export." />
+      </h2>
+      <RangeField
+        label="Quality score"
+        info="Curator quality score, from sharpness, resolution, and artifacts. NudeNet score is separate and does not move this slider."
+        value={filter.minScore}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(minScore) => onChange({ minScore })}
+      />
+      <Toggle
+        label="Keep hard rejects"
+        info="Adds images that failed blur, size, or aspect to the keep set when they pass the other filters."
+        checked={filter.includeRejected}
+        onChange={(includeRejected) => onChange({ includeRejected })}
+      />
+      <Toggle
+        label="Keep near-duplicates"
+        info="Adds near-duplicate frames to the keep set. It does not hide them in the grid."
+        checked={filter.keepSimilar}
+        onChange={(keepSimilar) => onChange({ keepSimilar })}
+      />
+
+      <Group title="People" hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
+        <Caption text="Face cluster" />
         <CheckList
           options={clusters}
           selected={filter.faceClusters}
+          counts={clusterCounts}
           label={(id) => clusterLabel(id, faceNames)}
           onToggle={(id) => onChange({ faceClusters: toggleValue(filter.faceClusters, id) })}
         />
-        <p className="text-caption text-text-muted">Head pose</p>
+        <Caption text="Head pose" />
         <CheckList
           options={POSES}
           selected={filter.facePoses}
+          counts={poseCounts}
+          hideEmpty
           label={poseLabel}
           onToggle={(pose) => onChange({ facePoses: toggleValue(filter.facePoses, pose) })}
         />
       </Group>
 
-      <Group title="Appearance" hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo")}>
-        <p className="text-caption text-text-secondary">{APPEARANCE}</p>
-        <p className="text-caption text-text-muted">Gender</p>
+      <Group title="Appearance" info={APPEARANCE} hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
+        <Caption text="Gender" />
         <CheckList
           options={GENDERS}
           selected={filter.faceGenders}
           label={(gender) => gender}
           onToggle={(gender) => onChange({ faceGenders: toggleValue(filter.faceGenders, gender) })}
         />
-        <p className="text-caption text-text-muted">Age bracket</p>
-        <CheckList options={AGE_BRACKETS} selected={filter.faceAges} label={(age) => age} onToggle={(age) => onChange({ faceAges: toggleValue(filter.faceAges, age) })} />
         {gates.mivolo ? (
           <div className="grid grid-cols-2 gap-2">
             <label className="text-caption">
@@ -203,13 +278,16 @@ export function Filters({
           </div>
         ) : (
           <p className="text-caption text-text-muted">
-            {summary && detectors?.mivolo && !summary.faces_config.mivolo
+            {live
+              ? liveNote("faces")
+              : summary && detectors?.mivolo && !summary.faces_config.mivolo
               ? "This scan did not run MiVOLO. Scan again to record it."
               : missing("mivolo")?.hint}
           </p>
         )}
         <RangeField
           label="Attribute confidence"
+          info="Ignore a gender reading below this confidence."
           value={filter.minAttributeConf}
           min={0}
           max={1}
@@ -218,42 +296,56 @@ export function Filters({
         />
       </Group>
 
-      <Group title="Places365" hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365")}>
-        <CheckList options={scenes} selected={filter.scenes} label={(scene) => scene} onToggle={(scene) => onChange({ scenes: toggleValue(filter.scenes, scene) })} />
+      <Group title="Places365" hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
+        <Caption text="Scene" info="Places365 labels this scan recorded at or above the scene confidence, with the number of images for each." />
+        <CheckList
+          options={scenes}
+          selected={filter.scenes}
+          counts={facets.scenes}
+          hideEmpty
+          label={(scene) => scene.replaceAll("_", " ")}
+          onToggle={(scene) => onChange({ scenes: toggleValue(filter.scenes, scene) })}
+        />
+        <Caption text="Environment" />
         <CheckList
           options={ENVIRONMENTS}
           selected={filter.sceneEnvironments}
+          counts={facets.environments}
+          hideEmpty
           label={(environment) => environment}
           onToggle={(environment) => onChange({ sceneEnvironments: toggleValue(filter.sceneEnvironments, environment) })}
         />
-        <RangeField label="Scene confidence" value={filter.minSceneConf} min={0} max={1} step={0.05} onChange={(minSceneConf) => onChange({ minSceneConf })} />
+        <RangeField label="Scene confidence" info="A scene or environment counts only at or above this confidence. The counts above follow it." value={filter.minSceneConf} min={0} max={1} step={0.05} onChange={(minSceneConf) => onChange({ minSceneConf })} />
       </Group>
 
-      <Group title="Fashionpedia" hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments")}>
-        <p className="text-caption text-text-muted">Garment present</p>
+      <Group title="Fashionpedia" hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
+        <Caption text="Garment present" info="Garments this scan recorded at or above the garment confidence, with the number of images for each." />
         <CheckList
           options={GARMENTS}
           selected={filter.garments}
+          counts={facets.garments}
+          hideEmpty
           label={slugLabel}
           onToggle={(garment) => onChange({ garments: toggleValue(filter.garments, garment) })}
         />
-        <p className="text-caption text-text-muted">Garment excluded</p>
+        <Caption text="Garment excluded" info="Drops images that show any garment ticked here." />
         <CheckList
           options={GARMENTS}
           selected={filter.excludeGarments}
+          counts={facets.garments}
+          hideEmpty
           label={slugLabel}
           onToggle={(garment) => onChange({ excludeGarments: toggleValue(filter.excludeGarments, garment) })}
         />
-        <label className="flex items-center gap-2 text-small">
-          <input
-            type="checkbox"
-            checked={filter.garmentsUncropped}
-            onChange={(event) => onChange({ garmentsUncropped: event.target.checked })}
-          />
-          Uncropped only
-        </label>
+        <Toggle
+          label="Uncropped only"
+          info="A garment counts only when at least one of its boxes stays clear of the frame edge."
+          checked={filter.garmentsUncropped}
+          onChange={(garmentsUncropped) => onChange({ garmentsUncropped })}
+        />
         <RangeField
           label="Garment confidence"
+          info="A garment counts only at or above this confidence. The counts above follow it."
           value={filter.minGarmentConf}
           min={0}
           max={1}
@@ -265,18 +357,21 @@ export function Filters({
       {detectors && (contentRatingAvailable(detectors) || summary?.nsfw_config?.enabled === true) ? (
         <Group
           title="NudeNet"
+          info="Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too."
           hint={
-            summary?.nsfw_config?.enabled === true
+            live
+              ? liveNote("nsfw")
+              : summary?.nsfw_config?.enabled === true
               ? null
               : summary
                 ? "This scan did not run NudeNet. Scan again to record it."
                 : "Scan a folder to record NudeNet scores."
           }
         >
-          <p className="text-caption text-text-secondary">
-            Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too. The first five are the usual exposed set; the rest are faces, covered parts, and other exposed areas.
-          </p>
-          <p className="text-caption text-text-muted">Content rating</p>
+          <Caption
+            text="Content rating"
+            info="Explicit is an exposed class at 0.2 or above; suggestive is a covered intimate class without that; safe is neither. An image NudeNet did not check is dropped once a rating is selected."
+          />
           <CheckList
             options={CONTENT_RATINGS}
             selected={filter.contentRatings}
@@ -284,17 +379,12 @@ export function Filters({
             label={(rating) => rating}
             onToggle={(rating) => onChange({ contentRatings: toggleValue(filter.contentRatings, rating) })}
           />
-          <p className="text-caption text-text-muted">
-            Explicit is an exposed class at 0.2 or above; suggestive is a covered intimate class without that; safe is neither. An image NudeNet did not check is dropped once a rating is selected.
-          </p>
-          <label className="flex items-center gap-2 text-small">
-            <input
-              type="checkbox"
-              checked={filter.nsfwThreshold != null}
-              onChange={(event) => onChange({ nsfwThreshold: event.target.checked ? 0.5 : null })}
-            />
-            Drop exposed nudity
-          </label>
+          <Toggle
+            label="Drop exposed nudity"
+            info="Drops an image whose highest score among the classes below is at or above the NudeNet score."
+            checked={filter.nsfwThreshold != null}
+            onChange={(checked) => onChange({ nsfwThreshold: checked ? 0.5 : null })}
+          />
           {filter.nsfwThreshold != null ? (
             <>
               <RangeField
@@ -305,7 +395,7 @@ export function Filters({
                 step={0.05}
                 onChange={(nsfwThreshold) => onChange({ nsfwThreshold })}
               />
-              <p className="text-caption text-text-muted">Classes in the score</p>
+              <Caption text="Classes in the score" info="The first five are the usual exposed set; the rest are faces, covered parts, and other exposed areas." />
               <CheckList
                 options={NUDENET_LABELS}
                 selected={filter.nsfwExposedLabels}
@@ -323,26 +413,24 @@ export function Filters({
       {detectors && (policyAvailable(detectors) || summary?.guard_config?.enabled === true) ? (
         <Group
           title="SingGuard"
+          info="A verdict, not a score. Dropping every unsafe image ignores the rule list. With only rules selected, an unsafe image whose rules are all unlisted stays, and one that names no rule is dropped."
           hint={
-            summary?.guard_config?.enabled === true
+            live
+              ? liveNote("guard")
+              : summary?.guard_config?.enabled === true
               ? null
               : summary
                 ? "This scan did not run SingGuard. Scan again to record it."
                 : "Scan a folder to record SingGuard verdicts."
           }
         >
-          <p className="text-caption text-text-secondary">
-            A verdict, not a score. Dropping every unsafe image ignores the rule list. With only rules selected, an unsafe image whose rules are all unlisted stays, and one that names no rule is dropped.
-          </p>
-          <label className="flex items-center gap-2 text-small">
-            <input
-              type="checkbox"
-              checked={filter.guardUnsafe}
-              onChange={(event) => onChange({ guardUnsafe: event.target.checked, guardRules: event.target.checked ? [] : filter.guardRules })}
-            />
-            Drop every unsafe verdict
-          </label>
-          <p className="text-caption text-text-muted">Rules</p>
+          <Toggle
+            label="Drop every unsafe verdict"
+            info="Drops any image a policy judged unsafe, whatever rule it named. Ticking it clears the rule list."
+            checked={filter.guardUnsafe}
+            onChange={(checked) => onChange({ guardUnsafe: checked, guardRules: checked ? [] : filter.guardRules })}
+          />
+          <Caption text="Rules" info="Drops an unsafe image that names any rule ticked here." />
           <CheckList
             options={[...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))]}
             selected={filter.guardRules}

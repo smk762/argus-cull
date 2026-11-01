@@ -5,12 +5,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { imageUrl, thumbUrl } from "@/lib/api";
 import { ageMissing, awaitingChecks, bodyAges, DEFAULT_BLUR, isMinorExposed, measuredAges, revealHeld, shouldBlur, shownAge, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
-import { confLine, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
+import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
 import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { contentRating, nudeNetLabel } from "@/lib/moderation";
 import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle } from "@/lib/policies";
-import { NUDENET_LABELS, slugLabel, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
+import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
 
@@ -149,7 +149,8 @@ function peopleCheckRow(image: ImageResult): Row | null {
   return ["People check", <span key="people" className="text-warning">{what}</span>, image.people_error ?? undefined];
 }
 
-function NudeNetTable({ nsfw, rating }: { nsfw: NsfwResult; rating: ReturnType<typeof contentRating> }) {
+function NudeNetTable({ nsfw, rating, source, erax }: { nsfw: NsfwResult; rating: ReturnType<typeof contentRating>; source: string | null; erax: EraxResult | null }) {
+  const eraxLabels = erax ? Object.entries(erax.labels).sort(([, left], [, right]) => right - left) : [];
   const detected = NUDENET_LABELS.filter((label) => nsfw.labels[label] != null).sort((left, right) => nsfw.labels[right] - nsfw.labels[left]);
   const quiet = NUDENET_LABELS.filter((label) => nsfw.labels[label] == null);
   return (
@@ -170,6 +171,14 @@ function NudeNetTable({ nsfw, rating }: { nsfw: NsfwResult; rating: ReturnType<t
             </th>
             <td className="py-1 font-semibold">{nsfw.exposed_score.toFixed(2)}</td>
           </tr>
+          {source ? (
+            <tr>
+              <th scope="row" className="w-2/5 py-1 pr-3 text-left font-normal text-text-secondary">
+                Source
+              </th>
+              <td className="py-1 text-warning">{source}</td>
+            </tr>
+          ) : null}
           {detected.map((label) => (
             <tr key={label} className="border-t border-base-700">
               <td className="py-1 pr-3">{nudeNetLabel(label)}</td>
@@ -181,7 +190,21 @@ function NudeNetTable({ nsfw, rating }: { nsfw: NsfwResult; rating: ReturnType<t
       <p className="mt-1 text-caption leading-relaxed text-text-muted">
         The exposed score is the highest of the five exposed classes; other classes do not raise it.
         {detected.length === 0 ? " No class scored 0.2 or above." : quiet.length > 0 ? ` Under 0.2: ${quiet.map((label) => nudeNetLabel(label)).join(", ")}.` : ""}
+        {source ? " EraX's classes are mapped onto NudeNet's; EraX has no buttocks class, so the frame stays blurred when NudeNet failed." : ""}
       </p>
+      {eraxLabels.length > 0 ? (
+        <table className="mt-2 w-full border-collapse text-small tabular-nums">
+          <caption className="text-left text-caption text-text-muted">EraX-NSFW, its own classes</caption>
+          <tbody>
+            {eraxLabels.map(([label, score]) => (
+              <tr key={label} className="border-t border-base-700">
+                <td className="py-1 pr-3">{label.replaceAll("_", " ")}</td>
+                <td className="py-1">{score.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
     </section>
   );
 }
@@ -678,8 +701,8 @@ export function PhotoDialog({
             <QualityTable image={image} />
           </Fold>
           {image.nsfw ? (
-            <Fold title="NudeNet" summary={nudeNetLine(image.nsfw, contentRating(image))} open={false}>
-              <NudeNetTable nsfw={image.nsfw} rating={contentRating(image)} />
+            <Fold title="NudeNet" summary={nudeNetLine(image.nsfw, contentRating(image), nsfwSource(image))} open={false}>
+              <NudeNetTable nsfw={image.nsfw} rating={contentRating(image)} source={nsfwSource(image)} erax={image.erax ?? null} />
             </Fold>
           ) : null}
           {image.scene ? (

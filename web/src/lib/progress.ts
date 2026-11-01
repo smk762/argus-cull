@@ -42,3 +42,29 @@ export function progressRatio(progress: Progress): number | null {
   if (progress.total <= 0) return null;
   return Math.min(1, Math.max(0, progress.done / progress.total));
 }
+
+/** The order the curator runs its phases in. Faces and NudeNet overlap on 0.5.1; `pending_checks` covers that. */
+const ORDER = ["starting", "collecting", "scoring", "faces", "identities", "scenes", "garments", "nsfw", "guard", "clustering"];
+
+export type CheckStage = "running" | "queued" | "waiting";
+
+/**
+ * Where a live scan is with a check, read off its phases: running when a phase
+ * for it is on the bar unfinished or the curator lists it as pending, queued
+ * while every phase on the bar comes before it, and otherwise waiting for the
+ * scan to finish, since the scan's record of what it ran only lands at the end.
+ */
+export function checkStage(checks: readonly string[], phases: readonly Progress[], pending: readonly string[]): CheckStage {
+  const unfinished = (entry: Progress) => !(entry.total > 0 && entry.done >= entry.total);
+  if (checks.some((check) => pending.includes(check) || phases.some((entry) => entry.phase === check && unfinished(entry)))) return "running";
+  const first = Math.min(...checks.map((check) => ORDER.indexOf(check)).filter((rank) => rank >= 0));
+  const reached = phases.map((entry) => ORDER.indexOf(entry.phase));
+  if (reached.length === 0 || reached.every((rank) => rank >= 0 && rank < first)) return "queued";
+  return "waiting";
+}
+
+export function checkStageNote(stage: CheckStage): string {
+  if (stage === "running") return "Running now in this scan. Filters open when the scan finishes.";
+  if (stage === "queued") return "Queued in this scan. Filters open when the scan finishes.";
+  return "Waiting for this scan to finish.";
+}
