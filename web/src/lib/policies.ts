@@ -338,9 +338,10 @@ export function withoutPolicies(summary: ScanSummary, off: readonly string[]): S
     guard_config: config ? { ...config, policy: kept[0], variants: kept.slice(1) } : config,
     policy_subset: kept,
     results: summary.results.map((image) => {
-      const official = image.guard?.policy ?? config?.policy ?? null;
+      // The official verdict goes by its recorded name, the config's, or "default" (as `policyVerdicts` names an unnamed one).
+      const officialOff = image.guard != null && (image.guard.policy != null ? skip.has(image.guard.policy) : skip.has("default") || (config?.policy != null && skip.has(config.policy)));
       const variants = image.guard_variants ? Object.fromEntries(Object.entries(image.guard_variants).filter(([name]) => !skip.has(name))) : image.guard_variants;
-      return { ...image, guard: image.guard && official != null && skip.has(official) ? null : image.guard, guard_variants: variants };
+      return { ...image, guard: officialOff ? null : image.guard, guard_variants: variants };
     }),
   };
 }

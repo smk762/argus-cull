@@ -50,11 +50,6 @@ export function templateFromSummary(summary: ScanSummary, root: string | null, d
   };
 }
 
-/**
- * Write the form back into the view, as the next scan's parameters. The scan
- * on screen is dropped the way a folder change drops it: the page is about to
- * start a new one, and the filters that named its clusters and scenes go too.
- */
 /** A run-stats file read back into the form, and what could not be carried over. */
 export interface ImportedRun {
   template: ScanTemplate;
@@ -75,19 +70,27 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
     throw new Error("This is not a Run stats file: it has no folder and config.");
   }
   const config = stats.config;
-  const base = root ? root.replace(/\/$/, "") : "";
+  if (root == null) throw new Error("The curator's source root is not known yet, so the run's folder cannot be placed. Try again once the curator is up.");
+  const base = root.replace(/\/$/, "");
   if (base && stats.folder !== base && !stats.folder.startsWith(`${base}/`)) {
     throw new Error(`The run scanned ${stats.folder}, which is not under this curator's source root (${base}).`);
   }
   const notes: string[] = [];
   const available = detectors?.singguard_policies ?? [];
-  const asked = config.guard === true && typeof config.policy === "string" ? [config.policy, ...(Array.isArray(config.variants) ? config.variants.filter((name): name is string => typeof name === "string") : [])] : [];
+  // The curator may list the official policy among the variants too; name each policy once.
+  const asked = config.guard === true && typeof config.policy === "string" ? [...new Set([config.policy, ...(Array.isArray(config.variants) ? config.variants.filter((name): name is string => typeof name === "string") : [])])] : [];
   const offered = available.length > 0 ? asked.filter((name) => available.includes(name)) : asked;
   const missing = asked.filter((name) => !offered.includes(name));
   if (missing.length > 0) notes.push(`This curator does not offer ${missing.join(", ")}, so ${missing.length === 1 ? "it was" : "they were"} left out.`);
   if (config.guard !== true) notes.push("The run did not record SingGuard, so the form keeps its default policy.");
   const off = Array.isArray(stats.policies_off) ? stats.policies_off.filter((name): name is string => typeof name === "string") : [];
-  if (off.length > 0) notes.push(`The file was saved with ${off.join(", ")} switched off, so the form runs only the policies left on.`);
+  if (off.length > 0) {
+    notes.push(
+      config.guard === true && asked.length === 0
+        ? `The file was saved with every policy (${off.join(", ")}) switched off, so the form keeps its default policy.`
+        : `The file was saved with ${off.join(", ")} switched off, so the form runs only the policies left on.`,
+    );
+  }
   const policy = offered.length > 0 ? { policy: offered[0], variants: offered.slice(1) } : defaultPolicyChoice(available);
   return {
     template: {
@@ -101,6 +104,11 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
   };
 }
 
+/**
+ * Write the form back into the view, as the next scan's parameters. The scan
+ * on screen is dropped the way a folder change drops it: the page is about to
+ * start a new one, and the filters that named its clusters and scenes go too.
+ */
 export function viewWithTemplate(view: ViewState, template: ScanTemplate): ViewState {
   return {
     ...withoutScan(view, template.folder),

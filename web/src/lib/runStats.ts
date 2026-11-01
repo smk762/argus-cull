@@ -83,7 +83,7 @@ export interface RunStats {
     frames_under_18: number;
     /** Frames the under-18 rule holds: a youngest age under 18 with an exposed reading of 0.2 or more. */
     frames_minor_exposed: number;
-    /** Under 18 with an exposed reading under 0.2: not delete-only, but Unblur NSFW does not reveal them. */
+    /** Under 18 but not delete-only: an exposed reading under 0.2, or no NudeNet reading yet. Unblur NSFW does not reveal them. */
     frames_under_18_not_exposed: number;
     /** Youngest age from 16 up to (not including) 18, where a MiVOLO misread most often holds a blur. */
     frames_16_to_18: number;

@@ -23,6 +23,7 @@ import {
   type Progress,
   type ScanList,
   type ScanSummary,
+  type SelectRequest,
   type SelectResult,
 } from "@/lib/types";
 import { mergeProgress } from "@/lib/progress";
@@ -88,6 +89,8 @@ export function CullApp() {
   const allPolicies = useMemo(() => policiesRun(rawSummary), [rawSummary]);
   const policyFlags = useMemo(() => policyFlagCounts(rawSummary?.results ?? []), [rawSummary]);
   const [selection, setSelection] = useState<SelectResult | null>(null);
+  // The request `selection` answered, so Run stats names the filters behind its keep set, not the ones on screen now.
+  const selectionRequest = useRef<SelectRequest | null>(null);
   const [progress, setProgress] = useState<Progress[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanList, setScanList] = useState<ScanList | null>(null);
@@ -316,9 +319,11 @@ export function CullApp() {
   useEffect(() => {
     if (!summary || !detectors || scanning) return;
     let cancel = false;
-    selectScan(summary.scan_id, selectBody(view.filter, availability(detectors, summary), summary))
+    const request = selectBody(view.filter, availability(detectors, summary), summary);
+    selectScan(summary.scan_id, request)
       .then((body) => {
         if (cancel) return;
+        selectionRequest.current = request;
         setSelection(body);
         setError(null);
       })
@@ -541,7 +546,7 @@ export function CullApp() {
     const stats = runStats(summary, selection, labels, tags, cohorts, policyNames, new Date(), {
       curatorVersion: health?.version ?? null,
       cullVersion: CULL_VERSION,
-      filters: detectors ? selectBody(view.filter, gates, summary) : null,
+      filters: selectionRequest.current,
       blur,
       faceNames: view.faceNames,
       policiesOff: offPolicies,

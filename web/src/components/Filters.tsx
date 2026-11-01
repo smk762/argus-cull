@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
 import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
@@ -191,7 +191,11 @@ export function Filters({
   const clusterCounts = new Map(summary?.face_clusters.map((cluster) => [cluster.cluster_id, cluster.size]) ?? []);
   const poseCounts = new Map<string, number>();
   for (const image of summary?.results ?? []) if (image.primary_face_pose) poseCounts.set(image.primary_face_pose, (poseCounts.get(image.primary_face_pose) ?? 0) + 1);
-  const ruleOptions = [...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))];
+  // Every verdict's explanation is read for these, so only once per scan, not on every render of the sidebar.
+  const { ruleOptions, ruleCounts } = useMemo(() => {
+    const options = [...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))];
+    return { ruleOptions: options, ruleCounts: guardRuleCounts(summary?.results ?? [], options) };
+  }, [summary]);
   const facets = facetCounts(summary?.results ?? [], filter.minSceneConf, filter.minGarmentConf);
 
   return (
@@ -214,7 +218,8 @@ export function Filters({
             : "Available once the keep set is calculated, after the scan."
         }
         checked={hideRejected}
-        disabled={!hideRejectedReady}
+        // Still clearable when on, so a switch left on from an earlier keep set is never stuck.
+        disabled={!hideRejectedReady && !hideRejected}
         onChange={onHideRejected}
       />
 
@@ -469,7 +474,7 @@ export function Filters({
           <CheckList
             options={ruleOptions}
             selected={filter.guardRules}
-            counts={guardRuleCounts(summary?.results ?? [], ruleOptions)}
+            counts={ruleCounts}
             hideEmpty
             label={(id) => guardRuleLabel(id, summary)}
             onToggle={(rule) => onChange({ guardUnsafe: false, guardRules: toggleValue(filter.guardRules, rule) })}
