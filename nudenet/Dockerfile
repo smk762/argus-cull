@@ -18,10 +18,12 @@ RUN mkdir -p /models \
     && curl -fL --retry 3 -o /models/640m.onnx "${NUDENET_640M_URL}" \
     && echo "${NUDENET_640M_SHA256}  /models/640m.onnx" | sha256sum -c -
 
+# sidecar.py comes from the `common` build context (docker-compose.yaml;
+# plain docker build: --build-context common=../sidecar-common).
+COPY --from=common sidecar.py .
 COPY app.py .
 ENV PYTHONUNBUFFERED=1 \
     NUDENET_MODEL=/models/640m.onnx \
-    NUDENET_RESOLUTION=640 \
-    PORT=8080
+    NUDENET_RESOLUTION=640
 EXPOSE 8080
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

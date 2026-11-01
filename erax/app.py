@@ -14,9 +14,8 @@ import os
 import threading
 from pathlib import Path
 
-import cv2
-import numpy as np
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
+from sidecar import add_infer, decode_bgr
 from ultralytics import YOLO
 
 log = logging.getLogger("erax")
@@ -36,20 +35,8 @@ log.info("loaded %s conf=%s iou=%s", _MODEL, _CONF, _IOU)
 app = FastAPI(title="EraX-NSFW")
 
 
-async def _form_images(form) -> list[bytes]:
-    blobs: list[bytes] = []
-    for key in sorted(form.keys()):
-        item = form[key]
-        if hasattr(item, "read"):
-            data = item.read()
-            blobs.append(await data if hasattr(data, "__await__") else data)
-    return blobs
-
-
 def _detect(data: bytes) -> list[dict]:
-    mat = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-    if mat is None:
-        raise ValueError("unreadable image")
+    mat = decode_bgr(data)
     with _infer:
         results = _model.predict(mat, conf=_CONF, iou=_IOU, verbose=False)
     out: list[dict] = []
@@ -75,17 +62,4 @@ def health() -> dict[str, object]:
     return {"ok": True, "model": _MODEL.name, "conf": _CONF, "iou": _IOU}
 
 
-@app.post("/infer")
-async def infer(request: Request) -> dict[str, object]:
-    form = await request.form()
-    images = await _form_images(form)
-    if not images:
-        raise HTTPException(status_code=400, detail="expected multipart image fields (f1, …)")
-    prediction: list[list[dict]] = []
-    try:
-        for data in images:
-            prediction.append(_detect(data))
-    except Exception as exc:
-        log.exception("EraX detect failed")
-        raise HTTPException(status_code=500, detail="EraX detect failed") from exc
-    return {"prediction": prediction, "success": True}
+add_infer(app, "EraX", lambda images: [_detect(data) for data in images])

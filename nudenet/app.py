@@ -13,8 +13,9 @@ import os
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from nudenet import NudeDetector
+from sidecar import add_infer, decode_bgr
 
 log = logging.getLogger("nudenet")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -32,15 +33,11 @@ log.info("loaded %s at %spx", _MODEL, _RESOLUTION)
 app = FastAPI(title="NudeNet 640m")
 
 
-async def _form_images(form) -> list[bytes]:
-    """Multipart file parts in field-name order (``f1``, ``f2``, …)."""
-    blobs: list[bytes] = []
-    for key in sorted(form.keys()):
-        item = form[key]
-        if hasattr(item, "read"):
-            data = item.read()
-            blobs.append(await data if hasattr(data, "__await__") else data)
-    return blobs
+def _detect_all(images: list[bytes]) -> list[list[dict]]:
+    # An array, not bytes: NudeNet's own bytes path uses IMREAD_UNCHANGED,
+    # which fails on grayscale or unreadable frames.
+    with _infer:
+        return [_detector.detect(decode_bgr(data)) for data in images]
 
 
 @app.get("/health")
@@ -48,18 +45,4 @@ def health() -> dict[str, object]:
     return {"ok": True, "model": _MODEL.name, "resolution": _RESOLUTION}
 
 
-@app.post("/infer")
-async def infer(request: Request) -> dict[str, object]:
-    form = await request.form()
-    images = await _form_images(form)
-    if not images:
-        raise HTTPException(status_code=400, detail="expected multipart image fields (f1, …)")
-    prediction: list[list[dict]] = []
-    try:
-        with _infer:
-            for data in images:
-                prediction.append(_detector.detect(data))
-    except Exception as exc:
-        log.exception("NudeNet detect failed")
-        raise HTTPException(status_code=500, detail="NudeNet detect failed") from exc
-    return {"prediction": prediction, "success": True}
+add_infer(app, "NudeNet", _detect_all)
