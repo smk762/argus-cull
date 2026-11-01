@@ -5,7 +5,7 @@ import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "./det
 import { runStats, runStatsFilename } from "./runStats";
 import { templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
 import { ago } from "./time";
-import { DEFAULT_VIEW, type Detectors, type FaceAttributes, type ImageResult, type ScanSummary } from "./types";
+import { DEFAULT_VIEW, type Detectors, type FaceAttributes, type ImageResult, type ScanSummary, type SelectRequest } from "./types";
 
 const DETECTORS: Detectors = {
   torch: true,
@@ -178,7 +178,7 @@ describe("run stats", () => {
   );
 
   it("counts pass and fail, and the keep set under the filters", () => {
-    expect(stats.config).toEqual({ faces: true, fairface: false, mivolo: true, set_age: true, scenes: true, garments: false, nsfw: true, guard: true, policy: "adult", variants: ["adult-v2"] });
+    expect(stats.config).toEqual({ faces: true, fairface: false, mivolo: true, set_age: true, mivolo_body: false, scenes: true, garments: false, nsfw: true, guard: true, policy: "adult", variants: ["adult-v2"] });
     // similar-to:<file> is one reason, not one per file.
     expect(stats.images).toEqual({ total: 5, passed: 4, rejected: 1, duplicates: 0, reject_reasons: { blur: 1 }, kept: 2, left_out: 3, left_out_reasons: { guard_unsafe: 1, "similar-to": 1, rejected: 1 } });
     // A selection from another scan does not count.
@@ -203,6 +203,10 @@ describe("run stats", () => {
       max_years: 22,
       frames_under_18: 0,
       frames_minor_exposed: 0,
+      frames_under_18_not_exposed: 0,
+      frames_16_to_18: 0,
+      youngest_from: { face: 3, body: 0, set: 1 },
+      people_check: {},
       set_age: SET_AGE,
       set_age_skipped: null,
     });
@@ -212,7 +216,12 @@ describe("run stats", () => {
   });
 
   it("bands NudeNet and rates each policy", () => {
-    expect(stats.nudenet).toEqual({ scored: 5, mean_exposed: 0.34, bands: { low: 2, mid: 1, high: 2, unscored: 0 } });
+    expect(stats.nudenet).toMatchObject({ scored: 5, mean_exposed: 0.34, bands: { low: 2, mid: 1, high: 2, unscored: 0 } });
+    expect(stats.nudenet.source).toEqual({ nudenet: 5, erax_filled: 0, erax_only: 0, unscored: 0 });
+    expect(stats.policies.map((entry) => [entry.policy, entry.unchecked, entry.slow_overrode_fast])).toEqual([
+      ["adult", 1, 0],
+      ["adult-v2", 4, 0],
+    ]);
     expect(stats.policies.map((entry) => [entry.policy, entry.official, entry.checked, entry.unsafe, entry.flag_rate])).toEqual([
       ["adult", true, 4, 1, "25%"],
       ["adult-v2", false, 1, 1, "100%"],
@@ -221,6 +230,47 @@ describe("run stats", () => {
     // The one label is adult, so the flag on 03 is a false positive.
     expect(stats.policies[0]).toMatchObject({ labelled: 1, precision: "0%", recall: "–", fp: 1 });
     expect(stats.policies[1].precision).toBeNull();
+  });
+
+  it("records what produced the numbers, and summarises verdicts, content, labels and blur", () => {
+    expect(stats.versions).toEqual({ curator: null, cull: null });
+    expect(stats.display).toEqual({ blur_exposed_score: 0.25, policy_blur: true });
+    // 01 passes the official policy and a variant flags it: split. 05 has no verdict.
+    expect(stats.verdicts).toEqual({ unsafe: 1, split: 1, safe: 2, none: 1, official_safe_variant_flagged: 1 });
+    expect(stats.content).toMatchObject({ scenes: { bedroom: 1 }, environments: { indoor: 1 } });
+    expect(stats.labels).toEqual({ labelled: 1, by_expect: { adult: 1 }, overrides: 0, tagged_by_hand: 1 });
+    // 01, 03 and 04 score at or above 0.25; no frame reads under 18, so Unblur reveals them all.
+    expect(stats.blur).toEqual({ blurred: 3, reasons: { held_minor_or_pending: 0, nudenet_score: 3, erax_only: 0, policy: 0 }, with_unblur: 0 });
+
+    const filters = { min_score: 0.4, min_scene_conf: 0.7 } as unknown as SelectRequest;
+    const withContext = runStats(SUMMARY, { scan_id: SUMMARY.scan_id, total: 5, kept: 5, rows: [] }, new Map(), new Map(), NO_TAGS, [], new Date(), {
+      curatorVersion: "0.11.1",
+      cullVersion: "0.2.0",
+      filters,
+      blur: { exposedScore: 0.6, policyBlur: false },
+    });
+    expect(withContext.versions).toEqual({ curator: "0.11.1", cull: "0.2.0" });
+    expect(withContext.filters).toBe(filters);
+    // Scene counts follow the filters' confidence: bedroom read 0.6, under 0.7.
+    expect(withContext.content.scenes).toEqual({});
+    expect(withContext.blur).toMatchObject({ blurred: 1, reasons: { nudenet_score: 1 } });
+  });
+
+  it("counts EraX sources, under-18 near the line, and cascade overrides", () => {
+    const exposed = { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.5 }, exposed_score: 0.5 };
+    const results = [
+      faced("a.jpg", 17.2, { nsfw: exposed, nudenet_failed: true }),
+      faced("b.jpg", 16.5, { nsfw: { detections: [], labels: {}, exposed_score: 0 }, erax_filled: true, guard: { safe: false, rules: ["Safe"], policy: "adult" } }),
+      faced("c.jpg", 30, { nsfw: { detections: [], labels: {}, exposed_score: 0 }, guard: { safe: false, rules: ["A. Sexual Content Risk"], policy: "adult" } }),
+    ];
+    const run = runStats({ ...SUMMARY, results }, null, new Map(), new Map(), NO_TAGS, ["adult"]);
+    expect(run.nudenet.source).toEqual({ nudenet: 1, erax_filled: 1, erax_only: 1, unscored: 0 });
+    expect(run.nudenet.minor_exposed_on_erax_only).toBe(1);
+    expect(run.age).toMatchObject({ frames_under_18: 2, frames_minor_exposed: 1, frames_under_18_not_exposed: 1, frames_16_to_18: 2 });
+    // b's flag names only "Safe", so the slower reading stands: safe, and counted as an override.
+    expect(run.policies[0]).toMatchObject({ checked: 2, unchecked: 1, unsafe: 1, slow_overrode_fast: 1, rules_only_safe: 1 });
+    // a is held (under 18, exposed); c is blurred by its policy verdict; b's flag turned safe, so nothing blurs it.
+    expect(run.blur).toMatchObject({ blurred: 2, reasons: { held_minor_or_pending: 1, nudenet_score: 0, erax_only: 0, policy: 1 } });
   });
 
   it("lists the trigger tags against the rest of the scan", () => {

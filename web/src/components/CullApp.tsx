@@ -32,6 +32,8 @@ import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch 
 
 import { ExportDialog } from "./ExportDialog";
 import { SubsetDialog } from "./SubsetDialog";
+import packageJson from "../../package.json";
+
 import { Filters } from "./Filters";
 import { Tooltip } from "./Tooltip";
 import { People } from "./People";
@@ -52,6 +54,8 @@ function subscribeHydration(): () => void {
 function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
+
+const CULL_VERSION = packageJson.version;
 
 export function CullApp() {
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
@@ -526,7 +530,13 @@ export function CullApp() {
 
   function downloadRunStats() {
     if (!summary) return;
-    const stats = runStats(summary, selection, labels, tags, cohorts, policyNames);
+    const stats = runStats(summary, selection, labels, tags, cohorts, policyNames, new Date(), {
+      curatorVersion: health?.version ?? null,
+      cullVersion: CULL_VERSION,
+      filters: detectors ? selectBody(view.filter, gates, summary) : null,
+      blur,
+      faceNames: view.faceNames,
+    });
     downloadText(runStatsFilename(summary), JSON.stringify(stats, null, 2), "application/json");
   }
 
