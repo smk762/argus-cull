@@ -607,6 +607,19 @@ describe("SingGuard explanation", () => {
     expect(shown).not.toContain("unreadable");
   });
 
+  it("hides the cutoff note whether it names <answer> or Final Judgment", () => {
+    const text = [
+      "SingGuard's reply ended before a Final Judgment or <answer>, so it may have been cut off. The check is unsafe so an incomplete result is not treated as safe.",
+      "",
+      "[Step 2] Check Risk Categories",
+      "The image is Safe.",
+    ].join("\n");
+    const shown = displayGuardExplanation(text);
+    expect(shown).toContain("The image is Safe.");
+    expect(shown).not.toContain("cut off");
+    expect(shown).not.toContain("incomplete result");
+  });
+
   it("splits steps and marks the fired rule", () => {
     const text = [
       "[Step 1] Content Summary",
