@@ -15,6 +15,8 @@ export interface RunContext {
   blur?: BlurPolicy;
   /** Names given to face clusters on this page. */
   faceNames?: Record<string, string>;
+  /** Policies switched off in the sidebar; the summary passed in has already left them out. */
+  policiesOff?: readonly string[];
 }
 
 /**
@@ -29,6 +31,8 @@ export interface RunStats {
   scan_id: string;
   folder: string;
   versions: { curator: string | null; cull: string | null };
+  /** Policies the scan ran but this file leaves out (switched off in the sidebar). Every other section counts without them. */
+  policies_off: string[];
   /** The keep-set filters behind `images.kept` and `left_out_reasons`; null before the keep set is calculated. */
   filters: SelectRequest | null;
   /** The grid's blur settings: the NudeNet score that blurs, and whether an unsafe verdict re-blurs. */
@@ -63,6 +67,8 @@ export interface RunStats {
   age: {
     /** Frames with a face MiVOLO aged. */
     frames_with_face_age: number;
+    /** Frames with no aged face whose age MiVOLO read from a body alone. */
+    frames_with_body_age_only: number;
     /** Frames with no face that took the set's age. */
     frames_with_set_age: number;
     frames_without_age: number;
@@ -196,6 +202,7 @@ export function runStats(
 
   const faceAges: number[] = [];
   let withFaceAge = 0;
+  let withBodyOnly = 0;
   let withSetAge = 0;
   let withoutAge = 0;
   let withoutFace = 0;
@@ -215,10 +222,10 @@ export function runStats(
     const ages = mivoloAges(image);
     if (ages.length === 0) withoutAge += 1;
     else if (usesSetAge(image)) withSetAge += 1;
-    else {
+    else if (measuredAges(image).length > 0) {
       withFaceAge += 1;
       faceAges.push(...measuredAges(image));
-    }
+    } else withBodyOnly += 1;
     if (ages.some((age) => age < MINOR_AGE_YEARS)) under18 += 1;
     if (isMinorExposed(image)) minorExposed += 1;
   }
@@ -279,6 +286,7 @@ export function runStats(
     scan_id: summary.scan_id,
     folder: summary.folder,
     versions: { curator: context.curatorVersion ?? null, cull: context.cullVersion ?? null },
+    policies_off: [...(context.policiesOff ?? [])],
     filters: rows ? (context.filters ?? null) : null,
     display: { blur_exposed_score: blur.exposedScore, policy_blur: blur.policyBlur },
     config: {
@@ -306,6 +314,7 @@ export function runStats(
     },
     age: {
       frames_with_face_age: withFaceAge,
+      frames_with_body_age_only: withBodyOnly,
       frames_with_set_age: withSetAge,
       frames_without_age: withoutAge,
       frames_without_face: withoutFace,
@@ -423,9 +432,13 @@ function bandCell(band: { tagged: { checked: number; unsafe: number }; rest: { c
   return { tagged_checked: band.tagged.checked, tagged_unsafe: band.tagged.unsafe, rest_checked: band.rest.checked, rest_unsafe: band.rest.unsafe };
 }
 
-/** `run-stats-<folder>-<scan>.json`, with the folder's last segment so two files from two sets tell apart in a download folder. */
-export function runStatsFilename(summary: Pick<ScanSummary, "scan_id" | "folder">): string {
+/**
+ * `run-stats-<folder>-<scan>.json`, with the folder's last segment so two files from two sets tell apart in a
+ * download folder, and `-without-<policies>` when some were switched off, so several files from one run do too.
+ */
+export function runStatsFilename(summary: Pick<ScanSummary, "scan_id" | "folder">, policiesOff: readonly string[] = []): string {
   const leaf = summary.folder.split("/").filter(Boolean).pop() ?? "root";
   const safe = leaf.replace(/[^a-z0-9._-]+/gi, "_").slice(0, 40) || "root";
-  return `run-stats-${safe}-${summary.scan_id.slice(0, 8)}.json`;
+  const without = policiesOff.length > 0 ? `-without-${[...policiesOff].sort().join("+").replace(/[^a-z0-9._+-]+/gi, "_").slice(0, 60)}` : "";
+  return `run-stats-${safe}-${summary.scan_id.slice(0, 8)}${without}.json`;
 }

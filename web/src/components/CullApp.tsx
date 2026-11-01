@@ -8,7 +8,7 @@ import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type 
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
 import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
-import { filterByShield, pathsByShield, policiesRun, policyStats, type ShieldPick, type ShieldView } from "@/lib/policies";
+import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
 import { availability, guardBody, selectBody } from "@/lib/select";
@@ -56,6 +56,7 @@ function sameJson(left: unknown, right: unknown): boolean {
 }
 
 const CULL_VERSION = packageJson.version;
+const NO_POLICIES_OFF: string[] = [];
 
 export function CullApp() {
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
@@ -78,7 +79,14 @@ export function CullApp() {
   // The scan form, when open: what it starts filled with, and the scan it was filled from.
   const [scanForm, setScanForm] = useState<{ template: ScanTemplate; from: string | null } | null>(null);
   const [rerunning, setRerunning] = useState<string | null>(null);
-  const [summary, setSummary] = useState<ScanSummary | null>(null);
+  // The scan as the curator returned it. Most of the page reads `summary`, which leaves out policies switched off in the sidebar.
+  const [rawSummary, setSummary] = useState<ScanSummary | null>(null);
+  const [policyOff, setPolicyOff] = useState<{ scanId: string; off: string[] } | null>(null);
+  // Switched-off policies belong to one scan; opening another starts with every policy on.
+  const offPolicies = policyOff && policyOff.scanId === rawSummary?.scan_id ? policyOff.off : NO_POLICIES_OFF;
+  const summary = useMemo(() => (rawSummary ? withoutPolicies(rawSummary, offPolicies) : null), [rawSummary, offPolicies]);
+  const allPolicies = useMemo(() => policiesRun(rawSummary), [rawSummary]);
+  const policyFlags = useMemo(() => policyFlagCounts(rawSummary?.results ?? []), [rawSummary]);
   const [selection, setSelection] = useState<SelectResult | null>(null);
   const [progress, setProgress] = useState<Progress[] | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -376,7 +384,7 @@ export function CullApp() {
   const subset = useMemo(() => (summary && reasons ? evaluateSubset(summary, reasons, view.filter.minScore) : null), [summary, reasons, view.filter.minScore]);
   const policyNames = useMemo(() => policiesRun(summary), [summary]);
   // While this tab's scan runs, its tiles show the policies it asked for, so a verdict still to come reads as queued.
-  const gridPolicies = scanning && scanPolicies.length > 0 ? scanPolicies : policyNames;
+  const gridPolicies = scanning && scanPolicies.length > 0 ? scanPolicies.filter((name) => !offPolicies.includes(name)) : policyNames;
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
   const cohortBase = useMemo(
@@ -518,7 +526,8 @@ export function CullApp() {
     setRerunning(scanId);
     setError(null);
     try {
-      const body = summary?.scan_id === scanId ? summary : await getScan(scanId);
+      // The raw scan: a rerun runs every policy the scan ran, whatever is switched off here.
+      const body = rawSummary?.scan_id === scanId ? rawSummary : await getScan(scanId);
       setScanForm({ template: templateFromSummary(body, root, detectors), from: folderLabel(body.folder, root).label });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not read that scan's parameters.");
@@ -535,8 +544,9 @@ export function CullApp() {
       filters: detectors ? selectBody(view.filter, gates, summary) : null,
       blur,
       faceNames: view.faceNames,
+      policiesOff: offPolicies,
     });
-    downloadText(runStatsFilename(summary), JSON.stringify(stats, null, 2), "application/json");
+    downloadText(runStatsFilename(summary, offPolicies), JSON.stringify(stats, null, 2), "application/json");
   }
 
   const scanControl = Boolean(health?.scan_control);
@@ -777,6 +787,12 @@ export function CullApp() {
           onHideRejected={(next) => {
             setKeepView(next ? "kept" : "all");
             if (view.page !== 1) replaceView({ ...view, page: 1 });
+          }}
+          policies={allPolicies}
+          policyFlags={policyFlags}
+          policiesOff={offPolicies}
+          onPoliciesOff={(off) => {
+            if (rawSummary) setPolicyOff({ scanId: rawSummary.scan_id, off });
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
         />

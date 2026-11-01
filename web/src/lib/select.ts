@@ -55,6 +55,8 @@ function listed<T>(active: boolean, values: readonly T[]): T[] | null {
  */
 export function guardPoliciesForRequest(summary: ScanSummary | null, active: boolean): string[] | undefined {
   if (!active) return undefined;
+  // Policies switched off in the sidebar: name the rest, even one alone, so the curator does not fall back to the official verdict.
+  if (summary?.policy_subset) return [...summary.policy_subset];
   const run = policiesRun(summary);
   return run.length > 1 ? run : undefined;
 }
@@ -62,7 +64,9 @@ export function guardPoliciesForRequest(summary: ScanSummary | null, active: boo
 /** Export-filter fields only. No dest, mode, max_keep, or diversify flags. */
 export function selectBody(filter: FilterState, gates: FilterAvailability, summary: ScanSummary | null = null): SelectRequest {
   const threshold = gates.nsfw && filter.nsfwThreshold != null && filter.nsfwExposedLabels.length > 0 ? filter.nsfwThreshold : null;
-  const guardActive = gates.guard && (filter.guardUnsafe || filter.guardRules.length > 0);
+  // Every policy switched off in the sidebar: there is no verdict left to filter on.
+  const guardOn = gates.guard && summary?.policy_subset?.length !== 0;
+  const guardActive = guardOn && (filter.guardUnsafe || filter.guardRules.length > 0);
   return {
     min_score: filter.minScore,
     include_rejected: filter.includeRejected,
@@ -86,8 +90,8 @@ export function selectBody(filter: FilterState, gates: FilterAvailability, summa
     nsfw_label_thresholds: null,
     nsfw_exposed_labels: exposedLabelsForRequest(filter, threshold != null),
     content_ratings: listed(gates.nsfw, filter.contentRatings),
-    guard_unsafe: gates.guard ? filter.guardUnsafe : false,
-    guard_rules: filter.guardUnsafe ? null : listed(gates.guard, filter.guardRules),
+    guard_unsafe: guardOn ? filter.guardUnsafe : false,
+    guard_rules: filter.guardUnsafe ? null : listed(guardOn, filter.guardRules),
     guard_policies: guardPoliciesForRequest(summary, guardActive),
   };
 }

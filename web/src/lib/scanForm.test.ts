@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { measuredAges, shownAge } from "./chunks";
 import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "./detailLines";
+import { policiesRun, withoutPolicies } from "./policies";
 import { runStats, runStatsFilename } from "./runStats";
 import { templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
 import { ago } from "./time";
@@ -195,6 +196,7 @@ describe("run stats", () => {
   it("reads the ages, measured and set", () => {
     expect(stats.age).toEqual({
       frames_with_face_age: 3,
+      frames_with_body_age_only: 0,
       frames_with_set_age: 1,
       frames_without_age: 1,
       frames_without_face: 2,
@@ -273,6 +275,22 @@ describe("run stats", () => {
     expect(run.policies[0]).toMatchObject({ checked: 2, unchecked: 1, unsafe: 1, slow_overrode_fast: 1, rules_only_safe: 1 });
     // a is held (under 18, exposed); c is blurred by its policy verdict; b's flag turned safe, so nothing blurs it.
     expect(run.blur).toMatchObject({ blurred: 2, reasons: { held_minor_or_pending: 1, nudenet_score: 0, erax_only: 0, policy: 1 } });
+  });
+
+  it("counts a faceless frame aged from the body apart from face ages", () => {
+    const body = image("body.jpg", { face_count: 0, people: [{ bbox: [0, 0, 1, 1], det_score: 0.9, face_index: null, age_years: 25, age_source: "mivolo" }] });
+    const run = runStats({ ...SUMMARY, results: [faced("a.jpg", 30), body] }, null, new Map(), new Map(), NO_TAGS, []);
+    expect(run.age).toMatchObject({ frames_with_face_age: 1, frames_with_body_age_only: 1, faces_measured: 1, frames_without_face: 1, youngest_from: { face: 1, body: 1, set: 0 } });
+  });
+
+  it("records switched-off policies, and counts without them", () => {
+    const off = withoutPolicies(SUMMARY, ["adult-v2"]);
+    const run = runStats(off, null, new Map(), new Map(), NO_TAGS, policiesRun(off), new Date(), { policiesOff: ["adult-v2"] });
+    expect(run.policies_off).toEqual(["adult-v2"]);
+    expect(run.policies.map((entry) => entry.policy)).toEqual(["adult"]);
+    // 01 was split only because adult-v2 flagged it; without it, it is safe.
+    expect(run.verdicts).toMatchObject({ split: 0, safe: 3, official_safe_variant_flagged: 0 });
+    expect(runStatsFilename(SUMMARY, ["default", "adult"])).toBe("run-stats-one_set-abcdef12-without-adult+default.json");
   });
 
   it("lists the trigger tags against the rest of the scan", () => {

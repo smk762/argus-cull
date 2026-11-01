@@ -1,6 +1,6 @@
 import { finalJudgment } from "./guardText";
 import { isPositive, type ImageLabel } from "./labels";
-import type { GuardPolicyInfo, GuardResult, ImageResult } from "./types";
+import type { GuardPolicyInfo, GuardResult, ImageResult, ScanSummary } from "./types";
 
 /** What a scan asks SingGuard to run: the official policy and the variants beside it. */
 export interface PolicyChoice {
@@ -319,4 +319,35 @@ export function policyShields(image: Guarded, policies: readonly string[], overr
     const rules = verdict.result.rules.length > 0 ? verdict.result.rules.join("; ") : "no rule named";
     return [{ policy, official, state: "unsafe", title: `${name}: unsafe. ${rules}.${follows}` }];
   });
+}
+
+/**
+ * The scan with some policies' verdicts left out, as if they had not run:
+ * blur, shields, counts, sorting and run stats all read this. The first policy
+ * still on leads where the official one is off. `policy_subset` names what
+ * is left, so the keep-set request asks the curator for those policies alone.
+ */
+export function withoutPolicies(summary: ScanSummary, off: readonly string[]): ScanSummary {
+  const skip = new Set(off);
+  const run = policiesRun(summary);
+  if (!run.some((name) => skip.has(name))) return summary;
+  const kept = run.filter((name) => !skip.has(name));
+  const config = summary.guard_config;
+  return {
+    ...summary,
+    guard_config: config ? { ...config, policy: kept[0], variants: kept.slice(1) } : config,
+    policy_subset: kept,
+    results: summary.results.map((image) => {
+      const official = image.guard?.policy ?? config?.policy ?? null;
+      const variants = image.guard_variants ? Object.fromEntries(Object.entries(image.guard_variants).filter(([name]) => !skip.has(name))) : image.guard_variants;
+      return { ...image, guard: image.guard && official != null && skip.has(official) ? null : image.guard, guard_variants: variants };
+    }),
+  };
+}
+
+/** Images each policy judged unsafe, for the sidebar's policy list. */
+export function policyFlagCounts(images: readonly Guarded[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const image of images) for (const verdict of policyVerdicts(image)) if (!verdict.result.safe) counts.set(verdict.policy, (counts.get(verdict.policy) ?? 0) + 1);
+  return counts;
 }

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policyShields, policySourceLabel, policyStats, policyVerdicts, resolvedGuard, shieldLabel, shieldState, shieldTitle, slowResultSafe, verdictConflict } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policyFlagCounts, policyShields, policySourceLabel, policyStats, policyVerdicts, resolvedGuard, shieldLabel, shieldState, shieldTitle, slowResultSafe, verdictConflict, withoutPolicies } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -198,6 +198,48 @@ describe("policy verdicts", () => {
     expect([granular.tp, granular.fp, granular.fn, granular.tn]).toEqual([1, 1, 0, 1]);
     expect(granular.rules).toEqual({ "H. Apparent Minor": 1, "A. Sexual Content Risk": 1 });
     expect([cautious.checked, cautious.labelled]).toEqual([2, 2]);
+  });
+});
+
+describe("policies switched off", () => {
+  const scan = {
+    scan_id: "s",
+    guard_config: { enabled: true, policy: "cinematic", variants: ["default", "adult"] },
+    results: [
+      { rel_path: "a.jpg", guard: safe("cinematic"), guard_variants: { cinematic: safe("cinematic"), default: unsafe("default"), adult: safe("adult") } },
+      { rel_path: "b.jpg", guard: unsafe("cinematic"), guard_variants: { cinematic: unsafe("cinematic"), default: unsafe("default"), adult: unsafe("adult") } },
+    ],
+  } as unknown as ScanSummary;
+  const gates = { faces: false, mivolo: false, scenes: false, garments: false, nsfw: false, guard: true };
+
+  it("leaves a variant's verdicts out, so its flags stop blurring and splitting", () => {
+    expect(effectiveUnsafe(scan.results[0])).toBe(true);
+    const off = withoutPolicies(scan, ["default"]);
+    expect(off.policy_subset).toEqual(["cinematic", "adult"]);
+    expect(policiesRun(off)).toEqual(["cinematic", "adult"]);
+    expect(effectiveUnsafe(off.results[0])).toBe(false);
+    expect(shieldState(off.results[0])).toBe("safe");
+    // Counts in the sidebar come from the full scan, so a switched-off policy still shows what it flagged.
+    expect([...policyFlagCounts(scan.results)]).toEqual([["default", 2], ["cinematic", 1], ["adult", 1]]);
+    expect(withoutPolicies(scan, [])).toBe(scan);
+  });
+
+  it("lets the first policy left lead when the official one is off", () => {
+    const off = withoutPolicies(scan, ["cinematic", "default"]);
+    expect(off.results[0].guard).toBeNull();
+    expect(policyVerdicts(off.results[1]).map((verdict) => verdict.policy)).toEqual(["adult"]);
+    expect(policiesRun(off)).toEqual(["adult"]);
+  });
+
+  it("asks the curator for the policies left on, and drops the SingGuard filters when none are", () => {
+    const one = withoutPolicies(scan, ["cinematic", "default"]);
+    // One policy alone is still named, or the curator would judge by the official verdict.
+    expect(selectBody({ ...DEFAULT_FILTER, guardUnsafe: true }, gates, one).guard_policies).toEqual(["adult"]);
+    const none = withoutPolicies(scan, ["cinematic", "default", "adult"]);
+    expect(none.policy_subset).toEqual([]);
+    const body = selectBody({ ...DEFAULT_FILTER, guardUnsafe: true, guardRules: [] }, gates, none);
+    expect(body).toMatchObject({ guard_unsafe: false, guard_rules: null, guard_policies: undefined });
+    expect(effectiveUnsafe(none.results[1])).toBeNull();
   });
 });
 

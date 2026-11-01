@@ -147,6 +147,10 @@ export function Filters({
   hideRejected,
   hideRejectedReady,
   onHideRejected,
+  policies = [],
+  policyFlags,
+  policiesOff = [],
+  onPoliciesOff,
   live,
 }: {
   filter: FilterState;
@@ -162,6 +166,12 @@ export function Filters({
   /** The keep set has been calculated, so there is something to hide by. */
   hideRejectedReady: boolean;
   onHideRejected: (hideRejected: boolean) => void;
+  /** Every policy the scan ran, official first, and how many images each flagged. */
+  policies?: readonly string[];
+  policyFlags?: ReadonlyMap<string, number>;
+  /** Policies switched off: their verdicts leave the blur, shields, counts, keep set and run stats. */
+  policiesOff?: readonly string[];
+  onPoliciesOff?: (off: string[]) => void;
   /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
   live: { phases: readonly Progress[]; pending: readonly string[] } | null;
 }) {
@@ -433,6 +443,22 @@ export function Filters({
                 : "Scan a folder to record SingGuard verdicts."
           }
         >
+          {policies.length > 1 && onPoliciesOff ? (
+            <>
+              <Caption
+                text="Policies counted"
+                info="Untick a policy to leave its verdicts out, as if it had not run: blur, shields, the counts here, the keep set and Run stats all follow. The number is images it flagged. The first ticked policy leads where the official one is off. A rerun still runs every policy."
+              />
+              <CheckList
+                options={policies}
+                selected={policies.filter((name) => !policiesOff.includes(name))}
+                counts={policyFlags}
+                label={(name) => (name === policies[0] ? `${name} (official)` : name)}
+                onToggle={(name) => onPoliciesOff(policiesOff.includes(name) ? policiesOff.filter((other) => other !== name) : [...policiesOff, name])}
+              />
+              {policiesOff.length === policies.length ? <p className="text-caption text-warning">Every policy is off: no verdict blurs, and the SingGuard filters below do nothing.</p> : null}
+            </>
+          ) : null}
           <Toggle
             label="Drop every unsafe verdict"
             info="Drops any image a policy judged unsafe, whatever rule it named. Ticking it clears the rule list."
