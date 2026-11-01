@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
-import { guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
+import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
 import { checkStage, checkStageNote } from "@/lib/progress";
 import { facetCounts, recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
@@ -114,11 +114,11 @@ function RangeField({
   );
 }
 
-function Toggle({ label, info, checked, onChange }: { label: string; info: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function Toggle({ label, info, checked, disabled = false, onChange }: { label: string; info: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <div className="flex items-center gap-1.5 text-small">
+    <div className={`flex items-center gap-1.5 text-small ${disabled ? "opacity-50" : ""}`}>
       <label className="flex items-center gap-2">
-        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+        <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
         {label}
       </label>
       <Info text={info} />
@@ -145,6 +145,7 @@ export function Filters({
   unblurNsfw,
   onUnblurNsfw,
   hideRejected,
+  hideRejectedReady,
   onHideRejected,
   live,
 }: {
@@ -156,8 +157,10 @@ export function Filters({
   onChange: (patch: Partial<FilterState>) => void;
   unblurNsfw: boolean;
   onUnblurNsfw: (unblurNsfw: boolean) => void;
-  /** Grid only: hide images that failed blur, size or aspect. */
+  /** Grid only: hide every image the keep set leaves out. Mirrors Show → Kept on the grid. */
   hideRejected: boolean;
+  /** The keep set has been calculated, so there is something to hide by. */
+  hideRejectedReady: boolean;
   onHideRejected: (hideRejected: boolean) => void;
   /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
   live: { phases: readonly Progress[]; pending: readonly string[] } | null;
@@ -178,6 +181,7 @@ export function Filters({
   const clusterCounts = new Map(summary?.face_clusters.map((cluster) => [cluster.cluster_id, cluster.size]) ?? []);
   const poseCounts = new Map<string, number>();
   for (const image of summary?.results ?? []) if (image.primary_face_pose) poseCounts.set(image.primary_face_pose, (poseCounts.get(image.primary_face_pose) ?? 0) + 1);
+  const ruleOptions = [...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))];
   const facets = facetCounts(summary?.results ?? [], filter.minSceneConf, filter.minGarmentConf);
 
   return (
@@ -194,8 +198,13 @@ export function Filters({
       />
       <Toggle
         label="Hide rejected"
-        info="Hides images that failed blur, size or aspect from the grid, together with the grid's own filters. Keep hard rejects, below, decides whether they can be kept."
+        info={
+          hideRejectedReady
+            ? "Hides every image the keep set leaves out, whether a hard reject (blur, size, aspect), a near-duplicate, or dropped by a filter below. The same switch as Show → Kept on the grid."
+            : "Available once the keep set is calculated, after the scan."
+        }
         checked={hideRejected}
+        disabled={!hideRejectedReady}
         onChange={onHideRejected}
       />
 
@@ -430,10 +439,12 @@ export function Filters({
             checked={filter.guardUnsafe}
             onChange={(checked) => onChange({ guardUnsafe: checked, guardRules: checked ? [] : filter.guardRules })}
           />
-          <Caption text="Rules" info="Drops an unsafe image that names any rule ticked here." />
+          <Caption text="Rules" info="Drops an unsafe image that names any rule ticked here. The count is images that any policy judged unsafe under that rule; rules no image fired are hidden." />
           <CheckList
-            options={[...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))]}
+            options={ruleOptions}
             selected={filter.guardRules}
+            counts={guardRuleCounts(summary?.results ?? [], ruleOptions)}
+            hideEmpty
             label={(id) => guardRuleLabel(id, summary)}
             onToggle={(rule) => onChange({ guardUnsafe: false, guardRules: toggleValue(filter.guardRules, rule) })}
           />
