@@ -1050,6 +1050,7 @@ export function CullApp() {
           from={scanForm.from}
           detectors={detectors}
           health={health}
+          root={root}
           policies={guardPolicies}
           canScan={canScan}
           busyLabel={!sourceReady ? "The curator is not ready." : scanBusy ? "A scan is running. Scan is available once it finishes, or stop it from the progress bar." : null}

@@ -4,7 +4,7 @@ import { measuredAges, shownAge } from "./chunks";
 import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "./detailLines";
 import { policiesRun, withoutPolicies } from "./policies";
 import { runStats, runStatsFilename } from "./runStats";
-import { templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
+import { templateFromRunStats, templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
 import { ago } from "./time";
 import { DEFAULT_VIEW, type Detectors, type FaceAttributes, type ImageResult, type ScanSummary, type SelectRequest } from "./types";
 
@@ -301,6 +301,26 @@ describe("run stats", () => {
     const lingerie = stats.tags[1].policies[0];
     expect(lingerie).toMatchObject({ policy: "adult", tagged_checked: 1, tagged_unsafe: 1, tagged_flag_rate: "100%", rest_checked: 3, rest_unsafe: 0, rest_flag_rate: "0%" });
     expect(lingerie.bands.mid).toEqual({ tagged_checked: 1, tagged_unsafe: 1, rest_checked: 0, rest_unsafe: 0 });
+  });
+
+  it("fills the scan form back from its own file", () => {
+    const file = JSON.parse(JSON.stringify(stats));
+    expect(templateFromRunStats(file, "/data/images", DETECTORS)).toEqual({
+      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false },
+      notes: [],
+    });
+    // A curator without adult-v2 drops it and says so.
+    const fewer = templateFromRunStats(file, "/data/images", { ...DETECTORS, singguard_policies: ["default", "adult"] });
+    expect(fewer.template.policy).toEqual({ policy: "adult", variants: [] });
+    expect(fewer.notes).toEqual(["This curator does not offer adult-v2, so it was left out."]);
+    // A file saved with a policy switched off names only the ones left on.
+    const off = withoutPolicies(SUMMARY, ["adult"]);
+    const saved = JSON.parse(JSON.stringify(runStats(off, null, new Map(), new Map(), NO_TAGS, policiesRun(off), new Date(), { policiesOff: ["adult"] })));
+    const isolated = templateFromRunStats(saved, "/data/images", DETECTORS);
+    expect(isolated.template.policy).toEqual({ policy: "adult-v2", variants: [] });
+    expect(isolated.notes).toEqual(["The file was saved with adult switched off, so the form runs only the policies left on."]);
+    expect(() => templateFromRunStats({ hello: 1 }, "/data/images", DETECTORS)).toThrow("not a Run stats file");
+    expect(() => templateFromRunStats(file, "/elsewhere", DETECTORS)).toThrow("not under this curator's source root");
   });
 
   it("names the file after the folder and the scan", () => {
