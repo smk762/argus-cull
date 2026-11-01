@@ -21,6 +21,9 @@ services:
       - ARGUS_CURATOR_GARMENTS_MODEL=/root/.cache/argus_curator/models/yolos_fashionpedia.onnx
       # Both checks are on unless .env sets the URL empty.
       - ARGUS_CURATOR_NUDENET_URL=${ARGUS_CURATOR_NUDENET_URL-http://nudenet:8080}
+      # Optional second detector. Empty turns it off. When NudeNet returns
+      # nothing useful, curator maps EraX hits onto the same exposed labels.
+      - ARGUS_CURATOR_ERAX_URL=${ARGUS_CURATOR_ERAX_URL-http://erax:8080}
       # Darkroom's guard: agent-composer on the LAN. Empty turns the check off.
       - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://192.168.1.198:9150}
       # cascade: fast on every frame (about a second), slow on the frames
@@ -53,13 +56,48 @@ services:
       - ${ARGUS_GPU_LOCK_DIR:-/tmp/argus-gpu}:/run/argus-gpu
     restart: unless-stopped
 
-  # NudeNet detector server (AGPL-3.0). Curator only talks to it over HTTP.
-  # Pinned by digest because upstream publishes only `latest`. No host port.
+  # NudeNet 640m (AGPL-3.0). Same /infer API as the official 320n image;
+  # curator only talks to it over HTTP. No host port.
   nudenet:
-    image: ghcr.io/notai-tech/nudenet@sha256:5d8fb3a20980680b73b7776745ee5b1983851c201a706cbdf3dd827c143783e9
+    build:
+      context: ./nudenet
+    environment:
+      - NUDENET_MODEL=/models/640m.onnx
+      - NUDENET_RESOLUTION=640
     ulimits:
       nofile: 1000000
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # EraX-NSFW-V1.0 (Apache-2.0, YOLO11s on CPU). Optional: set
+  # ARGUS_CURATOR_ERAX_URL empty to stop the curator calling it.
+  erax:
+    build:
+      context: ./erax
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
 
   # Optional local Sing-Guard-4b. Off unless `--profile local-singguard`.
   # Prefer agent-composer (`ARGUS_CURATOR_SINGGUARD_URL`); this copy cannot
