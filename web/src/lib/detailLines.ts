@@ -14,12 +14,20 @@ export function qualityLine(image: Pick<ImageResult, "score" | "reject_reason" |
 }
 
 /** The rating, then the exposed score, then the exposed classes that scored, highest first: "explicit · 0.84 · breast 0.84". */
-export function nudeNetLine(nsfw: Pick<NsfwResult, "exposed_score" | "labels">, rating?: ContentRating | null): string {
+/** Where the exposed score came from, when it was not NudeNet alone (curator 0.11's EraX fill-in). */
+export function nsfwSource(image: { erax_filled?: boolean; nudenet_failed?: boolean }): string | null {
+  if (image.nudenet_failed) return "EraX alone: NudeNet's check failed";
+  if (image.erax_filled) return "filled from EraX: NudeNet scored nothing exposed";
+  return null;
+}
+
+export function nudeNetLine(nsfw: Pick<NsfwResult, "exposed_score" | "labels">, rating?: ContentRating | null, source: string | null = null): string {
   const exposed = EXPOSED_LABELS.filter((label) => nsfw.labels[label] != null)
     .sort((left, right) => nsfw.labels[right] - nsfw.labels[left])
     .map((label) => `${nudeNetLabel(label)} ${nsfw.labels[label].toFixed(2)}`);
   const body = exposed.length > 0 ? `${nsfw.exposed_score.toFixed(2)} · ${exposed.join(", ")}` : `${nsfw.exposed_score.toFixed(2)} · nothing exposed at 0.2`;
-  return rating ? `${rating} · ${body}` : body;
+  const line = rating ? `${rating} · ${body}` : body;
+  return source ? `${line} · ${source.split(":")[0]}` : line;
 }
 
 /** The top scene and the environment: "bedroom 0.61 · indoor". */

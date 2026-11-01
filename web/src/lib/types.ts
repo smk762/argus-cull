@@ -185,6 +185,8 @@ export interface Detectors {
   bodies?: boolean;
   /** A NudeNet server is configured (ARGUS_CURATOR_NUDENET_URL). */
   nudenet?: boolean;
+  /** Curator 0.11: an EraX-NSFW server is configured (ARGUS_CURATOR_ERAX_URL), as NudeNet's fill-in. */
+  erax?: boolean;
   /** A SingGuard server is configured (ARGUS_CURATOR_SINGGUARD_URL). */
   singguard?: boolean;
   /** Policies a scan can pass as `guard.policy`, in the curator's order (curator 0.5+; empty without SingGuard). */
@@ -211,6 +213,12 @@ export interface NsfwResult {
   detections: NsfwDetection[];
   labels: Record<string, number>;
   exposed_score: number;
+}
+
+/** EraX-NSFW's own view of a frame (curator 0.11). Its five classes are not NudeNet's. */
+export interface EraxResult {
+  detections: { label: string; score: number; bbox: number[] }[];
+  labels: Record<string, number>;
 }
 
 export interface GuardResult {
@@ -311,6 +319,12 @@ export interface ImageResult {
   content_rating?: ContentRating | null;
   guard?: GuardResult | null;
   guard_variants?: GuardVariants;
+  /** Curator 0.11: EraX's own result, when the fill-in ran. */
+  erax?: EraxResult | null;
+  /** `nsfw` was filled from EraX because NudeNet scored nothing exposed. */
+  erax_filled?: boolean;
+  /** NudeNet's check failed and `nsfw` holds EraX's hits alone. EraX has no buttocks class, so a low score is not a clean bill. */
+  nudenet_failed?: boolean;
   /** Curator 0.10, when the scan asked for `faces.mivolo_body`: one entry per person box. */
   people?: PersonDetection[];
   /** How the person check went. Null when it was not asked for; an empty `people` means "none found" only when it is `ok`. */
@@ -389,6 +403,8 @@ export interface ScanSummary {
   garments_config: GarmentConfig;
   /** Present on curator 0.4 scans. `enabled` is whether that check actually ran. */
   nsfw_config?: CheckConfig;
+  /** Curator 0.11: whether the EraX fill-in ran on this scan. */
+  erax_config?: { enabled: boolean | null };
   guard_config?: GuardConfig;
   total: number;
   passed: number;

@@ -78,6 +78,7 @@ type AgedFace = { age_years?: number | null; age_source?: string | null } | null
 
 type AgeChecked = {
   nsfw?: { labels?: Record<string, number>; exposed_score?: number; detections?: unknown } | null;
+  nudenet_failed?: boolean;
   guard?: GuardResult | null;
   guard_variants?: GuardVariants;
   primary_face_attributes?: AgedFace;
@@ -204,6 +205,8 @@ export function shouldBlur(image: AgeChecked, pending: readonly string[], blur: 
   if (blur.unblurNsfw && !hasMinorAge(image)) return false;
   const score = image.nsfw?.exposed_score;
   if (score != null && score >= blur.exposedScore) return true;
+  // NudeNet failed and EraX alone scored the frame: EraX has no buttocks class, so a low score lifts nothing.
+  if (image.nudenet_failed && image.nsfw != null) return true;
   if (blur.policyBlur && effectiveUnsafe(image, policyOverride) === true) return true;
   return false;
 }

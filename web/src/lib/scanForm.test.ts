@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { measuredAges, shownAge } from "./chunks";
-import { confLine, nudeNetLine, qualityLine, sceneLine } from "./detailLines";
+import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "./detailLines";
 import { runStats, runStatsFilename } from "./runStats";
 import { templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
 import { ago } from "./time";
@@ -247,6 +247,11 @@ describe("detail lines", () => {
     expect(nudeNetLine({ exposed_score: 0.84, labels: { FEMALE_BREAST_EXPOSED: 0.84, BUTTOCKS_EXPOSED: 0.31, FACE_FEMALE: 0.9 } })).toBe("0.84 · female breast exposed 0.84, buttocks exposed 0.31");
     expect(nudeNetLine({ exposed_score: 0.84, labels: { FEMALE_BREAST_EXPOSED: 0.84 } }, "explicit")).toBe("explicit · 0.84 · female breast exposed 0.84");
     expect(nudeNetLine({ exposed_score: 0, labels: { FACE_FEMALE: 0.9 } })).toBe("0.00 · nothing exposed at 0.2");
+    // Curator 0.11's EraX fill-in names itself, so an EraX score is not read as NudeNet's.
+    expect(nsfwSource({})).toBeNull();
+    expect(nsfwSource({ erax_filled: true })).toBe("filled from EraX: NudeNet scored nothing exposed");
+    expect(nsfwSource({ erax_filled: true, nudenet_failed: true })).toBe("EraX alone: NudeNet's check failed");
+    expect(nudeNetLine({ exposed_score: 0.6, labels: { FEMALE_BREAST_EXPOSED: 0.6 } }, null, nsfwSource({ erax_filled: true }))).toBe("0.60 · female breast exposed 0.60 · filled from EraX");
     expect(
       sceneLine(
         [
