@@ -416,6 +416,11 @@ export interface ScanSummary {
   /** When `faces.set_age` was asked: the set age given to the faceless frames, or why none was. */
   set_age?: SetAge | null;
   set_age_skipped?: string | null;
+  /**
+   * Page-side only, never from the curator: the policies left switched on in
+   * the sidebar, set by `withoutPolicies`. Absent when every policy counts.
+   */
+  policy_subset?: string[];
   results: ImageResult[];
 }
 

@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByPassed, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
 import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
-import { filterByShield, pathsByShield, policiesRun, policyStats, type ShieldPick, type ShieldView } from "@/lib/policies";
+import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
 import { availability, guardBody, selectBody } from "@/lib/select";
@@ -23,6 +23,7 @@ import {
   type Progress,
   type ScanList,
   type ScanSummary,
+  type SelectRequest,
   type SelectResult,
 } from "@/lib/types";
 import { mergeProgress } from "@/lib/progress";
@@ -32,6 +33,8 @@ import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch 
 
 import { ExportDialog } from "./ExportDialog";
 import { SubsetDialog } from "./SubsetDialog";
+import packageJson from "../../package.json";
+
 import { Filters } from "./Filters";
 import { Tooltip } from "./Tooltip";
 import { People } from "./People";
@@ -52,6 +55,9 @@ function subscribeHydration(): () => void {
 function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
+
+const CULL_VERSION = packageJson.version;
+const NO_POLICIES_OFF: string[] = [];
 
 export function CullApp() {
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
@@ -74,8 +80,17 @@ export function CullApp() {
   // The scan form, when open: what it starts filled with, and the scan it was filled from.
   const [scanForm, setScanForm] = useState<{ template: ScanTemplate; from: string | null } | null>(null);
   const [rerunning, setRerunning] = useState<string | null>(null);
-  const [summary, setSummary] = useState<ScanSummary | null>(null);
+  // The scan as the curator returned it. Most of the page reads `summary`, which leaves out policies switched off in the sidebar.
+  const [rawSummary, setSummary] = useState<ScanSummary | null>(null);
+  const [policyOff, setPolicyOff] = useState<{ scanId: string; off: string[] } | null>(null);
+  // Switched-off policies belong to one scan; opening another starts with every policy on.
+  const offPolicies = policyOff && policyOff.scanId === rawSummary?.scan_id ? policyOff.off : NO_POLICIES_OFF;
+  const summary = useMemo(() => (rawSummary ? withoutPolicies(rawSummary, offPolicies) : null), [rawSummary, offPolicies]);
+  const allPolicies = useMemo(() => policiesRun(rawSummary), [rawSummary]);
+  const policyFlags = useMemo(() => policyFlagCounts(rawSummary?.results ?? []), [rawSummary]);
   const [selection, setSelection] = useState<SelectResult | null>(null);
+  // The request `selection` answered, so Run stats names the filters behind its keep set, not the ones on screen now.
+  const selectionRequest = useRef<SelectRequest | null>(null);
   const [progress, setProgress] = useState<Progress[] | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanList, setScanList] = useState<ScanList | null>(null);
@@ -304,9 +319,11 @@ export function CullApp() {
   useEffect(() => {
     if (!summary || !detectors || scanning) return;
     let cancel = false;
-    selectScan(summary.scan_id, selectBody(view.filter, availability(detectors, summary), summary))
+    const request = selectBody(view.filter, availability(detectors, summary), summary);
+    selectScan(summary.scan_id, request)
       .then((body) => {
         if (cancel) return;
+        selectionRequest.current = request;
         setSelection(body);
         setError(null);
       })
@@ -330,7 +347,6 @@ export function CullApp() {
   const [faceView, setFaceView] = useState<FaceView>("all");
   const [shieldView, setShieldView] = useState<ShieldView>("all");
   const [keepView, setKeepView] = useState<KeepView>("all");
-  const [hideRejected, setHideRejected] = useState(false);
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -359,8 +375,8 @@ export function CullApp() {
   const tagOptions = useMemo(() => cohorts.tags.map((rule) => rule.tag).filter((name) => visible.some((image) => (tags.get(image.rel_path) ?? []).includes(name))), [cohorts, visible, tags]);
   const shieldOverride = useCallback((rel: string) => labels.get(rel)?.override ?? null, [labels]);
   const viewed = useMemo(
-    () => filterByTag(filterByShield(filterByFaces(filterByAge(filterByPassed(visible, hideRejected), ageFrom, ageTo), faceView), shieldView, shieldOverride), tags, tag),
-    [visible, hideRejected, ageFrom, ageTo, faceView, shieldView, shieldOverride, tags, tag],
+    () => filterByTag(filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride), tags, tag),
+    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride, tags, tag],
   );
   const facesKnown = useMemo(() => facesRan(summary), [summary]);
   const gallery = useMemo(() => sortImages(filterByKeep(viewed, reasons, keepView), sort, sortDirection), [viewed, reasons, keepView, sort, sortDirection]);
@@ -373,12 +389,12 @@ export function CullApp() {
   const subset = useMemo(() => (summary && reasons ? evaluateSubset(summary, reasons, view.filter.minScore) : null), [summary, reasons, view.filter.minScore]);
   const policyNames = useMemo(() => policiesRun(summary), [summary]);
   // While this tab's scan runs, its tiles show the policies it asked for, so a verdict still to come reads as queued.
-  const gridPolicies = scanning && scanPolicies.length > 0 ? scanPolicies : policyNames;
+  const gridPolicies = scanning && scanPolicies.length > 0 ? scanPolicies.filter((name) => !offPolicies.includes(name)) : policyNames;
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
   const cohortBase = useMemo(
-    () => filterByShield(filterByFaces(filterByAge(filterByPassed(visible, hideRejected), ageFrom, ageTo), faceView), shieldView, shieldOverride),
-    [visible, hideRejected, ageFrom, ageTo, faceView, shieldView, shieldOverride],
+    () => filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride),
+    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride],
   );
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
@@ -515,7 +531,8 @@ export function CullApp() {
     setRerunning(scanId);
     setError(null);
     try {
-      const body = summary?.scan_id === scanId ? summary : await getScan(scanId);
+      // The raw scan: a rerun runs every policy the scan ran, whatever is switched off here.
+      const body = rawSummary?.scan_id === scanId ? rawSummary : await getScan(scanId);
       setScanForm({ template: templateFromSummary(body, root, detectors), from: folderLabel(body.folder, root).label });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not read that scan's parameters.");
@@ -526,8 +543,15 @@ export function CullApp() {
 
   function downloadRunStats() {
     if (!summary) return;
-    const stats = runStats(summary, selection, labels, tags, cohorts, policyNames);
-    downloadText(runStatsFilename(summary), JSON.stringify(stats, null, 2), "application/json");
+    const stats = runStats(summary, selection, labels, tags, cohorts, policyNames, new Date(), {
+      curatorVersion: health?.version ?? null,
+      cullVersion: CULL_VERSION,
+      filters: selectionRequest.current,
+      blur,
+      faceNames: view.faceNames,
+      policiesOff: offPolicies,
+    });
+    downloadText(runStatsFilename(summary, offPolicies), JSON.stringify(stats, null, 2), "application/json");
   }
 
   const scanControl = Boolean(health?.scan_control);
@@ -762,10 +786,18 @@ export function CullApp() {
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
-          hideRejected={hideRejected}
+          // The same switch as Show → Kept on the grid: on hides every image the keep set leaves out.
+          hideRejected={keepView === "kept"}
+          hideRejectedReady={reasons != null}
           onHideRejected={(next) => {
-            setHideRejected(next);
+            setKeepView(next ? "kept" : "all");
             if (view.page !== 1) replaceView({ ...view, page: 1 });
+          }}
+          policies={allPolicies}
+          policyFlags={policyFlags}
+          policiesOff={offPolicies}
+          onPoliciesOff={(off) => {
+            if (rawSummary) setPolicyOff({ scanId: rawSummary.scan_id, off });
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
         />
@@ -1023,6 +1055,7 @@ export function CullApp() {
           from={scanForm.from}
           detectors={detectors}
           health={health}
+          root={root}
           policies={guardPolicies}
           canScan={canScan}
           busyLabel={!sourceReady ? "The curator is not ready." : scanBusy ? "A scan is running. Scan is available once it finishes, or stop it from the progress bar." : null}

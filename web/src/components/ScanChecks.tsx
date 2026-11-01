@@ -1,6 +1,7 @@
 "use client";
 
 import type { Detectors, Health, ScanSummary } from "@/lib/types";
+import { formatYears } from "@/lib/years";
 
 /**
  * What the next scan runs beyond the curator's defaults. The choices live in
@@ -96,7 +97,7 @@ export function SetAgeOutcome({ summary }: { summary: ScanSummary | null }) {
     const frames = summary.results.filter((image) => image.set_age).length;
     return (
       <p className="text-caption text-text-secondary">
-        Set age ≈{Math.round(years)}y from {faces} faces in {cluster_id} ({Math.round(share * 100)}%), on {frames} {frames === 1 ? "frame" : "frames"} with no face.
+        Set age ≈{formatYears(years)}y from {faces} faces in {cluster_id} ({Math.round(share * 100)}%), on {frames} {frames === 1 ? "frame" : "frames"} with no face.
       </p>
     );
   }
