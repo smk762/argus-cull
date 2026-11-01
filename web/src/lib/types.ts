@@ -150,6 +150,8 @@ export interface Health {
   set_age?: boolean;
   /** Curator 0.8: `GET /guard/policies` serves each policy's text. */
   guard_policy_text?: boolean;
+  /** Curator 0.12: `POST /scan/{id}/delete` takes any image in the scan, not only under-18 exposed ones. */
+  delete_any?: boolean;
 }
 
 /**
@@ -456,7 +458,6 @@ export interface FilterState {
   faceClusters: string[];
   facePoses: FacePose[];
   faceGenders: FaceGender[];
-  faceAges: FaceAge[];
   minAgeYears: number | null;
   maxAgeYears: number | null;
   minAttributeConf: number;
@@ -562,7 +563,6 @@ export const DEFAULT_FILTER: FilterState = {
   faceClusters: [],
   facePoses: [],
   faceGenders: [],
-  faceAges: [],
   minAgeYears: null,
   maxAgeYears: null,
   minAttributeConf: 0,

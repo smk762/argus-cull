@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { contentRating, exposedLabelsForRequest, guardRuleLabel, isSensitive, rateContent, ratingCounts, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
-import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
+import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, filterByPassed, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { cascadePath, displayGuardExplanation, finalJudgment, splitGuardExplanation } from "./guardText";
 import { checkStage, mergeProgress, phaseLabel, progressRatio } from "./progress";
 import { withoutScan } from "./purge";
-import { availability, recordedScenes, scanBody, selectBody } from "./select";
+import { availability, facetCounts, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
 import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
 import { clusterLabel, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
@@ -524,6 +524,39 @@ describe("scan chunks", () => {
         faces: [{ attributes: face(15) }],
       }),
     ).toBe(true);
+  });
+
+  it("sorts by file name, quality, head pose and face cluster", () => {
+    const img = (rel: string, extra: Partial<ImageResult> = {}) => ({ rel_path: rel, score: 0.5, primary_face_pose: null, primary_face_cluster: null, ...extra }) as unknown as ImageResult;
+    const names = (list: ImageResult[]) => list.map((image) => image.rel_path);
+    const a10 = img("b/img10.jpg", { score: 0.9, primary_face_pose: "profile", primary_face_cluster: "c1" });
+    const a2 = img("a/img2.jpg", { score: 0.2, primary_face_pose: "frontal", primary_face_cluster: "c0" });
+    const a3 = img("img3.jpg", { score: 0.6, primary_face_cluster: "c1" });
+    expect(names(sortImages([a10, a3, a2], "filename", "asc"))).toEqual(["a/img2.jpg", "img3.jpg", "b/img10.jpg"]);
+    expect(names(sortImages([a10, a3, a2], "filename", "desc"))).toEqual(["b/img10.jpg", "img3.jpg", "a/img2.jpg"]);
+    expect(names(sortImages([a2, a3, a10], "quality"))).toEqual(["b/img10.jpg", "img3.jpg", "a/img2.jpg"]);
+    expect(names(sortImages([a10, a3, a2], "pose", "asc"))).toEqual(["a/img2.jpg", "b/img10.jpg", "img3.jpg"]);
+    expect(names(sortImages([a10, a3, a2], "pose", "desc"))).toEqual(["b/img10.jpg", "a/img2.jpg", "img3.jpg"]);
+    expect(names(sortImages([a2, a10, img("none.jpg"), a3], "cluster"))).toEqual(["b/img10.jpg", "img3.jpg", "a/img2.jpg", "none.jpg"]);
+  });
+
+  it("hides hard rejects from the grid only when asked", () => {
+    const pass = { rel_path: "pass.jpg", passed: true } as unknown as ImageResult;
+    const fail = { rel_path: "fail.jpg", passed: false } as unknown as ImageResult;
+    expect(filterByPassed([pass, fail], false)).toHaveLength(2);
+    expect(filterByPassed([pass, fail], true).map((image) => image.rel_path)).toEqual(["pass.jpg"]);
+  });
+
+  it("counts images per scene, environment and garment at the sidebar confidence", () => {
+    const results = [
+      { scene: { categories: [{ label: "airport", conf: 0.6 }, { label: "alcove", conf: 0.05 }], environment: "indoor", environment_conf: 0.9 }, garments: [{ label: "dress", conf: 0.8 }, { label: "dress", conf: 0.7 }] },
+      { scene: { categories: [{ label: "airport", conf: 0.3 }], environment: "outdoor", environment_conf: 0.05 }, garments: [{ label: "shoe", conf: 0.3 }] },
+      { scene: null, garments: null },
+    ] as unknown as ImageResult[];
+    const counts = facetCounts(results, 0.1, 0.5);
+    expect([...counts.scenes]).toEqual([["airport", 2]]);
+    expect([...counts.environments]).toEqual([["indoor", 1]]);
+    expect([...counts.garments]).toEqual([["dress", 1]]);
   });
 
   it("sorts scored images above ones still waiting", () => {

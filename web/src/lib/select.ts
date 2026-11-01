@@ -1,6 +1,6 @@
 import { exposedLabelsForRequest } from "./moderation";
 import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
-import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
+import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, ScanSummary, SceneConfig, SelectRequest } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -70,7 +70,8 @@ export function selectBody(filter: FilterState, gates: FilterAvailability, summa
     face_clusters: listed(gates.faces, filter.faceClusters),
     face_poses: listed(gates.faces, filter.facePoses),
     face_genders: listed(gates.mivolo, filter.faceGenders),
-    face_ages: listed(gates.mivolo, filter.faceAges),
+    // Age brackets left the sidebar; min and max years cover them.
+    face_ages: null,
     min_age_years: gates.mivolo ? filter.minAgeYears : null,
     max_age_years: gates.mivolo ? filter.maxAgeYears : null,
     min_attribute_conf: filter.minAttributeConf,
@@ -155,4 +156,27 @@ export function recordedScenes(summary: ScanSummary | null): string[] {
     for (const category of result.scene?.categories ?? []) labels.add(category.label);
   }
   return [...labels].sort();
+}
+
+/** Images per scene label, environment and garment at or above the sidebar's confidence. */
+export interface FacetCounts {
+  scenes: Map<string, number>;
+  environments: Map<string, number>;
+  garments: Map<string, number>;
+}
+
+export function facetCounts(results: readonly ImageResult[], minSceneConf: number, minGarmentConf: number): FacetCounts {
+  const scenes = new Map<string, number>();
+  const environments = new Map<string, number>();
+  const garments = new Map<string, number>();
+  const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1);
+  for (const image of results) {
+    const scene = image.scene;
+    if (scene) {
+      for (const label of new Set(scene.categories.filter((category) => category.conf >= minSceneConf).map((category) => category.label))) bump(scenes, label);
+      if (scene.environment_conf >= minSceneConf) bump(environments, scene.environment);
+    }
+    for (const label of new Set((image.garments ?? []).filter((garment) => garment.conf >= minGarmentConf).map((garment) => garment.label))) bump(garments, label);
+  }
+  return { scenes, environments, garments };
 }
