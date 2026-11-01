@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policySourceLabel, policyStats, policyVerdicts, resolvedGuard, shieldLabel, shieldState, shieldTitle, slowResultSafe, verdictConflict } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policyShields, policySourceLabel, policyStats, policyVerdicts, resolvedGuard, shieldLabel, shieldState, shieldTitle, slowResultSafe, verdictConflict } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -177,6 +177,7 @@ describe("policy verdicts", () => {
     expect(policiesRun(configured)).toEqual(["adult", "adult-granular"]);
     expect(policiesRun({ guard_config: { enabled: true }, results: [split, clean] } as unknown as ScanSummary)).toEqual(["adult", "adult-granular", "adult-cautious"]);
     expect(policiesRun(null)).toEqual([]);
+    expect(policiesRun({ guard_config: { enabled: false, policy: "adult" }, results: [] } as unknown as ScanSummary)).toEqual([]);
   });
 
   it("counts flag rate, disagreement, and a confusion table against labels", () => {
@@ -197,6 +198,30 @@ describe("policy verdicts", () => {
     expect([granular.tp, granular.fp, granular.fn, granular.tn]).toEqual([1, 1, 0, 1]);
     expect(granular.rules).toEqual({ "H. Apparent Minor": 1, "A. Sexual Content Risk": 1 });
     expect([cautious.checked, cautious.labelled]).toEqual([2, 2]);
+  });
+});
+
+describe("policy shields", () => {
+  it("gives every policy the scan ran its own shield, with the rules in the tooltip", () => {
+    const image = { guard: safe("adult"), guard_variants: { strict: unsafe("strict") } };
+    const shields = policyShields(image, ["adult", "strict"], "strict");
+    expect(shields.map((shield) => [shield.policy, shield.state])).toEqual([
+      ["adult", "safe"],
+      ["strict", "unsafe"],
+    ]);
+    expect(shields[0].title).toBe("adult (official): safe.");
+    expect(shields[1].title).toBe("strict: unsafe. A. Sexual Content Risk. The blur follows this policy.");
+  });
+
+  it("greys a missing verdict only while SingGuard is queued, and keeps unlisted verdicts", () => {
+    const image = { guard: safe("adult") };
+    expect(policyShields(image, ["adult", "strict"], null, true).map((shield) => [shield.policy, shield.state, shield.title])).toEqual([
+      ["adult", "safe", "adult (official): safe."],
+      ["strict", "none", "strict: queued"],
+    ]);
+    expect(policyShields(image, ["adult", "strict"]).map((shield) => shield.policy)).toEqual(["adult"]);
+    expect(policyShields({ guard: null }, ["adult"])).toEqual([]);
+    expect(policyShields({ guard: unsafe("adult") }, []).map((shield) => [shield.policy, shield.official])).toEqual([["adult", true]]);
   });
 });
 

@@ -11,7 +11,7 @@ import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
 import { filterByShield, pathsByShield, policiesRun, policyStats, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
-import { availability, selectBody } from "@/lib/select";
+import { availability, guardBody, selectBody } from "@/lib/select";
 import { evaluateSubset } from "@/lib/subset";
 import {
   PAGE_SIZE,
@@ -81,6 +81,8 @@ export function CullApp() {
   const [stopping, setStopping] = useState(false);
   const [purging, setPurging] = useState(false);
   const [pendingChecks, setPendingChecks] = useState<string[]>([]);
+  /** Policies this tab's running scan asked SingGuard for. Its partial summary names none until the scan ends. */
+  const [scanPolicies, setScanPolicies] = useState<string[]>([]);
   const [blur, setBlur] = useState<BlurPolicy>(DEFAULT_BLUR);
   const [unblurNsfw, setUnblurNsfw] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -368,6 +370,8 @@ export function CullApp() {
   }, [viewed, reasons]);
   const subset = useMemo(() => (summary && reasons ? evaluateSubset(summary, reasons, view.filter.minScore) : null), [summary, reasons, view.filter.minScore]);
   const policyNames = useMemo(() => policiesRun(summary), [summary]);
+  // While this tab's scan runs, its tiles show the policies it asked for, so a verdict still to come reads as queued.
+  const gridPolicies = scanning && scanPolicies.length > 0 ? scanPolicies : policyNames;
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
   const cohortBase = useMemo(
@@ -444,6 +448,8 @@ export function CullApp() {
     try {
       const live = await getDetectors();
       setDetectors(live);
+      const asked = guardBody(live, template.policy);
+      setScanPolicies(asked.enabled && asked.policy ? [asked.policy, ...(asked.variants ?? [])] : []);
       const next = await scanFolder(
         template.folder,
         live,
@@ -486,6 +492,7 @@ export function CullApp() {
       }
     } finally {
       setScanning(false);
+      setScanPolicies([]);
       setStopping(false);
       setProgress(null);
       void getScans().then((body) => {
@@ -749,6 +756,7 @@ export function CullApp() {
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
+          live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
         />
       </aside>
       <main className="space-y-4 overflow-y-auto p-4 lg:max-h-dvh">
@@ -899,6 +907,7 @@ export function CullApp() {
             deleting={batchDeleting}
             deleteError={batchError}
             labels={labels}
+            policies={gridPolicies}
           />
         ) : null}
         {summary && view.view === "people" && view.cluster ? (
@@ -945,6 +954,7 @@ export function CullApp() {
             deleting={batchDeleting}
             deleteError={batchError}
             labels={labels}
+            policies={gridPolicies}
           />
         ) : null}
         <p className="text-caption text-text-muted">
