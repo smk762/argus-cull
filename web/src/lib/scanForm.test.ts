@@ -92,17 +92,19 @@ describe("shown age", () => {
   it("is always the youngest face", () => {
     // Primary 43, a second face 28: the tile says 28 and the tooltip names the primary.
     const two = faced("a.jpg", 43, { face_count: 2, faces: [{ primary: true, attributes: mivolo(43) }, { attributes: mivolo(28) }] });
-    expect(shownAge(two)).toEqual({ text: "28y", title: "Youngest of 2 faces, MiVOLO. The primary face reads 43y." });
+    expect(shownAge(two)).toEqual({ text: "28.0y", title: "Youngest of 2 faces, MiVOLO. The primary face reads 43.0y." });
     // The face list carries the primary face, so it is not counted twice; a record with no list has the primary alone.
     expect(measuredAges(two)).toEqual([43, 28]);
     expect(measuredAges(faced("one.jpg", 30))).toEqual([30]);
     expect(measuredAges(faced("old.jpg", 30, { faces: [{ attributes: mivolo(25) }] }))).toEqual([30, 25]);
     // A primary that is the youngest is just the age.
     const young = faced("b.jpg", 20, { face_count: 2, faces: [{ primary: true, attributes: mivolo(20) }, { attributes: mivolo(35) }] });
-    expect(shownAge(young)).toEqual({ text: "20y", title: "Youngest of 2 faces, MiVOLO" });
-    expect(shownAge(faced("c.jpg", 31.4))).toEqual({ text: "31y", title: "Apparent age, MiVOLO years" });
+    expect(shownAge(young)).toEqual({ text: "20.0y", title: "Youngest of 2 faces, MiVOLO" });
+    expect(shownAge(faced("c.jpg", 31.4))).toEqual({ text: "31.4y", title: "Apparent age, MiVOLO years" });
+    // One decimal, cut off: a reading the under-18 rule calls a minor never shows as 18.
+    expect(shownAge(faced("d.jpg", 17.96))?.text).toBe("17.9y");
     // No face: the set's age when the scan gave one, else nothing.
-    expect(shownAge(image("d.jpg", { set_age: SET_AGE }))?.text).toBe("≈20y set");
+    expect(shownAge(image("d.jpg", { set_age: SET_AGE }))?.text).toBe("≈19.6y set");
     expect(shownAge(image("e.jpg"))).toBeNull();
     // Only FairFace ran: its bracket stands in.
     expect(shownAge(image("f.jpg", { face_count: 1, primary_face_attributes: { ...mivolo(0), age_years: null, age_source: "fairface", age: "20-29" } }))).toEqual({ text: "20-29", title: "FairFace age bracket of the primary face" });

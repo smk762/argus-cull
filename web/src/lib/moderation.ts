@@ -1,4 +1,4 @@
-import { resolvedGuard } from "./policies";
+import { policyVerdicts, resolvedGuard } from "./policies";
 import {
   ADULT_RULE_A,
   EXPOSED_LABELS,
@@ -66,17 +66,38 @@ export function exposedLabelsForRequest(filter: FilterState, active: boolean): N
   return [...filter.nsfwExposedLabels];
 }
 
-/** Rules a scan recorded that are not already in the default policy list. */
+/** Rules a scan recorded under any of its policies, official or variant, that are not already in the default policy list. */
 export function recordedGuardRules(summary: ScanSummary | null, known: readonly string[]): string[] {
   const knownSet = new Set(known);
   const extra = new Set<string>();
   for (const image of summary?.results ?? []) {
-    for (const rule of image.guard ? resolvedGuard(image.guard).rules : []) {
+    for (const rule of policyVerdicts(image).flatMap((verdict) => verdict.result.rules)) {
       const letter = rule.trim().slice(0, 1).toUpperCase();
       if (!knownSet.has(letter) && !knownSet.has(rule)) extra.add(rule);
     }
   }
   return [...extra].sort();
+}
+
+/** The curator's match: *wanted* names *fired* in full, or by its letter ("A" or "A." for "A. Sexual Content Risk"). */
+export function ruleMatches(fired: string, wanted: string): boolean {
+  const a = fired.trim().toLowerCase();
+  const b = wanted.trim().toLowerCase();
+  return a === b || a.startsWith(`${b.replace(/\.$/, "")}.`);
+}
+
+/**
+ * Images per rule: an image counts once for a rule when any policy's verdict
+ * on it is unsafe and names that rule, as the Rules filter tests it.
+ */
+export function guardRuleCounts(results: readonly ImageResult[], rules: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const image of results) {
+    const fired = policyVerdicts(image).flatMap((verdict) => (verdict.result.safe ? [] : verdict.result.rules));
+    if (fired.length === 0) continue;
+    for (const rule of rules) if (fired.some((name) => ruleMatches(name, rule))) counts.set(rule, (counts.get(rule) ?? 0) + 1);
+  }
+  return counts;
 }
 
 /** The name a rule letter has under the policy *summary* was judged by. */

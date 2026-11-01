@@ -10,6 +10,7 @@ import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/l
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { contentRating, nudeNetLabel } from "@/lib/moderation";
 import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle } from "@/lib/policies";
+import { formatYears } from "@/lib/years";
 import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 import { Shield } from "./Shield";
@@ -101,7 +102,7 @@ function AppearanceTable({ image }: { image: ImageResult }) {
   if (!attrs && !image.primary_face_pose && faceCount === 0 && !setAge && bodies.length === 0 && !people) return null;
   // The age row is the youngest face or body-only person, the one the under-18 rule reads. The primary face gets its own row when it reads older.
   const primaryYears = attrs?.age_source === "mivolo" || attrs?.age_source == null ? attrs?.age_years ?? null : null;
-  const age = !setAge && youngest != null ? `${Math.round(youngest)} years` : attrs?.age ?? null;
+  const age = !setAge && youngest != null ? `${formatYears(youngest)} years` : attrs?.age ?? null;
   const agedFaces = measuredAges(image).length;
   const youngestIsBody = bodies.length > 0 && youngest != null && youngest === Math.min(...bodies);
   return (
@@ -111,7 +112,7 @@ function AppearanceTable({ image }: { image: ImageResult }) {
         setAge
           ? [
               "Age of the set",
-              `about ${Math.round(setAge.years)} years`,
+              `about ${formatYears(setAge.years)} years`,
               `no face in this frame; median of ${setAge.faces} MiVOLO faces in ${setAge.cluster_id} (${Math.round(setAge.share * 100)}% of the scan's faces)`,
             ]
           : null,
@@ -129,9 +130,9 @@ function AppearanceTable({ image }: { image: ImageResult }) {
                 : [attrs?.age_source, attrs?.age_conf != null ? attrs.age_conf.toFixed(2) : null].filter(Boolean).join(" · "),
             ]
           : null,
-        youngest != null && primaryYears != null && primaryYears > youngest ? ["Primary face", `${Math.round(primaryYears)} years`, "mivolo · the face the gender reads from"] : null,
+        youngest != null && primaryYears != null && primaryYears > youngest ? ["Primary face", `${formatYears(primaryYears)} years`, "mivolo · the face the gender reads from"] : null,
         bodies.length > 0
-          ? ["No visible face", bodies.map((years) => `${Math.round(years)} years`).join(", "), `mivolo · read from the body alone; ${bodies.length === 1 ? "one person" : `${bodies.length} people`} the face detector missed`]
+          ? ["No visible face", bodies.map((years) => `${formatYears(years)} years`).join(", "), `mivolo · read from the body alone; ${bodies.length === 1 ? "one person" : `${bodies.length} people`} the face detector missed`]
           : null,
         people,
         image.primary_face_pose ? ["Head pose", image.primary_face_pose.replaceAll("_", " ")] : null,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, filterByPassed, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
@@ -330,7 +330,6 @@ export function CullApp() {
   const [faceView, setFaceView] = useState<FaceView>("all");
   const [shieldView, setShieldView] = useState<ShieldView>("all");
   const [keepView, setKeepView] = useState<KeepView>("all");
-  const [hideRejected, setHideRejected] = useState(false);
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -359,8 +358,8 @@ export function CullApp() {
   const tagOptions = useMemo(() => cohorts.tags.map((rule) => rule.tag).filter((name) => visible.some((image) => (tags.get(image.rel_path) ?? []).includes(name))), [cohorts, visible, tags]);
   const shieldOverride = useCallback((rel: string) => labels.get(rel)?.override ?? null, [labels]);
   const viewed = useMemo(
-    () => filterByTag(filterByShield(filterByFaces(filterByAge(filterByPassed(visible, hideRejected), ageFrom, ageTo), faceView), shieldView, shieldOverride), tags, tag),
-    [visible, hideRejected, ageFrom, ageTo, faceView, shieldView, shieldOverride, tags, tag],
+    () => filterByTag(filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride), tags, tag),
+    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride, tags, tag],
   );
   const facesKnown = useMemo(() => facesRan(summary), [summary]);
   const gallery = useMemo(() => sortImages(filterByKeep(viewed, reasons, keepView), sort, sortDirection), [viewed, reasons, keepView, sort, sortDirection]);
@@ -377,8 +376,8 @@ export function CullApp() {
   const stats = useMemo(() => policyStats(viewed, labels, policyNames), [viewed, labels, policyNames]);
   // Cohorts compare against the rest of the view, so they are read before the tag filter narrows it.
   const cohortBase = useMemo(
-    () => filterByShield(filterByFaces(filterByAge(filterByPassed(visible, hideRejected), ageFrom, ageTo), faceView), shieldView, shieldOverride),
-    [visible, hideRejected, ageFrom, ageTo, faceView, shieldView, shieldOverride],
+    () => filterByShield(filterByFaces(filterByAge(visible, ageFrom, ageTo), faceView), shieldView, shieldOverride),
+    [visible, ageFrom, ageTo, faceView, shieldView, shieldOverride],
   );
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
@@ -762,9 +761,11 @@ export function CullApp() {
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
-          hideRejected={hideRejected}
+          // The same switch as Show → Kept on the grid: on hides every image the keep set leaves out.
+          hideRejected={keepView === "kept"}
+          hideRejectedReady={reasons != null}
           onHideRejected={(next) => {
-            setHideRejected(next);
+            setKeepView(next ? "kept" : "all");
             if (view.page !== 1) replaceView({ ...view, page: 1 });
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
