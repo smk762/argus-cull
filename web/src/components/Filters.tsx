@@ -238,7 +238,7 @@ export function Filters({
       />
       <Toggle
         label="Keep hard rejects"
-        info="Adds images that failed blur, size, or aspect to the keep set when they pass the other filters."
+        info="Adds images that failed blur, size, or aspect to the keep set when they pass the other filters. An image the scan prefiltered (prefilter:<kind>) is never kept."
         checked={filter.includeRejected}
         onChange={(includeRejected) => onChange({ includeRejected })}
       />

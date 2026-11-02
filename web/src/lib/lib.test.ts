@@ -194,6 +194,20 @@ describe("select body", () => {
     expect(body.min_age_years).toBeNull();
   });
 
+  it("asks for the prefilter only from a curator that offers it, and only for drops it can test", () => {
+    const all = { ...DETECTORS, insightface: true, mivolo: true, nudenet: true };
+    const drops = ["nsfw", "no-face", "no-age"] as const;
+    expect(scanBody("s", all, null, { withGarments: false, setAge: false, readBodies: false, drops: [...drops], prefilter: true }).prefilter).toEqual({ drop_nsfw: true, drop_no_face: true, drop_no_age: true });
+    // An older curator would ignore the block and judge everything, so it is not sent.
+    expect(scanBody("s", all, null, { withGarments: false, setAge: false, readBodies: false, drops: [...drops] }).prefilter).toBeUndefined();
+    // No face detection: only the NSFW drop can be tested.
+    expect(scanBody("s", { ...all, insightface: false, mivolo: false }, null, { withGarments: false, setAge: false, readBodies: false, drops: [...drops], prefilter: true }).prefilter).toEqual({ drop_nsfw: true, drop_no_face: false, drop_no_age: false });
+    expect(scanBody("s", all, null, { withGarments: false, setAge: false, readBodies: false, drops: [], prefilter: true }).prefilter).toBeUndefined();
+    const view = { ...DEFAULT_VIEW, drops: ["nsfw", "no-age"] as ("nsfw" | "no-age")[] };
+    expect(serializeView(view)).toContain("drop=nsfw%2Cno-age");
+    expect(parseView(new URLSearchParams(serializeView(view).slice(1))).drops).toEqual(["nsfw", "no-age"]);
+  });
+
   it("requests a detector only when its weights are loaded", () => {
     expect(scanBody("shoots", NONE).faces).toEqual({ enabled: false, fairface: false, mivolo: false });
     expect(scanBody("shoots", NONE).scenes).toEqual({ enabled: false });
@@ -392,6 +406,7 @@ describe("progress", () => {
   it("names each scan phase and keeps an unknown one readable", () => {
     expect(phaseLabel("scoring")).toBe("Scoring images");
     expect(phaseLabel("guard")).toBe("Checking policy");
+    expect(phaseLabel("prefilter")).toBe("Dropping before the slow checks");
     expect(phaseLabel("transferring")).toBe("Writing the export");
     expect(phaseLabel("near_dup")).toBe("near dup");
   });
@@ -403,6 +418,8 @@ describe("progress", () => {
     expect(checkStage(["nsfw"], [{ phase: "faces", done: 1, total: 4 }], ["faces", "nsfw"])).toBe("running");
     expect(checkStage(["scenes"], [{ phase: "scenes", done: 1, total: 4 }], [])).toBe("running");
     expect(checkStage(["scenes"], [{ phase: "guard", done: 1, total: 4 }], [])).toBe("waiting");
+    // The prefilter step comes after identities, so the late checks are still queued.
+    expect(checkStage(["guard"], [{ phase: "prefilter", done: 4, total: 4 }], [])).toBe("queued");
     expect(checkStage(["faces", "identities"], [{ phase: "identities", done: 0, total: 0 }], [])).toBe("running");
   });
 

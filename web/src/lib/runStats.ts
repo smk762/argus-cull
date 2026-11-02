@@ -4,7 +4,7 @@ import type { ImageLabel } from "./labels";
 import { ratingCounts } from "./moderation";
 import { dissentingPolicies, effectiveUnsafe, policyStats, rate, resolvedGuard, shieldState, verdictConflict } from "./policies";
 import { facetCounts } from "./select";
-import type { ContentRating, GuardResult, ImageResult, ScanSummary, SelectRequest, SelectResult } from "./types";
+import type { ContentRating, GuardResult, ImageResult, PrefilterConfig, ScanSummary, SelectRequest, SelectResult } from "./types";
 
 /** What produced the numbers, from outside the scan record: versions, the keep-set filters, and the blur settings. */
 export interface RunContext {
@@ -50,6 +50,8 @@ export interface RunStats {
     guard: boolean;
     policy: string | null;
     variants: string[];
+    /** What the scan dropped before scenes, garments and SingGuard; null on a scan that did not record it. */
+    prefilter: PrefilterConfig | null;
   };
   images: {
     total: number;
@@ -63,6 +65,8 @@ export interface RunStats {
     left_out: number | null;
     /** Reasons the current filters left frames out, by the curator's keep_reason. */
     left_out_reasons: Record<string, number> | null;
+    /** Images the scan's prefilter dropped, by kind. Every section below leaves them out. */
+    prefiltered: Record<string, number>;
   };
   age: {
     /** Frames with a face MiVOLO aged. */
@@ -197,7 +201,8 @@ export function runStats(
   now: Date = new Date(),
   context: RunContext = {},
 ): RunStats {
-  const images = summary.results;
+  // A prefiltered image skipped the slow checks, so every section after `images` counts without it.
+  const images = summary.results.filter((image) => !isPrefiltered(image));
   const rows = selection && selection.scan_id === summary.scan_id ? selection.rows : null;
 
   const faceAges: number[] = [];
@@ -301,16 +306,18 @@ export function runStats(
       guard: guard != null,
       policy: guard?.policy ?? null,
       variants: [...(guard?.variants ?? [])],
+      prefilter: summary.prefilter_config ?? null,
     },
     images: {
       total: summary.total,
       passed: summary.passed,
       rejected: summary.rejected,
       duplicates: summary.duplicates,
-      reject_reasons: count(images.filter((image) => image.reject_reason).map((image) => image.reject_reason as string)),
+      reject_reasons: count(summary.results.filter((image) => image.reject_reason).map((image) => image.reject_reason as string)),
       kept: rows ? rows.filter((row) => row.keep_reason === "").length : null,
       left_out: rows ? rows.filter((row) => row.keep_reason !== "").length : null,
       left_out_reasons: rows ? count(rows.filter((row) => row.keep_reason !== "").map((row) => reasonKind(row.keep_reason))) : null,
+      prefiltered: count(summary.results.filter(isPrefiltered).map((image) => (image.reject_reason as string).slice("prefilter:".length))),
     },
     age: {
       frames_with_face_age: withFaceAge,
@@ -426,6 +433,11 @@ function cascadeCounts(images: readonly ImageResult[]): Map<string, { overrode: 
     for (const [policy, guard] of Object.entries(image.guard_variants ?? {})) if (guard && policy !== official) tally(policy, guard);
   }
   return out;
+}
+
+/** The scan dropped this image before the slow checks (`prefilter:<kind>`). */
+export function isPrefiltered(image: Pick<ImageResult, "reject_reason">): boolean {
+  return image.reject_reason?.startsWith("prefilter:") === true;
 }
 
 function bandCell(band: { tagged: { checked: number; unsafe: number }; rest: { checked: number; unsafe: number } }) {

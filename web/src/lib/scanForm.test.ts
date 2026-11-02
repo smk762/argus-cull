@@ -115,10 +115,10 @@ describe("shown age", () => {
 describe("scan template", () => {
   it("reads the form back out of a finished scan", () => {
     const template = templateFromSummary(SUMMARY, "/data/images", DETECTORS);
-    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false });
+    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [] });
     // A scan that ran garments runs them again; one with no recorded policy takes the picker's default.
     const plain = { ...SUMMARY, garments_config: { enabled: true, min_conf: 0.3 }, guard_config: { enabled: false }, faces_config: { enabled: true, fairface: true, mivolo: true } };
-    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false });
+    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [] });
     // The curator writes a policy name even when SingGuard was off; that is not a choice to repeat.
     const off: ScanSummary = { ...SUMMARY, guard_config: { enabled: false, policy: "default" } };
     expect(templateFromSummary(off, "/data/images", DETECTORS).policy).toEqual({ policy: "adult", variants: [] });
@@ -144,8 +144,8 @@ describe("scan template", () => {
 
   it("names what a template runs", () => {
     expect(templateSummary(templateFromSummary(SUMMARY, "/data/images", DETECTORS), DETECTORS)).toBe("adult + adult-v2 · set age");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false }, DETECTORS)).toBe("default · garments");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [] }, DETECTORS)).toBe("default · garments");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [] }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
   });
 });
 
@@ -181,9 +181,9 @@ describe("run stats", () => {
   );
 
   it("counts pass and fail, and the keep set under the filters", () => {
-    expect(stats.config).toEqual({ faces: true, fairface: false, mivolo: true, set_age: true, mivolo_body: false, scenes: true, garments: false, nsfw: true, guard: true, policy: "adult", variants: ["adult-v2"] });
+    expect(stats.config).toEqual({ faces: true, fairface: false, mivolo: true, set_age: true, mivolo_body: false, scenes: true, garments: false, nsfw: true, guard: true, policy: "adult", variants: ["adult-v2"], prefilter: null });
     // similar-to:<file> is one reason, not one per file.
-    expect(stats.images).toEqual({ total: 5, passed: 4, rejected: 1, duplicates: 0, reject_reasons: { blur: 1 }, kept: 2, left_out: 3, left_out_reasons: { guard_unsafe: 1, "similar-to": 1, rejected: 1 } });
+    expect(stats.images).toEqual({ total: 5, passed: 4, rejected: 1, duplicates: 0, reject_reasons: { blur: 1 }, kept: 2, left_out: 3, left_out_reasons: { guard_unsafe: 1, "similar-to": 1, rejected: 1 }, prefiltered: {} });
     // A selection from another scan does not count.
     expect(runStats(SUMMARY, { scan_id: "other", total: 0, kept: 0, rows: [] }, new Map(), new Map(), NO_TAGS, []).images.kept).toBeNull();
     // A scan that ran without SingGuard records a policy name all the same; it judged nothing, so nothing is reported for it.
@@ -306,7 +306,7 @@ describe("run stats", () => {
   it("fills the scan form back from its own file", () => {
     const file = JSON.parse(JSON.stringify(stats));
     expect(templateFromRunStats(file, "/data/images", DETECTORS)).toEqual({
-      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false },
+      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [] },
       notes: [],
     });
     // A curator without adult-v2 drops it and says so.
@@ -321,6 +321,22 @@ describe("run stats", () => {
     expect(isolated.notes).toEqual(["The file was saved with adult switched off, so the form runs only the policies left on."]);
     expect(() => templateFromRunStats({ hello: 1 }, "/data/images", DETECTORS)).toThrow("not a Run stats file");
     expect(() => templateFromRunStats(file, "/elsewhere", DETECTORS)).toThrow("not under this curator's source root");
+  });
+
+  it("counts prefiltered images apart, and leaves them out of every other section", () => {
+    const prefilter = { drop_nsfw: true, drop_no_face: true, drop_no_age: false };
+    const dropped = image("x.jpg", { passed: false, reject_reason: "prefilter:nsfw", nsfw: { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.9 }, exposed_score: 0.9 } });
+    const faceless = image("y.jpg", { passed: false, reject_reason: "prefilter:no-face" });
+    const scan = { ...SUMMARY, prefilter_config: prefilter, total: 7, results: [...SUMMARY.results, dropped, faceless] };
+    const run = runStats(scan, null, new Map(), new Map(), NO_TAGS, ["adult", "adult-v2"]);
+    expect(run.config.prefilter).toEqual(prefilter);
+    expect(run.images.prefiltered).toEqual({ nsfw: 1, "no-face": 1 });
+    expect(run.images.reject_reasons).toEqual({ blur: 1, "prefilter:nsfw": 1, "prefilter:no-face": 1 });
+    // The NudeNet section is the same as without them.
+    expect(run.nudenet).toEqual(stats.nudenet);
+    // The form reads the drops back from the scan and from its Run stats file.
+    expect(templateFromSummary(scan, "/data/images", DETECTORS).drops).toEqual(["nsfw", "no-face"]);
+    expect(templateFromRunStats(JSON.parse(JSON.stringify(run)), "/data/images", DETECTORS).template.drops).toEqual(["nsfw", "no-face"]);
   });
 
   it("names the file after the folder and the scan", () => {

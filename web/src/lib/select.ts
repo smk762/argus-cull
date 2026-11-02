@@ -1,6 +1,6 @@
 import { exposedLabelsForRequest } from "./moderation";
 import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
-import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, ScanSummary, SceneConfig, SelectRequest } from "./types";
+import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, Prefilter, PrefilterConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -103,6 +103,12 @@ export interface ScanBody {
   garments: GarmentConfig;
   nsfw: CheckConfig;
   guard: GuardConfig;
+  prefilter?: PrefilterConfig;
+}
+
+/** The scan request's prefilter block from the form's choices. */
+export function prefilterConfig(drops: readonly Prefilter[]): PrefilterConfig {
+  return { drop_nsfw: drops.includes("nsfw"), drop_no_face: drops.includes("no-face"), drop_no_age: drops.includes("no-age") };
 }
 
 /**
@@ -126,6 +132,14 @@ export interface ScanChecks {
   setAge: boolean;
   /** Give MiVOLO each person's body (`faces.mivolo_body`). Sent only when MiVOLO and the person detector are loaded. */
   readBodies: boolean;
+  /**
+   * Prefilter before scenes, garments and SingGuard. Sent only to a curator
+   * that offers it (`prefilter` on /health): an older one would ignore the
+   * block and run every check on every image. The face and age drops need
+   * face detection (and MiVOLO for age), so they go only when those run.
+   */
+  drops?: readonly Prefilter[];
+  prefilter?: boolean;
 }
 
 export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false, readBodies: false };
@@ -151,7 +165,15 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
     // NudeNet and SingGuard are remote servers. Ask only when /detectors says the URL is set.
     nsfw: { enabled: Boolean(detectors.nudenet) },
     guard: guardBody(detectors, policies),
+    ...prefilterBody(detectors, checks),
   };
+}
+
+function prefilterBody(detectors: Detectors, checks: ScanChecks): { prefilter?: PrefilterConfig } {
+  if (!checks.prefilter || !checks.drops || checks.drops.length === 0) return {};
+  const faces = detectors.insightface || detectors.mivolo;
+  const drops = checks.drops.filter((kind) => kind === "nsfw" || (kind === "no-face" && faces) || (kind === "no-age" && detectors.mivolo));
+  return drops.length > 0 ? { prefilter: prefilterConfig(drops) } : {};
 }
 
 export function recordedScenes(summary: ScanSummary | null): string[] {

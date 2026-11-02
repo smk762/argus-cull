@@ -1,11 +1,11 @@
 import { folderLabel } from "./chunks";
 import { defaultPolicyChoice, type PolicyChoice } from "./policies";
 import { withoutScan } from "./purge";
-import type { Detectors, ScanSummary, ViewState } from "./types";
+import { PREFILTERS, type Detectors, type Prefilter, type PrefilterConfig, type ScanSummary, type ViewState } from "./types";
 
 /**
  * What the scan form asks for. The same fields live in the URL (`folder`,
- * `policy`, `variants`, `garments=off`, `set=1`, `bodies=1`), so a shared link opens the
+ * `policy`, `variants`, `garments=off`, `set=1`, `bodies=1`, `drop=nsfw,no-face`), so a shared link opens the
  * form filled the same way, and a scan already run can be read back into it
  * to run again with one change.
  */
@@ -16,10 +16,19 @@ export interface ScanTemplate {
   withGarments: boolean;
   setAge: boolean;
   readBodies: boolean;
+  /** Images the scan drops before scenes, garments and SingGuard. */
+  drops: Prefilter[];
+}
+
+/** The form's choices from a recorded prefilter block (a summary's, or a Run stats file's). */
+export function dropsFrom(config: Partial<Record<keyof PrefilterConfig, unknown>> | null | undefined): Prefilter[] {
+  if (!config) return [];
+  const on: Record<Prefilter, boolean> = { nsfw: config.drop_nsfw === true, "no-face": config.drop_no_face === true, "no-age": config.drop_no_age === true };
+  return PREFILTERS.filter((kind) => on[kind]);
 }
 
 /** The form as the URL has it. The policy falls back the way the picker does when the URL names none. */
-export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" | "guardVariants" | "withGarments" | "setAge" | "readBodies">, detectors: Detectors | null): ScanTemplate {
+export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" | "guardVariants" | "withGarments" | "setAge" | "readBodies" | "drops">, detectors: Detectors | null): ScanTemplate {
   const base = defaultPolicyChoice(detectors?.singguard_policies);
   return {
     folder: view.folder,
@@ -27,6 +36,7 @@ export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" 
     withGarments: view.withGarments,
     setAge: view.setAge,
     readBodies: view.readBodies,
+    drops: [...view.drops],
   };
 }
 
@@ -47,6 +57,7 @@ export function templateFromSummary(summary: ScanSummary, root: string | null, d
     withGarments: summary.garments_config.enabled === true,
     setAge: summary.faces_config.set_age === true,
     readBodies: summary.faces_config.mivolo_body === true,
+    drops: dropsFrom(summary.prefilter_config),
   };
 }
 
@@ -99,6 +110,7 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
       withGarments: config.garments === true,
       setAge: config.set_age === true,
       readBodies: config.mivolo_body === true,
+      drops: dropsFrom(config.prefilter as Partial<Record<keyof PrefilterConfig, unknown>> | null | undefined),
     },
     notes,
   };
@@ -117,6 +129,7 @@ export function viewWithTemplate(view: ViewState, template: ScanTemplate): ViewS
     withGarments: template.withGarments,
     setAge: template.setAge,
     readBodies: template.readBodies,
+    drops: [...template.drops],
     view: "grid",
   };
 }
@@ -130,5 +143,6 @@ export function templateSummary(template: ScanTemplate, detectors: Detectors | n
   if (detectors?.garments && template.withGarments) parts.push("garments");
   if (template.setAge) parts.push("set age");
   if (template.readBodies) parts.push("bodies");
+  if (template.drops.length > 0) parts.push(`drop ${template.drops.join(", ")}`);
   return parts.join(" · ");
 }
