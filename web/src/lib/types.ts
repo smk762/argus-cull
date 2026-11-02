@@ -146,14 +146,14 @@ export interface Health {
   allow_move: boolean;
   /** Curator 0.6: it can stop a running scan and purge the scan cache. */
   scan_control?: boolean;
+  /** Curator 0.12: `DELETE /scan/{id}` removes one cached scan. */
+  scan_delete?: boolean;
   /** Curator 0.7: frames with no face can take the set's age (`faces.set_age`). */
   set_age?: boolean;
   /** Curator 0.8: `GET /guard/policies` serves each policy's text. */
   guard_policy_text?: boolean;
   /** Curator 0.12: `POST /scan/{id}/delete` takes any image in the scan, not only under-18 exposed ones. */
   delete_any?: boolean;
-  /** Curator 0.12: `DELETE /scan/{id}` removes one cached scan. */
-  scan_delete?: boolean;
 }
 
 /**
