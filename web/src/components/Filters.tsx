@@ -21,9 +21,9 @@ import {
   type Progress,
   type ScanSummary,
 } from "@/lib/types";
-import { clusterLabel, toggleValue } from "@/lib/urlState";
+import { clearedFilter, clusterLabel, isDefaultFilter, toggleValue } from "@/lib/urlState";
 
-import { Info } from "./Tooltip";
+import { Info, Tooltip } from "./Tooltip";
 
 const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
 
@@ -226,6 +226,16 @@ export function Filters({
       <h2 className="flex items-center gap-1.5 border-t border-base-700 pt-3 font-display text-small font-semibold">
         Keep set
         <Info text="These filters decide which images are kept, for Kept and Left out on the grid, Download paths, and Export." />
+        <Tooltip text="Untick every filter below and put the sliders back to their defaults. Unblur NSFW and Hide rejected stay as they are." className="ml-auto">
+          <button
+            type="button"
+            className="rounded-md border border-base-600 px-1.5 py-0.5 text-caption font-normal text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
+            disabled={isDefaultFilter(filter)}
+            onClick={() => onChange(clearedFilter())}
+          >
+            Clear all
+          </button>
+        </Tooltip>
       </h2>
       <RangeField
         label="Quality score"
