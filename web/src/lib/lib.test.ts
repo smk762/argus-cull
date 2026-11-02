@@ -11,7 +11,7 @@ import { withoutScan } from "./purge";
 import { availability, facetCounts, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
 import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
-import { clusterLabel, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
+import { clearedFilter, clusterLabel, isDefaultFilter, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
 
 const DETECTORS: Detectors = {
   torch: false,
@@ -820,5 +820,21 @@ describe("body-only ages", () => {
     expect(usesSetAge(image)).toBe(false);
     expect(youngestAge(image)).toBe(16);
     expect(isMinorExposed(image)).toBe(true);
+  });
+});
+
+describe("clearedFilter", () => {
+  it("puts every keep-set filter back to the default", () => {
+    const busy: FilterState = { ...DEFAULT_FILTER, minScore: 0.8, keepSimilar: true, facePoses: ["frontal"], garments: ["dress"], nsfwExposedLabels: [EXPOSED_LABELS[0]], guardUnsafe: true, maxAgeYears: 30 };
+    expect(isDefaultFilter(busy)).toBe(false);
+    const cleared = clearedFilter();
+    expect(isDefaultFilter(cleared)).toBe(true);
+    expect(cleared).toEqual(DEFAULT_FILTER);
+    // A fresh list, not the default's own.
+    expect(cleared.nsfwExposedLabels).not.toBe(DEFAULT_FILTER.nsfwExposedLabels);
+  });
+
+  it("reads the exposed labels as a set", () => {
+    expect(isDefaultFilter({ ...DEFAULT_FILTER, nsfwExposedLabels: [...EXPOSED_LABELS].reverse() })).toBe(true);
   });
 });
