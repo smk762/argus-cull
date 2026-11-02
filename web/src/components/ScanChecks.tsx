@@ -1,7 +1,21 @@
 "use client";
 
-import type { Detectors, Health, ScanSummary } from "@/lib/types";
+import { PREFILTERS, type Detectors, type Health, type Prefilter, type ScanSummary } from "@/lib/types";
 import { formatYears } from "@/lib/years";
+
+import { Info } from "./Tooltip";
+
+const DROP_LABELS: Record<Prefilter, { label: string; info: string }> = {
+  nsfw: {
+    label: "Drop NSFW",
+    info: "Drops an image whose exposed reading (NudeNet, or EraX filling in) is 0.2 or more. An image neither could score goes on.",
+  },
+  "no-face": { label: "Drop no face", info: "Drops an image with no detected face." },
+  "no-age": {
+    label: "Drop no age",
+    info: "Drops an image with no MiVOLO age from a face or a body, and no set age. With Set: one person on, faceless frames that take the set age go on.",
+  },
+};
 
 /**
  * What the next scan runs beyond the curator's defaults. The choices live in
@@ -28,27 +42,57 @@ export function ScanChecks({
   withGarments,
   setAge,
   readBodies,
+  drops = [],
   disabled,
   onWithGarments,
   onSetAge,
   onReadBodies,
+  onDrops,
 }: {
   detectors: Detectors | null;
   health: Health | null;
   withGarments: boolean;
   setAge: boolean;
   readBodies: boolean;
+  drops?: readonly Prefilter[];
   disabled: boolean;
   onWithGarments: (on: boolean) => void;
   onSetAge: (on: boolean) => void;
   onReadBodies: (on: boolean) => void;
+  onDrops?: (drops: Prefilter[]) => void;
 }) {
   const garments = Boolean(detectors?.garments);
   const set = Boolean(health?.set_age && detectors?.mivolo);
   const bodies = Boolean(detectors?.bodies && detectors?.mivolo);
-  if (!garments && !set && !bodies) return null;
+  const faces = Boolean(detectors?.insightface || detectors?.mivolo);
+  // Each drop needs the check it reads: NudeNet or EraX, face detection, MiVOLO.
+  const offered: Record<Prefilter, boolean> = { nsfw: Boolean(detectors?.nudenet || detectors?.erax), "no-face": faces, "no-age": Boolean(detectors?.mivolo) };
+  const prefilter = Boolean(health?.prefilter && onDrops) && PREFILTERS.some((kind) => offered[kind]);
+  if (!garments && !set && !bodies && !prefilter) return null;
   return (
     <section className="space-y-2">
+      {prefilter && onDrops ? (
+        <div className="space-y-1.5 rounded-md border border-base-600 p-2">
+          <h3 className="flex items-center gap-1.5 font-display text-small font-semibold">
+            Drop before the slow checks
+            <Info text="A dropped image skips scenes, garments and SingGuard. It stays in the scan as a reject named prefilter:<kind>, so it is never kept or exported, Hide rejected hides it, and Run stats count it apart." />
+          </h3>
+          {PREFILTERS.filter((kind) => offered[kind]).map((kind) => (
+            <div key={kind} className="flex items-center gap-1.5 text-small">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={drops.includes(kind)}
+                  disabled={disabled}
+                  onChange={(event) => onDrops(event.target.checked ? PREFILTERS.filter((other) => other === kind || drops.includes(other)) : drops.filter((other) => other !== kind))}
+                />
+                {DROP_LABELS[kind].label}
+              </label>
+              <Info text={DROP_LABELS[kind].info} />
+            </div>
+          ))}
+        </div>
+      ) : null}
       <h3 className="font-display text-small font-semibold">Checks</h3>
       {garments ? (
         <>

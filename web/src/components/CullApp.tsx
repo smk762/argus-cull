@@ -450,6 +450,7 @@ export function CullApp() {
   // The scan on screen is the one still running, here or in another tab.
   const liveScan = scanning || Boolean(scanList?.active && (!summary || summary.scan_id === scanList.active.scan_id));
   const canScan = sourceReady && !scanBusy;
+  const prefilterOffered = Boolean(health?.prefilter);
 
   const onScan = useCallback(async (template: ScanTemplate) => {
     if (!sourceReady || scanning || scanList?.active) return;
@@ -472,7 +473,7 @@ export function CullApp() {
         template.folder,
         live,
         template.policy,
-        { withGarments: template.withGarments, setAge: template.setAge, readBodies: template.readBodies },
+        { withGarments: template.withGarments, setAge: template.setAge, readBodies: template.readBodies, drops: template.drops, prefilter: prefilterOffered },
         (event) => {
           setProgress((current) => mergeProgress(current ?? [], event));
           // Curator 0.5.1 says on every progress event which checks are still running.
@@ -517,7 +518,7 @@ export function CullApp() {
         if (body) setScanList(body);
       });
     }
-  }, [sourceReady, scanning, scanList?.active]);
+  }, [sourceReady, scanning, scanList?.active, prefilterOffered]);
 
   const root = health?.source_root ?? null;
 
@@ -616,7 +617,9 @@ export function CullApp() {
     setSummary((current) => {
       if (!current || current.scan_id !== scanId) return current;
       const results = current.results.filter((item) => !gone.has(item.rel_path));
-      return { ...current, results, total: results.length };
+      // The same totals the curator recounts after a delete, so Run stats match a reload without a rescan.
+      const passed = results.filter((item) => item.passed);
+      return { ...current, results, total: results.length, passed: passed.length, rejected: results.length - passed.length, duplicates: passed.filter((item) => item.is_duplicate).length };
     });
     setSelected((prev) => {
       const next = new Set([...prev].filter((rel) => !gone.has(rel)));
