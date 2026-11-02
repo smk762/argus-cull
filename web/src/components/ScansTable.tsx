@@ -10,7 +10,8 @@ import type { ScanList as ScanListData } from "@/lib/types";
 /**
  * Every scan the curator holds, newest first, with the one running on top.
  * A row opens its scan; Again opens the scan form filled the way that scan
- * ran, so the next run differs only in what the viewer changes.
+ * ran, so the next run differs only in what the viewer changes. The bin
+ * removes that one scan from the curator's cache (asks twice, like Purge all).
  */
 export function ScansTable({
   scans,
@@ -22,6 +23,9 @@ export function ScansTable({
   onOpen,
   onRerun,
   onPurge,
+  canForget = false,
+  forgetting = null,
+  onForget,
 }: {
   scans: ScanListData | null;
   root: string | null;
@@ -34,6 +38,11 @@ export function ScansTable({
   onOpen: (scanId: string, folder: string) => void;
   onRerun?: (scanId: string) => void;
   onPurge?: () => void;
+  /** The curator can remove one cached scan (`DELETE /scan/{id}`, 0.12 and later). */
+  canForget?: boolean;
+  /** The scan being removed. */
+  forgetting?: string | null;
+  onForget?: (scanId: string) => void;
 }) {
   // Purge asks twice; the second ask lapses after a few seconds.
   const [confirm, setConfirm] = useState(false);
@@ -42,6 +51,14 @@ export function ScansTable({
     const timer = setTimeout(() => setConfirm(false), 5000);
     return () => clearTimeout(timer);
   }, [confirm]);
+  // The row whose bin was clicked once; the second click removes it. Lapses like the purge ask.
+  const [confirmRow, setConfirmRow] = useState<string | null>(null);
+  useEffect(() => {
+    if (!confirmRow) return;
+    const timer = setTimeout(() => setConfirmRow(null), 5000);
+    return () => clearTimeout(timer);
+  }, [confirmRow]);
+  const forget = canForget && onForget ? onForget : null;
 
   if (!scans) return null;
   const active = scans.active;
@@ -67,6 +84,11 @@ export function ScansTable({
             <th scope="col" className="w-12 py-1 text-right font-normal">
               <span className="sr-only">Run again</span>
             </th>
+            {forget ? (
+              <th scope="col" className="w-7 py-1 text-right font-normal">
+                <span className="sr-only">Remove</span>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -82,6 +104,7 @@ export function ScansTable({
                 </span>
               </td>
               <td className="py-1" />
+              {forget ? <td className="py-1" /> : null}
             </tr>
           ) : null}
           {rows.map((scan) => {
@@ -111,6 +134,33 @@ export function ScansTable({
                     </button>
                   ) : null}
                 </td>
+                {forget ? (
+                  <td className="py-1 text-right">
+                    <button
+                      type="button"
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-md border disabled:opacity-40 ${confirmRow === scan.scan_id ? "border-warning text-warning" : "border-transparent text-text-muted hover:border-warning hover:text-warning"}`}
+                      disabled={forgetting != null || purging}
+                      title={confirmRow === scan.scan_id ? "Click again to remove this scan. Source images stay." : "Remove this scan from the curator's cache. Source images, labels and cohorts stay."}
+                      aria-label={confirmRow === scan.scan_id ? `Confirm removing the scan of ${folder.label}` : `Remove the scan of ${folder.label}`}
+                      onClick={() => {
+                        if (confirmRow !== scan.scan_id) {
+                          setConfirmRow(scan.scan_id);
+                          return;
+                        }
+                        setConfirmRow(null);
+                        forget(scan.scan_id);
+                      }}
+                    >
+                      {forgetting === scan.scan_id ? (
+                        "…"
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+                        </svg>
+                      )}
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             );
           })}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
+import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, deleteCachedScan, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
 import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
@@ -96,6 +96,7 @@ export function CullApp() {
   const [scanList, setScanList] = useState<ScanList | null>(null);
   const [stopping, setStopping] = useState(false);
   const [purging, setPurging] = useState(false);
+  const [forgetting, setForgetting] = useState<string | null>(null);
   const [pendingChecks, setPendingChecks] = useState<string[]>([]);
   /** Policies this tab's running scan asked SingGuard for. Its partial summary names none until the scan ends. */
   const [scanPolicies, setScanPolicies] = useState<string[]>([]);
@@ -602,6 +603,27 @@ export function CullApp() {
     }
   }, [scanning]);
 
+  const onForget = useCallback(async (scanId: string) => {
+    setForgetting(scanId);
+    setError(null);
+    try {
+      await deleteCachedScan(scanId);
+      // The scan on screen was the one removed: let go of it the way a purge does.
+      if (latest.current.scan === scanId) {
+        setSummary(null);
+        setSelection(null);
+        setPendingChecks([]);
+        replaceView(withoutScan(viewFromSearch(currentSearch())));
+      }
+      const body = await getScans();
+      if (body) setScanList(body);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not remove that scan.");
+    } finally {
+      setForgetting(null);
+    }
+  }, []);
+
   const photo = summary?.results.find((image) => image.rel_path === view.photo) ?? null;
   const photoIndex = photo ? gallery.findIndex((image) => image.rel_path === photo.rel_path) : -1;
   const previousPhoto = photoIndex > 0 ? gallery[photoIndex - 1] : null;
@@ -778,6 +800,9 @@ export function CullApp() {
           onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
           onRerun={(scanId) => void openRerun(scanId)}
           onPurge={() => void onPurge()}
+          canForget={Boolean(health?.scan_delete)}
+          forgetting={forgetting}
+          onForget={(scanId) => void onForget(scanId)}
         />
         <SetAgeOutcome summary={summary} />
         <Filters

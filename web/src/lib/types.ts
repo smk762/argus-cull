@@ -146,6 +146,8 @@ export interface Health {
   allow_move: boolean;
   /** Curator 0.6: it can stop a running scan and purge the scan cache. */
   scan_control?: boolean;
+  /** Curator 0.12: `DELETE /scan/{id}` removes one cached scan. */
+  scan_delete?: boolean;
   /** Curator 0.7: frames with no face can take the set's age (`faces.set_age`). */
   set_age?: boolean;
   /** Curator 0.8: `GET /guard/policies` serves each policy's text. */
