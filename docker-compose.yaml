@@ -52,6 +52,10 @@ services:
       # that list, so name every origin the page is opened as.
       - CURATOR_CORS_ORIGINS=${CURATOR_CORS_ORIGINS-}
       # - CURATOR_ALLOW_MOVE=1
+      # Curator 0.12: Delete in the grid may remove any scanned image from the
+      # source folder. 0 in .env limits it to under-18 frames with an exposed
+      # reading, the rule before 0.12.
+      - CURATOR_ALLOW_DELETE=${CURATOR_ALLOW_DELETE-1}
       # Take turns on the GPU with argus-lens: one argus job at a time, each
       # waiting for free VRAM (argus_cortex.gpu). lens must mount the same host
       # directory (ARGUS_GPU_LOCK_DIR) and use the same lock file in it.
