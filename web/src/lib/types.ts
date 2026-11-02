@@ -152,6 +152,8 @@ export interface Health {
   guard_policy_text?: boolean;
   /** Curator 0.12: `POST /scan/{id}/delete` takes any image in the scan, not only under-18 exposed ones. */
   delete_any?: boolean;
+  /** Curator 0.12: `DELETE /scan/{id}` removes one cached scan. */
+  scan_delete?: boolean;
 }
 
 /**
