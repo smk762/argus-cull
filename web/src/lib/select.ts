@@ -1,6 +1,6 @@
 import { exposedLabelsForRequest } from "./moderation";
 import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
-import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, ScanSummary, SceneConfig, SelectRequest } from "./types";
+import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, Prefilter, PrefilterConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -55,6 +55,8 @@ function listed<T>(active: boolean, values: readonly T[]): T[] | null {
  */
 export function guardPoliciesForRequest(summary: ScanSummary | null, active: boolean): string[] | undefined {
   if (!active) return undefined;
+  // Policies switched off in the sidebar: name the rest, even one alone, so the curator does not fall back to the official verdict.
+  if (summary?.policy_subset) return [...summary.policy_subset];
   const run = policiesRun(summary);
   return run.length > 1 ? run : undefined;
 }
@@ -62,7 +64,9 @@ export function guardPoliciesForRequest(summary: ScanSummary | null, active: boo
 /** Export-filter fields only. No dest, mode, max_keep, or diversify flags. */
 export function selectBody(filter: FilterState, gates: FilterAvailability, summary: ScanSummary | null = null): SelectRequest {
   const threshold = gates.nsfw && filter.nsfwThreshold != null && filter.nsfwExposedLabels.length > 0 ? filter.nsfwThreshold : null;
-  const guardActive = gates.guard && (filter.guardUnsafe || filter.guardRules.length > 0);
+  // Every policy switched off in the sidebar: there is no verdict left to filter on.
+  const guardOn = gates.guard && summary?.policy_subset?.length !== 0;
+  const guardActive = guardOn && (filter.guardUnsafe || filter.guardRules.length > 0);
   return {
     min_score: filter.minScore,
     include_rejected: filter.includeRejected,
@@ -86,8 +90,8 @@ export function selectBody(filter: FilterState, gates: FilterAvailability, summa
     nsfw_label_thresholds: null,
     nsfw_exposed_labels: exposedLabelsForRequest(filter, threshold != null),
     content_ratings: listed(gates.nsfw, filter.contentRatings),
-    guard_unsafe: gates.guard ? filter.guardUnsafe : false,
-    guard_rules: filter.guardUnsafe ? null : listed(gates.guard, filter.guardRules),
+    guard_unsafe: guardOn ? filter.guardUnsafe : false,
+    guard_rules: filter.guardUnsafe ? null : listed(guardOn, filter.guardRules),
     guard_policies: guardPoliciesForRequest(summary, guardActive),
   };
 }
@@ -99,6 +103,12 @@ export interface ScanBody {
   garments: GarmentConfig;
   nsfw: CheckConfig;
   guard: GuardConfig;
+  prefilter?: PrefilterConfig;
+}
+
+/** The scan request's prefilter block from the form's choices. */
+export function prefilterConfig(drops: readonly Prefilter[]): PrefilterConfig {
+  return { drop_nsfw: drops.includes("nsfw"), drop_no_face: drops.includes("no-face"), drop_no_age: drops.includes("no-age") };
 }
 
 /**
@@ -122,6 +132,14 @@ export interface ScanChecks {
   setAge: boolean;
   /** Give MiVOLO each person's body (`faces.mivolo_body`). Sent only when MiVOLO and the person detector are loaded. */
   readBodies: boolean;
+  /**
+   * Prefilter before scenes, garments and SingGuard. Sent only to a curator
+   * that offers it (`prefilter` on /health): an older one would ignore the
+   * block and run every check on every image. The face and age drops need
+   * face detection (and MiVOLO for age), so they go only when those run.
+   */
+  drops?: readonly Prefilter[];
+  prefilter?: boolean;
 }
 
 export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false, readBodies: false };
@@ -147,7 +165,15 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
     // NudeNet and SingGuard are remote servers. Ask only when /detectors says the URL is set.
     nsfw: { enabled: Boolean(detectors.nudenet) },
     guard: guardBody(detectors, policies),
+    ...prefilterBody(detectors, checks),
   };
+}
+
+function prefilterBody(detectors: Detectors, checks: ScanChecks): { prefilter?: PrefilterConfig } {
+  if (!checks.prefilter || !checks.drops || checks.drops.length === 0) return {};
+  const faces = detectors.insightface || detectors.mivolo;
+  const drops = checks.drops.filter((kind) => kind === "nsfw" || (kind === "no-face" && faces) || (kind === "no-age" && detectors.mivolo));
+  return drops.length > 0 ? { prefilter: prefilterConfig(drops) } : {};
 }
 
 export function recordedScenes(summary: ScanSummary | null): string[] {

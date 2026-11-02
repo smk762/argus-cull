@@ -1,4 +1,5 @@
 import { effectiveUnsafe } from "./policies";
+import { formatYears } from "./years";
 import { EXPOSED_LABELS, type GuardResult, type GuardVariants, type ImageResult, type ScanChunk, type ScanSummary } from "./types";
 
 /** MiVOLO ages under this, with any reported exposed detection, stay blurred and are never kept. */
@@ -231,7 +232,7 @@ export function youngestAge(image: AgeChecked): number | null {
  */
 export function shownAge(image: AgeChecked & { primary_face_attributes?: { age?: string | null } | null }): { text: string; title: string } | null {
   if (usesSetAge(image) && image.set_age) {
-    return { text: `≈${Math.round(image.set_age.years)}y set`, title: "No face in this frame; the set's median MiVOLO age stands in" };
+    return { text: `≈${formatYears(image.set_age.years)}y set`, title: "No face in this frame; the set's median MiVOLO age stands in" };
   }
   const measured = measuredAges(image);
   const bodies = bodyAges(image);
@@ -239,14 +240,14 @@ export function shownAge(image: AgeChecked & { primary_face_attributes?: { age?:
     const youngest = Math.min(...bodies);
     const who = bodies.length === 1 ? "a person with no visible face" : `the youngest of ${bodies.length} people with no visible face`;
     const faces = measured.length > 0 ? `, younger than the ${measured.length === 1 ? "face" : `${measured.length} faces`}` : "";
-    return { text: `${Math.round(youngest)}y body`, title: `Apparent age of ${who}, MiVOLO from the body alone${faces}` };
+    return { text: `${formatYears(youngest)}y body`, title: `Apparent age of ${who}, MiVOLO from the body alone${faces}` };
   }
   if (measured.length > 0) {
     const youngest = Math.min(...measured);
     const primary = mivoloYears(image.primary_face_attributes);
-    const text = `${Math.round(youngest)}y`;
+    const text = `${formatYears(youngest)}y`;
     if (measured.length > 1 && primary != null && primary > youngest) {
-      return { text, title: `Youngest of ${measured.length} faces, MiVOLO. The primary face reads ${Math.round(primary)}y.` };
+      return { text, title: `Youngest of ${measured.length} faces, MiVOLO. The primary face reads ${formatYears(primary)}y.` };
     }
     return { text, title: measured.length > 1 ? `Youngest of ${measured.length} faces, MiVOLO` : "Apparent age, MiVOLO years" };
   }
@@ -367,10 +368,6 @@ function poseRank(image: ImageResult): number | null {
   return rank < 0 ? null : rank;
 }
 
-/** Drop hard rejects (failed blur, size or aspect) from the grid. The keep set is unchanged. */
-export function filterByPassed(images: ImageResult[], hideRejected: boolean): ImageResult[] {
-  return hideRejected ? images.filter((image) => image.passed) : images;
-}
 
 function compareScore(left: number | null | undefined, right: number | null | undefined, direction: SortDirection): number {
   if (left == null && right == null) return 0;

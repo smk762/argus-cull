@@ -7,5 +7,6 @@ export function downloadText(filename: string, content: string, type: string): v
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revoked on the next tick: some browsers start reading the blob only after click() returns.
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }

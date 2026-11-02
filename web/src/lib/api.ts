@@ -113,6 +113,12 @@ export async function purgeScans(): Promise<PurgeResult> {
   return (await response.json()) as PurgeResult;
 }
 
+/** Remove one cached scan (curator 0.12). Source images stay. The curator refuses the running scan. */
+export async function deleteCachedScan(scanId: string): Promise<void> {
+  const response = await fetch(`${curatorUrl()}/scan/${encodeURIComponent(scanId)}`, { method: "DELETE" });
+  if (!response.ok) throw new ApiError(await readError(response));
+}
+
 export function scanFolder(
   folder: string,
   detectors: Detectors,

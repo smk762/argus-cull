@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
-import { contentRating, exposedLabelsForRequest, guardRuleLabel, isSensitive, rateContent, ratingCounts, recordedGuardRules } from "./moderation";
+import { contentRating, exposedLabelsForRequest, guardRuleCounts, guardRuleLabel, ruleMatches, isSensitive, rateContent, ratingCounts, recordedGuardRules } from "./moderation";
 import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
-import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, filterByPassed, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
+import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { cascadePath, displayGuardExplanation, finalJudgment, splitGuardExplanation } from "./guardText";
 import { checkStage, mergeProgress, phaseLabel, progressRatio } from "./progress";
@@ -11,7 +11,7 @@ import { withoutScan } from "./purge";
 import { availability, facetCounts, recordedScenes, scanBody, selectBody } from "./select";
 import { parseSseFrames } from "./sse";
 import { curatorUrl, DEFAULT_FILTER, DEFAULT_VIEW, EXPOSED_LABELS, type Detectors, type FilterState, type ImageResult, type ScanSummary } from "./types";
-import { clusterLabel, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
+import { clearedFilter, clusterLabel, isDefaultFilter, namedFaces, parseView, serializeView, withFaceName } from "./urlState";
 
 const DETECTORS: Detectors = {
   torch: false,
@@ -192,6 +192,20 @@ describe("select body", () => {
     expect(body.scenes).toBeNull();
     expect(body.garments).toBeNull();
     expect(body.min_age_years).toBeNull();
+  });
+
+  it("asks for the prefilter only from a curator that offers it, and only for drops it can test", () => {
+    const all = { ...DETECTORS, insightface: true, mivolo: true, nudenet: true };
+    const drops = ["nsfw", "no-face", "no-age"] as const;
+    expect(scanBody("s", all, null, { withGarments: false, setAge: false, readBodies: false, drops: [...drops], prefilter: true }).prefilter).toEqual({ drop_nsfw: true, drop_no_face: true, drop_no_age: true });
+    // An older curator would ignore the block and judge everything, so it is not sent.
+    expect(scanBody("s", all, null, { withGarments: false, setAge: false, readBodies: false, drops: [...drops] }).prefilter).toBeUndefined();
+    // No face detection: only the NSFW drop can be tested.
+    expect(scanBody("s", { ...all, insightface: false, mivolo: false }, null, { withGarments: false, setAge: false, readBodies: false, drops: [...drops], prefilter: true }).prefilter).toEqual({ drop_nsfw: true, drop_no_face: false, drop_no_age: false });
+    expect(scanBody("s", all, null, { withGarments: false, setAge: false, readBodies: false, drops: [], prefilter: true }).prefilter).toBeUndefined();
+    const view = { ...DEFAULT_VIEW, drops: ["nsfw", "no-age"] as ("nsfw" | "no-age")[] };
+    expect(serializeView(view)).toContain("drop=nsfw%2Cno-age");
+    expect(parseView(new URLSearchParams(serializeView(view).slice(1))).drops).toEqual(["nsfw", "no-age"]);
   });
 
   it("requests a detector only when its weights are loaded", () => {
@@ -392,6 +406,7 @@ describe("progress", () => {
   it("names each scan phase and keeps an unknown one readable", () => {
     expect(phaseLabel("scoring")).toBe("Scoring images");
     expect(phaseLabel("guard")).toBe("Checking policy");
+    expect(phaseLabel("prefilter")).toBe("Dropping before the slow checks");
     expect(phaseLabel("transferring")).toBe("Writing the export");
     expect(phaseLabel("near_dup")).toBe("near dup");
   });
@@ -403,6 +418,8 @@ describe("progress", () => {
     expect(checkStage(["nsfw"], [{ phase: "faces", done: 1, total: 4 }], ["faces", "nsfw"])).toBe("running");
     expect(checkStage(["scenes"], [{ phase: "scenes", done: 1, total: 4 }], [])).toBe("running");
     expect(checkStage(["scenes"], [{ phase: "guard", done: 1, total: 4 }], [])).toBe("waiting");
+    // The prefilter step comes after identities, so the late checks are still queued.
+    expect(checkStage(["guard"], [{ phase: "prefilter", done: 4, total: 4 }], [])).toBe("queued");
     expect(checkStage(["faces", "identities"], [{ phase: "identities", done: 0, total: 0 }], [])).toBe("running");
   });
 
@@ -540,11 +557,22 @@ describe("scan chunks", () => {
     expect(names(sortImages([a2, a10, img("none.jpg"), a3], "cluster"))).toEqual(["b/img10.jpg", "img3.jpg", "a/img2.jpg", "none.jpg"]);
   });
 
-  it("hides hard rejects from the grid only when asked", () => {
-    const pass = { rel_path: "pass.jpg", passed: true } as unknown as ImageResult;
-    const fail = { rel_path: "fail.jpg", passed: false } as unknown as ImageResult;
-    expect(filterByPassed([pass, fail], false)).toHaveLength(2);
-    expect(filterByPassed([pass, fail], true).map((image) => image.rel_path)).toEqual(["pass.jpg"]);
+  it("counts images per policy rule the way the Rules filter matches them", () => {
+    expect(ruleMatches("A. Sexual Content Risk", "A")).toBe(true);
+    expect(ruleMatches("A. Sexual Content Risk", "a.")).toBe(true);
+    expect(ruleMatches("AB. Other", "A")).toBe(false);
+    const results = [
+      { guard: { safe: false, rules: ["A. Sexual Content Risk"], policy: "adult" }, guard_variants: { strict: { safe: false, rules: ["A. Sexual Content Risk", "C. Unethical Behavior"] } } },
+      { guard: { safe: true, rules: [], policy: "adult" }, guard_variants: { strict: { safe: false, rules: ["C. Unethical Behavior"] } } },
+      { guard: { safe: true, rules: ["B. Real-World Crimes & Public Safety"], policy: "adult" } },
+      { guard: null },
+    ] as unknown as ImageResult[];
+    const variantOnly = { guard: { safe: true, rules: [], policy: "adult" }, guard_variants: { granular: { safe: false, rules: ["H. Non-Consensual Sexual Content"] } } } as unknown as ImageResult;
+    expect(recordedGuardRules({ results: [variantOnly] } as unknown as ScanSummary, ["A"])).toEqual(["H. Non-Consensual Sexual Content"]);
+    expect([...guardRuleCounts(results, ["A", "B", "C", "Custom rule"])]).toEqual([
+      ["A", 1],
+      ["C", 2],
+    ]);
   });
 
   it("counts images per scene, environment and garment at the sidebar confidence", () => {
@@ -786,7 +814,7 @@ describe("body-only ages", () => {
     expect(isMinorExposed(faceless)).toBe(true);
     expect(revealHeld(faceless, [])).toBe(true);
     expect(shouldBlur(faceless, [], { exposedScore: 0.25, policyBlur: true, unblurNsfw: true })).toBe(true);
-    expect(shownAge(faceless)).toEqual({ text: "15y body", title: "Apparent age of a person with no visible face, MiVOLO from the body alone" });
+    expect(shownAge(faceless)).toEqual({ text: "15.0y body", title: "Apparent age of a person with no visible face, MiVOLO from the body alone" });
     // A person matched to a face is already counted by the face.
     const matched = { face_count: 1, faces: [{ primary: true, attributes: { age_years: 30, age_source: "mivolo" } }], primary_face_attributes: { age_years: 30, age_source: "mivolo" }, people: [person(16, 0)], nsfw: exposed } as unknown as ImageResult;
     expect(bodyAges(matched)).toEqual([]);
@@ -797,10 +825,10 @@ describe("body-only ages", () => {
     const mixed = { face_count: 1, faces: [{ primary: true, attributes: { age_years: 30, age_source: "mivolo" } }], primary_face_attributes: { age_years: 30, age_source: "mivolo" }, people: [person(0, 0), person(14)], nsfw: exposed } as unknown as ImageResult;
     expect(youngestAge(mixed)).toBe(14);
     expect(isMinorExposed(mixed)).toBe(true);
-    expect(shownAge(mixed)?.text).toBe("14y body");
+    expect(shownAge(mixed)?.text).toBe("14.0y body");
     const young = { face_count: 1, faces: [{ primary: true, attributes: { age_years: 15, age_source: "mivolo" } }], primary_face_attributes: { age_years: 15, age_source: "mivolo" }, people: [person(40)], nsfw: exposed } as unknown as ImageResult;
     expect(isMinorExposed(young)).toBe(true);
-    expect(shownAge(young)?.text).toBe("15y");
+    expect(shownAge(young)?.text).toBe("15.0y");
   });
 
   it("outranks the set age: the frame has a reading of its own", () => {
@@ -809,5 +837,21 @@ describe("body-only ages", () => {
     expect(usesSetAge(image)).toBe(false);
     expect(youngestAge(image)).toBe(16);
     expect(isMinorExposed(image)).toBe(true);
+  });
+});
+
+describe("clearedFilter", () => {
+  it("puts every keep-set filter back to the default", () => {
+    const busy: FilterState = { ...DEFAULT_FILTER, minScore: 0.8, keepSimilar: true, facePoses: ["frontal"], garments: ["dress"], nsfwExposedLabels: [EXPOSED_LABELS[0]], guardUnsafe: true, maxAgeYears: 30 };
+    expect(isDefaultFilter(busy)).toBe(false);
+    const cleared = clearedFilter();
+    expect(isDefaultFilter(cleared)).toBe(true);
+    expect(cleared).toEqual(DEFAULT_FILTER);
+    // A fresh list, not the default's own.
+    expect(cleared.nsfwExposedLabels).not.toBe(DEFAULT_FILTER.nsfwExposedLabels);
+  });
+
+  it("reads the exposed labels as a set", () => {
+    expect(isDefaultFilter({ ...DEFAULT_FILTER, nsfwExposedLabels: [...EXPOSED_LABELS].reverse() })).toBe(true);
   });
 });

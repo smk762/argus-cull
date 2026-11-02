@@ -1,9 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
-import { guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
+import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
 import { checkStage, checkStageNote } from "@/lib/progress";
 import { facetCounts, recordedScenes, type FilterAvailability } from "@/lib/select";
 import {
@@ -21,9 +21,9 @@ import {
   type Progress,
   type ScanSummary,
 } from "@/lib/types";
-import { clusterLabel, toggleValue } from "@/lib/urlState";
+import { clearedFilter, clusterLabel, isDefaultFilter, toggleValue } from "@/lib/urlState";
 
-import { Info } from "./Tooltip";
+import { Info, Tooltip } from "./Tooltip";
 
 const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
 
@@ -114,11 +114,11 @@ function RangeField({
   );
 }
 
-function Toggle({ label, info, checked, onChange }: { label: string; info: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function Toggle({ label, info, checked, disabled = false, onChange }: { label: string; info: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <div className="flex items-center gap-1.5 text-small">
+    <div className={`flex items-center gap-1.5 text-small ${disabled ? "opacity-50" : ""}`}>
       <label className="flex items-center gap-2">
-        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+        <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
         {label}
       </label>
       <Info text={info} />
@@ -145,7 +145,12 @@ export function Filters({
   unblurNsfw,
   onUnblurNsfw,
   hideRejected,
+  hideRejectedReady,
   onHideRejected,
+  policies = [],
+  policyFlags,
+  policiesOff = [],
+  onPoliciesOff,
   live,
 }: {
   filter: FilterState;
@@ -156,9 +161,17 @@ export function Filters({
   onChange: (patch: Partial<FilterState>) => void;
   unblurNsfw: boolean;
   onUnblurNsfw: (unblurNsfw: boolean) => void;
-  /** Grid only: hide images that failed blur, size or aspect. */
+  /** Grid only: hide every image the keep set leaves out. Mirrors Show → Kept on the grid. */
   hideRejected: boolean;
+  /** The keep set has been calculated, so there is something to hide by. */
+  hideRejectedReady: boolean;
   onHideRejected: (hideRejected: boolean) => void;
+  /** Every policy the scan ran, official first, and how many images each flagged. */
+  policies?: readonly string[];
+  policyFlags?: ReadonlyMap<string, number>;
+  /** Policies switched off: their verdicts leave the blur, shields, counts, keep set and run stats. */
+  policiesOff?: readonly string[];
+  onPoliciesOff?: (off: string[]) => void;
   /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
   live: { phases: readonly Progress[]; pending: readonly string[] } | null;
 }) {
@@ -178,6 +191,11 @@ export function Filters({
   const clusterCounts = new Map(summary?.face_clusters.map((cluster) => [cluster.cluster_id, cluster.size]) ?? []);
   const poseCounts = new Map<string, number>();
   for (const image of summary?.results ?? []) if (image.primary_face_pose) poseCounts.set(image.primary_face_pose, (poseCounts.get(image.primary_face_pose) ?? 0) + 1);
+  // Every verdict's explanation is read for these, so only once per scan, not on every render of the sidebar.
+  const { ruleOptions, ruleCounts } = useMemo(() => {
+    const options = [...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))];
+    return { ruleOptions: options, ruleCounts: guardRuleCounts(summary?.results ?? [], options) };
+  }, [summary]);
   const facets = facetCounts(summary?.results ?? [], filter.minSceneConf, filter.minGarmentConf);
 
   return (
@@ -194,14 +212,30 @@ export function Filters({
       />
       <Toggle
         label="Hide rejected"
-        info="Hides images that failed blur, size or aspect from the grid, together with the grid's own filters. Keep hard rejects, below, decides whether they can be kept."
+        info={
+          hideRejectedReady
+            ? "Hides every image the keep set leaves out, whether a hard reject (blur, size, aspect), a near-duplicate, or dropped by a filter below. The same switch as Show → Kept on the grid."
+            : "Available once the keep set is calculated, after the scan."
+        }
         checked={hideRejected}
+        // Still clearable when on, so a switch left on from an earlier keep set is never stuck.
+        disabled={!hideRejectedReady && !hideRejected}
         onChange={onHideRejected}
       />
 
       <h2 className="flex items-center gap-1.5 border-t border-base-700 pt-3 font-display text-small font-semibold">
         Keep set
         <Info text="These filters decide which images are kept, for Kept and Left out on the grid, Download paths, and Export." />
+        <Tooltip text="Untick every filter below and put the sliders back to their defaults. Unblur NSFW and Hide rejected stay as they are." className="ml-auto">
+          <button
+            type="button"
+            className="rounded-md border border-base-600 px-1.5 py-0.5 text-caption font-normal text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
+            disabled={isDefaultFilter(filter)}
+            onClick={() => onChange(clearedFilter())}
+          >
+            Clear all
+          </button>
+        </Tooltip>
       </h2>
       <RangeField
         label="Quality score"
@@ -214,7 +248,7 @@ export function Filters({
       />
       <Toggle
         label="Keep hard rejects"
-        info="Adds images that failed blur, size, or aspect to the keep set when they pass the other filters."
+        info="Adds images that failed blur, size, or aspect to the keep set when they pass the other filters. An image the scan prefiltered (prefilter:<kind>) is never kept."
         checked={filter.includeRejected}
         onChange={(includeRejected) => onChange({ includeRejected })}
       />
@@ -424,16 +458,34 @@ export function Filters({
                 : "Scan a folder to record SingGuard verdicts."
           }
         >
+          {policies.length > 1 && onPoliciesOff ? (
+            <>
+              <Caption
+                text="Policies counted"
+                info="Untick a policy to leave its verdicts out, as if it had not run: blur, shields, the counts here, the keep set and Run stats all follow. The number is images it flagged. The first ticked policy leads where the official one is off. A rerun still runs every policy."
+              />
+              <CheckList
+                options={policies}
+                selected={policies.filter((name) => !policiesOff.includes(name))}
+                counts={policyFlags}
+                label={(name) => (name === policies[0] ? `${name} (official)` : name)}
+                onToggle={(name) => onPoliciesOff(policiesOff.includes(name) ? policiesOff.filter((other) => other !== name) : [...policiesOff, name])}
+              />
+              {policiesOff.length === policies.length ? <p className="text-caption text-warning">Every policy is off: no verdict blurs, and the SingGuard filters below do nothing.</p> : null}
+            </>
+          ) : null}
           <Toggle
             label="Drop every unsafe verdict"
             info="Drops any image a policy judged unsafe, whatever rule it named. Ticking it clears the rule list."
             checked={filter.guardUnsafe}
             onChange={(checked) => onChange({ guardUnsafe: checked, guardRules: checked ? [] : filter.guardRules })}
           />
-          <Caption text="Rules" info="Drops an unsafe image that names any rule ticked here." />
+          <Caption text="Rules" info="Drops an unsafe image that names any rule ticked here. The count is images that any policy judged unsafe under that rule; rules no image fired are hidden." />
           <CheckList
-            options={[...GUARD_RULES.map((rule) => rule.id), ...recordedGuardRules(summary, GUARD_RULES.map((rule) => rule.id))]}
+            options={ruleOptions}
             selected={filter.guardRules}
+            counts={ruleCounts}
+            hideEmpty
             label={(id) => guardRuleLabel(id, summary)}
             onToggle={(rule) => onChange({ guardUnsafe: false, guardRules: toggleValue(filter.guardRules, rule) })}
           />

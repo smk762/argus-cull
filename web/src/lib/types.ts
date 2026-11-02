@@ -146,12 +146,16 @@ export interface Health {
   allow_move: boolean;
   /** Curator 0.6: it can stop a running scan and purge the scan cache. */
   scan_control?: boolean;
+  /** Curator 0.12: `DELETE /scan/{id}` removes one cached scan. */
+  scan_delete?: boolean;
   /** Curator 0.7: frames with no face can take the set's age (`faces.set_age`). */
   set_age?: boolean;
   /** Curator 0.8: `GET /guard/policies` serves each policy's text. */
   guard_policy_text?: boolean;
   /** Curator 0.12: `POST /scan/{id}/delete` takes any image in the scan, not only under-18 exposed ones. */
   delete_any?: boolean;
+  /** Curator 0.12: a scan can prefilter images before scenes, garments and SingGuard (`prefilter` on the request). */
+  prefilter?: boolean;
 }
 
 /**
@@ -396,9 +400,24 @@ export interface TargetProfile {
   target_category?: "identity" | "wardrobe" | "pose_composition" | "setting";
 }
 
+/** What a scan prefilters out before the slow checks. A dropped image stays as a reject named `prefilter:<kind>`. */
+export const PREFILTERS = ["nsfw", "no-face", "no-age"] as const;
+export type Prefilter = (typeof PREFILTERS)[number];
+
+export interface PrefilterConfig {
+  /** An exposed reading of 0.2 or more. An image NudeNet and EraX could not score goes on. */
+  drop_nsfw: boolean;
+  /** No face detected. */
+  drop_no_face: boolean;
+  /** No MiVOLO age from a face or a body, and no set age. */
+  drop_no_age: boolean;
+}
+
 export interface ScanSummary {
   scan_id: string;
   folder: string;
+  /** Curator 0.12: what the scan prefiltered. Absent on older scans. */
+  prefilter_config?: PrefilterConfig;
   target_profile?: TargetProfile;
   faces_config: FaceConfig;
   scenes_config: SceneConfig;
@@ -416,6 +435,11 @@ export interface ScanSummary {
   /** When `faces.set_age` was asked: the set age given to the faceless frames, or why none was. */
   set_age?: SetAge | null;
   set_age_skipped?: string | null;
+  /**
+   * Page-side only, never from the curator: the policies left switched on in
+   * the sidebar, set by `withoutPolicies`. Absent when every policy counts.
+   */
+  policy_subset?: string[];
   results: ImageResult[];
 }
 
@@ -510,6 +534,8 @@ export interface ViewState {
   setAge: boolean;
   /** MiVOLO reads bodies on the next scan, so a person with no visible face gets an age. Under evaluation; off unless asked for. */
   readBodies: boolean;
+  /** What the next scan prefilters out before scenes, garments and SingGuard. */
+  drops: Prefilter[];
   /** Person names by cluster id, for export (`face_names`). The cached scan is not changed. */
   faceNames: Record<string, string>;
   filter: FilterState;
@@ -608,6 +634,7 @@ export const DEFAULT_VIEW: ViewState = {
   withGarments: false,
   setAge: false,
   readBodies: false,
+  drops: [],
   faceNames: {},
   filter: DEFAULT_FILTER,
 };

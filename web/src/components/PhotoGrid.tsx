@@ -5,6 +5,7 @@ import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, s
 import type { ImageLabel } from "@/lib/labels";
 import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
+import { formatYears } from "@/lib/years";
 
 import { Shield } from "./Shield";
 import { Info } from "./Tooltip";
@@ -423,7 +424,7 @@ function emptyView(keepView: KeepView, ageFrom: number | null, ageTo: number | n
 export function setAgeTitle(image: Pick<ImageResult, "set_age" | "primary_face_attributes" | "faces">): string | null {
   if (!usesSetAge(image) || !image.set_age) return null;
   const { years, faces, cluster_id, share } = image.set_age;
-  return `No face in this frame. The set's age: median ${years.toFixed(1)} years over ${faces} MiVOLO faces in ${cluster_id} (${Math.round(share * 100)}% of the scan's faces). An inference about the set, not a reading of this frame.`;
+  return `No face in this frame. The set's age: median ${formatYears(years)} years over ${faces} MiVOLO faces in ${cluster_id} (${Math.round(share * 100)}% of the scan's faces). An inference about the set, not a reading of this frame.`;
 }
 
 function readAge(value: string): number | null {

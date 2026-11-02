@@ -9,6 +9,7 @@ import {
   GARMENTS,
   GENDERS,
   POSES,
+  PREFILTERS,
   type ContentRating,
   type ExposedLabel,
   type FaceAge,
@@ -144,6 +145,7 @@ export function parseView(params: URLSearchParams): ViewState {
     withGarments: params.get("garments") === "on",
     setAge: params.get("set") === "1",
     readBodies: params.get("bodies") === "1",
+    drops: PREFILTERS.filter((kind) => (params.get("drop") ?? "").split(",").includes(kind)),
     faceNames,
     filter,
   };
@@ -204,6 +206,7 @@ export function serializeView(view: ViewState): string {
   if (view.withGarments) params.set("garments", "on");
   if (view.setAge) params.set("set", "1");
   if (view.readBodies) params.set("bodies", "1");
+  if (view.drops.length > 0) params.set("drop", view.drops.join(","));
   const names: Record<string, string> = {};
   for (const [id, name] of Object.entries(view.faceNames)) {
     const parsed = readFaceName(`${id}:${name}`);
@@ -241,6 +244,16 @@ export function serializeView(view: ViewState): string {
 
 export function toggleValue<T extends string>(list: readonly T[], value: T): T[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+/** The keep set's filters as a fresh page has them. Fresh lists, so a later edit does not reach DEFAULT_FILTER. */
+export function clearedFilter(): FilterState {
+  return { ...DEFAULT_FILTER, nsfwExposedLabels: [...EXPOSED_LABELS] };
+}
+
+/** True when no keep-set filter differs from the default: the URL would carry none of them. */
+export function isDefaultFilter(filter: FilterState): boolean {
+  return serializeView({ ...DEFAULT_VIEW, filter }) === "";
 }
 
 export function withFilter(view: ViewState, patch: Partial<FilterState>): ViewState {

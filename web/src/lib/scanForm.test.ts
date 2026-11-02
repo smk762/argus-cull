@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { measuredAges, shownAge } from "./chunks";
 import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "./detailLines";
+import { policiesRun, withoutPolicies } from "./policies";
 import { runStats, runStatsFilename } from "./runStats";
-import { templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
+import { templateFromRunStats, templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
 import { ago } from "./time";
-import { DEFAULT_VIEW, type Detectors, type FaceAttributes, type ImageResult, type ScanSummary } from "./types";
+import { DEFAULT_VIEW, type Detectors, type FaceAttributes, type ImageResult, type ScanSummary, type SelectRequest } from "./types";
 
 const DETECTORS: Detectors = {
   torch: true,
@@ -92,17 +93,19 @@ describe("shown age", () => {
   it("is always the youngest face", () => {
     // Primary 43, a second face 28: the tile says 28 and the tooltip names the primary.
     const two = faced("a.jpg", 43, { face_count: 2, faces: [{ primary: true, attributes: mivolo(43) }, { attributes: mivolo(28) }] });
-    expect(shownAge(two)).toEqual({ text: "28y", title: "Youngest of 2 faces, MiVOLO. The primary face reads 43y." });
+    expect(shownAge(two)).toEqual({ text: "28.0y", title: "Youngest of 2 faces, MiVOLO. The primary face reads 43.0y." });
     // The face list carries the primary face, so it is not counted twice; a record with no list has the primary alone.
     expect(measuredAges(two)).toEqual([43, 28]);
     expect(measuredAges(faced("one.jpg", 30))).toEqual([30]);
     expect(measuredAges(faced("old.jpg", 30, { faces: [{ attributes: mivolo(25) }] }))).toEqual([30, 25]);
     // A primary that is the youngest is just the age.
     const young = faced("b.jpg", 20, { face_count: 2, faces: [{ primary: true, attributes: mivolo(20) }, { attributes: mivolo(35) }] });
-    expect(shownAge(young)).toEqual({ text: "20y", title: "Youngest of 2 faces, MiVOLO" });
-    expect(shownAge(faced("c.jpg", 31.4))).toEqual({ text: "31y", title: "Apparent age, MiVOLO years" });
+    expect(shownAge(young)).toEqual({ text: "20.0y", title: "Youngest of 2 faces, MiVOLO" });
+    expect(shownAge(faced("c.jpg", 31.4))).toEqual({ text: "31.4y", title: "Apparent age, MiVOLO years" });
+    // One decimal, cut off: a reading the under-18 rule calls a minor never shows as 18.
+    expect(shownAge(faced("d.jpg", 17.96))?.text).toBe("17.9y");
     // No face: the set's age when the scan gave one, else nothing.
-    expect(shownAge(image("d.jpg", { set_age: SET_AGE }))?.text).toBe("≈20y set");
+    expect(shownAge(image("d.jpg", { set_age: SET_AGE }))?.text).toBe("≈19.6y set");
     expect(shownAge(image("e.jpg"))).toBeNull();
     // Only FairFace ran: its bracket stands in.
     expect(shownAge(image("f.jpg", { face_count: 1, primary_face_attributes: { ...mivolo(0), age_years: null, age_source: "fairface", age: "20-29" } }))).toEqual({ text: "20-29", title: "FairFace age bracket of the primary face" });
@@ -112,10 +115,10 @@ describe("shown age", () => {
 describe("scan template", () => {
   it("reads the form back out of a finished scan", () => {
     const template = templateFromSummary(SUMMARY, "/data/images", DETECTORS);
-    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false });
+    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [] });
     // A scan that ran garments runs them again; one with no recorded policy takes the picker's default.
     const plain = { ...SUMMARY, garments_config: { enabled: true, min_conf: 0.3 }, guard_config: { enabled: false }, faces_config: { enabled: true, fairface: true, mivolo: true } };
-    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false });
+    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [] });
     // The curator writes a policy name even when SingGuard was off; that is not a choice to repeat.
     const off: ScanSummary = { ...SUMMARY, guard_config: { enabled: false, policy: "default" } };
     expect(templateFromSummary(off, "/data/images", DETECTORS).policy).toEqual({ policy: "adult", variants: [] });
@@ -141,8 +144,8 @@ describe("scan template", () => {
 
   it("names what a template runs", () => {
     expect(templateSummary(templateFromSummary(SUMMARY, "/data/images", DETECTORS), DETECTORS)).toBe("adult + adult-v2 · set age");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false }, DETECTORS)).toBe("default · garments");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [] }, DETECTORS)).toBe("default · garments");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [] }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
   });
 });
 
@@ -178,9 +181,9 @@ describe("run stats", () => {
   );
 
   it("counts pass and fail, and the keep set under the filters", () => {
-    expect(stats.config).toEqual({ faces: true, fairface: false, mivolo: true, set_age: true, scenes: true, garments: false, nsfw: true, guard: true, policy: "adult", variants: ["adult-v2"] });
+    expect(stats.config).toEqual({ faces: true, fairface: false, mivolo: true, set_age: true, mivolo_body: false, scenes: true, garments: false, nsfw: true, guard: true, policy: "adult", variants: ["adult-v2"], prefilter: null });
     // similar-to:<file> is one reason, not one per file.
-    expect(stats.images).toEqual({ total: 5, passed: 4, rejected: 1, duplicates: 0, reject_reasons: { blur: 1 }, kept: 2, left_out: 3, left_out_reasons: { guard_unsafe: 1, "similar-to": 1, rejected: 1 } });
+    expect(stats.images).toEqual({ total: 5, passed: 4, rejected: 1, duplicates: 0, reject_reasons: { blur: 1 }, kept: 2, left_out: 3, left_out_reasons: { guard_unsafe: 1, "similar-to": 1, rejected: 1 }, prefiltered: {} });
     // A selection from another scan does not count.
     expect(runStats(SUMMARY, { scan_id: "other", total: 0, kept: 0, rows: [] }, new Map(), new Map(), NO_TAGS, []).images.kept).toBeNull();
     // A scan that ran without SingGuard records a policy name all the same; it judged nothing, so nothing is reported for it.
@@ -193,6 +196,7 @@ describe("run stats", () => {
   it("reads the ages, measured and set", () => {
     expect(stats.age).toEqual({
       frames_with_face_age: 3,
+      frames_with_body_age_only: 0,
       frames_with_set_age: 1,
       frames_without_age: 1,
       frames_without_face: 2,
@@ -203,6 +207,10 @@ describe("run stats", () => {
       max_years: 22,
       frames_under_18: 0,
       frames_minor_exposed: 0,
+      frames_under_18_not_exposed: 0,
+      frames_16_to_18: 0,
+      youngest_from: { face: 3, body: 0, set: 1 },
+      people_check: {},
       set_age: SET_AGE,
       set_age_skipped: null,
     });
@@ -212,7 +220,12 @@ describe("run stats", () => {
   });
 
   it("bands NudeNet and rates each policy", () => {
-    expect(stats.nudenet).toEqual({ scored: 5, mean_exposed: 0.34, bands: { low: 2, mid: 1, high: 2, unscored: 0 } });
+    expect(stats.nudenet).toMatchObject({ scored: 5, mean_exposed: 0.34, bands: { low: 2, mid: 1, high: 2, unscored: 0 } });
+    expect(stats.nudenet.source).toEqual({ nudenet: 5, erax_filled: 0, erax_only: 0, unscored: 0 });
+    expect(stats.policies.map((entry) => [entry.policy, entry.unchecked, entry.slow_overrode_fast])).toEqual([
+      ["adult", 1, 0],
+      ["adult-v2", 4, 0],
+    ]);
     expect(stats.policies.map((entry) => [entry.policy, entry.official, entry.checked, entry.unsafe, entry.flag_rate])).toEqual([
       ["adult", true, 4, 1, "25%"],
       ["adult-v2", false, 1, 1, "100%"],
@@ -223,6 +236,63 @@ describe("run stats", () => {
     expect(stats.policies[1].precision).toBeNull();
   });
 
+  it("records what produced the numbers, and summarises verdicts, content, labels and blur", () => {
+    expect(stats.versions).toEqual({ curator: null, cull: null });
+    expect(stats.display).toEqual({ blur_exposed_score: 0.25, policy_blur: true });
+    // 01 passes the official policy and a variant flags it: split. 05 has no verdict.
+    expect(stats.verdicts).toEqual({ unsafe: 1, split: 1, safe: 2, none: 1, official_safe_variant_flagged: 1 });
+    expect(stats.content).toMatchObject({ scenes: { bedroom: 1 }, environments: { indoor: 1 } });
+    expect(stats.labels).toEqual({ labelled: 1, by_expect: { adult: 1 }, overrides: 0, tagged_by_hand: 1 });
+    // 01, 03 and 04 score at or above 0.25; no frame reads under 18, so Unblur reveals them all.
+    expect(stats.blur).toEqual({ blurred: 3, reasons: { held_minor_or_pending: 0, nudenet_score: 3, erax_only: 0, policy: 0 }, with_unblur: 0 });
+
+    const filters = { min_score: 0.4, min_scene_conf: 0.7 } as unknown as SelectRequest;
+    const withContext = runStats(SUMMARY, { scan_id: SUMMARY.scan_id, total: 5, kept: 5, rows: [] }, new Map(), new Map(), NO_TAGS, [], new Date(), {
+      curatorVersion: "0.11.1",
+      cullVersion: "0.2.0",
+      filters,
+      blur: { exposedScore: 0.6, policyBlur: false },
+    });
+    expect(withContext.versions).toEqual({ curator: "0.11.1", cull: "0.2.0" });
+    expect(withContext.filters).toBe(filters);
+    // Scene counts follow the filters' confidence: bedroom read 0.6, under 0.7.
+    expect(withContext.content.scenes).toEqual({});
+    expect(withContext.blur).toMatchObject({ blurred: 1, reasons: { nudenet_score: 1 } });
+  });
+
+  it("counts EraX sources, under-18 near the line, and cascade overrides", () => {
+    const exposed = { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.5 }, exposed_score: 0.5 };
+    const results = [
+      faced("a.jpg", 17.2, { nsfw: exposed, nudenet_failed: true }),
+      faced("b.jpg", 16.5, { nsfw: { detections: [], labels: {}, exposed_score: 0 }, erax_filled: true, guard: { safe: false, rules: ["Safe"], policy: "adult" } }),
+      faced("c.jpg", 30, { nsfw: { detections: [], labels: {}, exposed_score: 0 }, guard: { safe: false, rules: ["A. Sexual Content Risk"], policy: "adult" } }),
+    ];
+    const run = runStats({ ...SUMMARY, results }, null, new Map(), new Map(), NO_TAGS, ["adult"]);
+    expect(run.nudenet.source).toEqual({ nudenet: 1, erax_filled: 1, erax_only: 1, unscored: 0 });
+    expect(run.nudenet.minor_exposed_on_erax_only).toBe(1);
+    expect(run.age).toMatchObject({ frames_under_18: 2, frames_minor_exposed: 1, frames_under_18_not_exposed: 1, frames_16_to_18: 2 });
+    // b's flag names only "Safe", so the slower reading stands: safe, and counted as an override.
+    expect(run.policies[0]).toMatchObject({ checked: 2, unchecked: 1, unsafe: 1, slow_overrode_fast: 1, rules_only_safe: 1 });
+    // a is held (under 18, exposed); c is blurred by its policy verdict; b's flag turned safe, so nothing blurs it.
+    expect(run.blur).toMatchObject({ blurred: 2, reasons: { held_minor_or_pending: 1, nudenet_score: 0, erax_only: 0, policy: 1 } });
+  });
+
+  it("counts a faceless frame aged from the body apart from face ages", () => {
+    const body = image("body.jpg", { face_count: 0, people: [{ bbox: [0, 0, 1, 1], det_score: 0.9, face_index: null, age_years: 25, age_source: "mivolo" }] });
+    const run = runStats({ ...SUMMARY, results: [faced("a.jpg", 30), body] }, null, new Map(), new Map(), NO_TAGS, []);
+    expect(run.age).toMatchObject({ frames_with_face_age: 1, frames_with_body_age_only: 1, faces_measured: 1, frames_without_face: 1, youngest_from: { face: 1, body: 1, set: 0 } });
+  });
+
+  it("records switched-off policies, and counts without them", () => {
+    const off = withoutPolicies(SUMMARY, ["adult-v2"]);
+    const run = runStats(off, null, new Map(), new Map(), NO_TAGS, policiesRun(off), new Date(), { policiesOff: ["adult-v2"] });
+    expect(run.policies_off).toEqual(["adult-v2"]);
+    expect(run.policies.map((entry) => entry.policy)).toEqual(["adult"]);
+    // 01 was split only because adult-v2 flagged it; without it, it is safe.
+    expect(run.verdicts).toMatchObject({ split: 0, safe: 3, official_safe_variant_flagged: 0 });
+    expect(runStatsFilename(SUMMARY, ["default", "adult"])).toBe("run-stats-one_set-abcdef12-without-adult+default.json");
+  });
+
   it("lists the trigger tags against the rest of the scan", () => {
     expect(stats.tags.map((entry) => [entry.tag, entry.group, entry.images, entry.by_hand])).toEqual([
       ["bedroom", "setting", 1, 0],
@@ -231,6 +301,42 @@ describe("run stats", () => {
     const lingerie = stats.tags[1].policies[0];
     expect(lingerie).toMatchObject({ policy: "adult", tagged_checked: 1, tagged_unsafe: 1, tagged_flag_rate: "100%", rest_checked: 3, rest_unsafe: 0, rest_flag_rate: "0%" });
     expect(lingerie.bands.mid).toEqual({ tagged_checked: 1, tagged_unsafe: 1, rest_checked: 0, rest_unsafe: 0 });
+  });
+
+  it("fills the scan form back from its own file", () => {
+    const file = JSON.parse(JSON.stringify(stats));
+    expect(templateFromRunStats(file, "/data/images", DETECTORS)).toEqual({
+      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [] },
+      notes: [],
+    });
+    // A curator without adult-v2 drops it and says so.
+    const fewer = templateFromRunStats(file, "/data/images", { ...DETECTORS, singguard_policies: ["default", "adult"] });
+    expect(fewer.template.policy).toEqual({ policy: "adult", variants: [] });
+    expect(fewer.notes).toEqual(["This curator does not offer adult-v2, so it was left out."]);
+    // A file saved with a policy switched off names only the ones left on.
+    const off = withoutPolicies(SUMMARY, ["adult"]);
+    const saved = JSON.parse(JSON.stringify(runStats(off, null, new Map(), new Map(), NO_TAGS, policiesRun(off), new Date(), { policiesOff: ["adult"] })));
+    const isolated = templateFromRunStats(saved, "/data/images", DETECTORS);
+    expect(isolated.template.policy).toEqual({ policy: "adult-v2", variants: [] });
+    expect(isolated.notes).toEqual(["The file was saved with adult switched off, so the form runs only the policies left on."]);
+    expect(() => templateFromRunStats({ hello: 1 }, "/data/images", DETECTORS)).toThrow("not a Run stats file");
+    expect(() => templateFromRunStats(file, "/elsewhere", DETECTORS)).toThrow("not under this curator's source root");
+  });
+
+  it("counts prefiltered images apart, and leaves them out of every other section", () => {
+    const prefilter = { drop_nsfw: true, drop_no_face: true, drop_no_age: false };
+    const dropped = image("x.jpg", { passed: false, reject_reason: "prefilter:nsfw", nsfw: { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.9 }, exposed_score: 0.9 } });
+    const faceless = image("y.jpg", { passed: false, reject_reason: "prefilter:no-face" });
+    const scan = { ...SUMMARY, prefilter_config: prefilter, total: 7, results: [...SUMMARY.results, dropped, faceless] };
+    const run = runStats(scan, null, new Map(), new Map(), NO_TAGS, ["adult", "adult-v2"]);
+    expect(run.config.prefilter).toEqual(prefilter);
+    expect(run.images.prefiltered).toEqual({ nsfw: 1, "no-face": 1 });
+    expect(run.images.reject_reasons).toEqual({ blur: 1, "prefilter:nsfw": 1, "prefilter:no-face": 1 });
+    // The NudeNet section is the same as without them.
+    expect(run.nudenet).toEqual(stats.nudenet);
+    // The form reads the drops back from the scan and from its Run stats file.
+    expect(templateFromSummary(scan, "/data/images", DETECTORS).drops).toEqual(["nsfw", "no-face"]);
+    expect(templateFromRunStats(JSON.parse(JSON.stringify(run)), "/data/images", DETECTORS).template.drops).toEqual(["nsfw", "no-face"]);
   });
 
   it("names the file after the folder and the scan", () => {
