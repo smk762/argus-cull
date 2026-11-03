@@ -208,6 +208,18 @@ describe("select body", () => {
     expect(parseView(new URLSearchParams(serializeView(view).slice(1))).drops).toEqual(["nsfw", "no-age"]);
   });
 
+  it("asks for watermark crops only when a detector is configured, and keeps the choice in the URL", () => {
+    const checks = { withGarments: false, setAge: false, readBodies: false, cropWatermarks: true };
+    expect(scanBody("s", { ...DETECTORS, watermark: true }, null, checks).crops).toEqual({ enabled: true, detect: true });
+    // No detector: the curator would refuse the scan with a 400, so the block is not sent.
+    expect(scanBody("s", { ...DETECTORS, watermark: false }, null, checks).crops).toBeUndefined();
+    expect(scanBody("s", { ...DETECTORS, watermark: true }, null, { ...checks, cropWatermarks: false }).crops).toBeUndefined();
+    const view = { ...DEFAULT_VIEW, cropWatermarks: true };
+    expect(serializeView(view)).toContain("crop=detect");
+    expect(parseView(new URLSearchParams(serializeView(view).slice(1))).cropWatermarks).toBe(true);
+    expect(parseView(new URLSearchParams("")).cropWatermarks).toBe(false);
+  });
+
   it("requests a detector only when its weights are loaded", () => {
     expect(scanBody("shoots", NONE).faces).toEqual({ enabled: false, fairface: false, mivolo: false });
     expect(scanBody("shoots", NONE).scenes).toEqual({ enabled: false });

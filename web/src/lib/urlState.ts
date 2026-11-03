@@ -146,6 +146,7 @@ export function parseView(params: URLSearchParams): ViewState {
     setAge: params.get("set") === "1",
     readBodies: params.get("bodies") === "1",
     drops: PREFILTERS.filter((kind) => (params.get("drop") ?? "").split(",").includes(kind)),
+    cropWatermarks: params.get("crop") === "detect",
     faceNames,
     filter,
   };
@@ -207,6 +208,7 @@ export function serializeView(view: ViewState): string {
   if (view.setAge) params.set("set", "1");
   if (view.readBodies) params.set("bodies", "1");
   if (view.drops.length > 0) params.set("drop", view.drops.join(","));
+  if (view.cropWatermarks) params.set("crop", "detect");
   const names: Record<string, string> = {};
   for (const [id, name] of Object.entries(view.faceNames)) {
     const parsed = readFaceName(`${id}:${name}`);

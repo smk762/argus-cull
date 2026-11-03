@@ -37,6 +37,9 @@ services:
       # Optional second detector. Empty turns it off. When NudeNet returns
       # nothing useful, curator maps EraX hits onto the same exposed labels.
       - ARGUS_CURATOR_ERAX_URL=${ARGUS_CURATOR_ERAX_URL-http://erax:8080}
+      # Watermark detector for a scan's crops.detect. It runs only when a scan
+      # asks for it, so the URL being set costs nothing. Empty refuses detect.
+      - ARGUS_CURATOR_WATERMARK_URL=${ARGUS_CURATOR_WATERMARK_URL-http://watermark:8080}
       # Darkroom's guard: agent-composer on the LAN. Empty turns the check off.
       - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://192.168.1.198:9150}
       # cascade: fast on every frame (about a second), slow on the frames
@@ -104,6 +107,20 @@ services:
   erax:
     build:
       context: ./erax
+      additional_contexts:
+        common: ./sidecar-common
+    restart: unless-stopped
+    healthcheck:
+      <<: *sidecar-health
+      start_period: 180s
+
+  # Watermark detector (YOLO11x on CPU) for curator's crops.detect: frames
+  # with a watermark at the edge are cropped in memory before every check and
+  # exported cropped. Curator does not wait on it; a scan asking for detection
+  # while it is still loading records its frames as crop:unchecked.
+  watermark:
+    build:
+      context: ./watermark
       additional_contexts:
         common: ./sidecar-common
     restart: unless-stopped

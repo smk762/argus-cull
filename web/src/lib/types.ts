@@ -158,6 +158,8 @@ export interface Health {
   delete_any?: boolean;
   /** Curator 0.12: a scan can prefilter images before scenes, garments and SingGuard (`prefilter` on the request). */
   prefilter?: boolean;
+  /** A scan can find watermarks and crop them away in memory before every check (`crops.detect` on the request). */
+  watermark_detect?: boolean;
 }
 
 /**
@@ -195,6 +197,8 @@ export interface Detectors {
   nudenet?: boolean;
   /** Curator 0.11: an EraX-NSFW server is configured (ARGUS_CURATOR_ERAX_URL), as NudeNet's fill-in. */
   erax?: boolean;
+  /** A watermark detector is configured (ARGUS_CURATOR_WATERMARK_URL), for `crops.detect`. */
+  watermark?: boolean;
   /** A SingGuard server is configured (ARGUS_CURATOR_SINGGUARD_URL). */
   singguard?: boolean;
   /** Policies a scan can pass as `guard.policy`, in the curator's order (curator 0.5+; empty without SingGuard). */
@@ -295,12 +299,41 @@ export interface FaceDetection {
   attributes: FaceAttributes | null;
 }
 
+/** A crop in displayed pixels of the source, `right`/`bottom` exclusive. */
+export interface CropBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export interface WatermarkDetection {
+  label: string;
+  score: number;
+  /** `[x, y, w, h]` on the uncropped frame. */
+  bbox: number[];
+}
+
+/** What a scan crops before every check. Only `enabled` + `detect` is sent by cull. */
+export interface CropConfig {
+  enabled: boolean;
+  detect?: boolean;
+  min_conf?: number;
+  max_cut?: number;
+  reject_overlay?: boolean;
+}
+
 export interface ImageResult {
   rel_path: string;
   abs_path: string;
   score: number;
   passed: boolean;
   reject_reason: string | null;
+  /** The crop every check saw; the image's size and boxes are of the cropped frame. */
+  crop?: CropBox | null;
+  crop_source?: "manual" | "detected" | null;
+  /** Watermarks the detector found on the uncropped frame; null when it did not check. */
+  watermarks?: WatermarkDetection[] | null;
   similar_group: number;
   group_size: number;
   is_representative: boolean;
@@ -420,6 +453,8 @@ export interface ScanSummary {
   folder: string;
   /** Curator 0.12: what the scan prefiltered. Absent on older scans. */
   prefilter_config?: PrefilterConfig;
+  /** What the scan cropped before every check. Absent on older scans. */
+  crop_config?: CropConfig;
   target_profile?: TargetProfile;
   faces_config: FaceConfig;
   scenes_config: SceneConfig;
@@ -538,6 +573,8 @@ export interface ViewState {
   readBodies: boolean;
   /** What the next scan prefilters out before scenes, garments and SingGuard. */
   drops: Prefilter[];
+  /** The next scan finds watermarks and crops them away before every check. Off unless asked for: it changes what every check sees. */
+  cropWatermarks: boolean;
   /** Person names by cluster id, for export (`face_names`). The cached scan is not changed. */
   faceNames: Record<string, string>;
   filter: FilterState;
@@ -643,6 +680,7 @@ export const DEFAULT_VIEW: ViewState = {
   setAge: false,
   readBodies: false,
   drops: [],
+  cropWatermarks: false,
   faceNames: {},
   filter: DEFAULT_FILTER,
 };

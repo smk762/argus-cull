@@ -474,7 +474,7 @@ export function CullApp() {
         template.folder,
         live,
         template.policy,
-        { withGarments: template.withGarments, setAge: template.setAge, readBodies: template.readBodies, drops: template.drops, prefilter: prefilterOffered },
+        { withGarments: template.withGarments, setAge: template.setAge, readBodies: template.readBodies, drops: template.drops, prefilter: prefilterOffered, cropWatermarks: template.cropWatermarks },
         (event) => {
           setProgress((current) => mergeProgress(current ?? [], event));
           // Curator 0.5.1 says on every progress event which checks are still running.

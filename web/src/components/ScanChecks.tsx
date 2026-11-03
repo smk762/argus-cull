@@ -43,11 +43,13 @@ export function ScanChecks({
   setAge,
   readBodies,
   drops = [],
+  cropWatermarks = false,
   disabled,
   onWithGarments,
   onSetAge,
   onReadBodies,
   onDrops,
+  onCropWatermarks,
 }: {
   detectors: Detectors | null;
   health: Health | null;
@@ -55,11 +57,13 @@ export function ScanChecks({
   setAge: boolean;
   readBodies: boolean;
   drops?: readonly Prefilter[];
+  cropWatermarks?: boolean;
   disabled: boolean;
   onWithGarments: (on: boolean) => void;
   onSetAge: (on: boolean) => void;
   onReadBodies: (on: boolean) => void;
   onDrops?: (drops: Prefilter[]) => void;
+  onCropWatermarks?: (on: boolean) => void;
 }) {
   const garments = Boolean(detectors?.garments);
   const set = Boolean(health?.set_age && detectors?.mivolo);
@@ -68,7 +72,8 @@ export function ScanChecks({
   // Each drop needs the check it reads: NudeNet or EraX, face detection, MiVOLO.
   const offered: Record<Prefilter, boolean> = { nsfw: Boolean(detectors?.nudenet || detectors?.erax), "no-face": faces, "no-age": Boolean(detectors?.mivolo) };
   const prefilter = Boolean(health?.prefilter && onDrops) && PREFILTERS.some((kind) => offered[kind]);
-  if (!garments && !set && !bodies && !prefilter) return null;
+  const crop = Boolean(health?.watermark_detect && detectors?.watermark && onCropWatermarks);
+  if (!garments && !set && !bodies && !prefilter && !crop) return null;
   return (
     <section className="space-y-2">
       {prefilter && onDrops ? (
@@ -126,6 +131,20 @@ export function ScanChecks({
             {readBodies
               ? "MiVOLO reads each person's body as well as the face. A person with no visible face gets a body-only age, which can only add under-18 holds. Slower; crowded frames often give no usable body."
               : "Off by default. Gives MiVOLO each person's body, so a person the face detector missed still gets an age for the under-18 check."}
+          </p>
+        </>
+      ) : null}
+      {crop && onCropWatermarks ? (
+        <>
+          <label className="flex items-center gap-2 text-small">
+            <input type="checkbox" checked={cropWatermarks} disabled={disabled} onChange={(event) => onCropWatermarks(event.target.checked)} />
+            Crop watermarks
+            <Info text="Each frame goes to the watermark detector first. A watermark at the edge is cut away, at most 15% of a side per edge, and every check (faces, NudeNet, SingGuard) sees the cropped frame; export writes it cropped (copy only). A watermark no edge cut removes rejects the frame as crop:overlay; one the detector could not check is crop:unchecked. Source files are never changed." />
+          </label>
+          <p className="text-caption text-text-muted">
+            {cropWatermarks
+              ? "This scan crops watermarks at the edges before every check, so verdicts read the frame without them. Scan the folder again with this off to compare."
+              : "Off by default: it changes what every check sees. Turn it on to scan with edge watermarks cut away, and compare against a run without."}
           </p>
         </>
       ) : null}

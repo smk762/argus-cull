@@ -85,6 +85,16 @@ function QualityTable({ image }: { image: ImageResult }) {
         ...SCORE_PARTS.filter(([key]) => breakdown[key] != null).map(([key, label]): Row => [label, breakdown[key].toFixed(3)]),
         ...extra.map(([key, value]): Row => [key.replaceAll("_", " "), value.toFixed(3)]),
         ["Size", `${image.width}×${image.height}`],
+        image.crop
+          ? [
+              "Cropped",
+              `${image.crop.left},${image.crop.top} – ${image.crop.right},${image.crop.bottom}`,
+              image.crop_source === "detected" ? "Watermark found and cut away; every check saw the cropped frame" : "Box given by hand; every check saw the cropped frame",
+            ]
+          : null,
+        image.watermarks != null
+          ? ["Watermarks", image.watermarks.length === 0 ? "none found" : image.watermarks.map((hit) => `${hit.label} ${hit.score.toFixed(2)}`).join(", ")]
+          : null,
         ["Sharpness, raw", image.sharpness.toFixed(1)],
         image.artifact_score != null ? ["Artifact, raw", image.artifact_score.toFixed(2)] : null,
       ]}

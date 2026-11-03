@@ -3,6 +3,7 @@ import type { Progress } from "./types";
 const PHASES: Record<string, string> = {
   starting: "Starting",
   collecting: "Reading the folder",
+  watermarks: "Finding watermarks",
   scoring: "Scoring images",
   faces: "Estimating age",
   identities: "Grouping faces",
@@ -45,7 +46,7 @@ export function progressRatio(progress: Progress): number | null {
 }
 
 /** The order the curator runs its phases in. Faces and NudeNet overlap on 0.5.1; `pending_checks` covers that. */
-const ORDER = ["starting", "collecting", "scoring", "faces", "identities", "prefilter", "scenes", "garments", "nsfw", "guard", "clustering"];
+const ORDER = ["starting", "collecting", "watermarks", "scoring", "faces", "identities", "prefilter", "scenes", "garments", "nsfw", "guard", "clustering"];
 
 export type CheckStage = "running" | "queued" | "waiting";
 
