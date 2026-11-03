@@ -148,6 +148,8 @@ export interface Health {
   scan_control?: boolean;
   /** Curator 0.12: `DELETE /scan/{id}` removes one cached scan. */
   scan_delete?: boolean;
+  /** Curator 0.13: export carries each image's sidecars and writes `run_stats.json`; a move drops the moved rows from the cached scan. */
+  export_sidecars?: boolean;
   /** Curator 0.7: frames with no face can take the set's age (`faces.set_age`). */
   set_age?: boolean;
   /** Curator 0.8: `GET /guard/policies` serves each policy's text. */
@@ -596,6 +598,12 @@ export interface ExportResult {
   exported_abs_paths: Record<string, string>;
   /** Sidecars written beside exported files (`write_xmp`). Absent on an older curator. */
   xmp_written?: number;
+  /** `.txt` / `.xmp` / `.json` files carried beside the exported images (`carry_sidecars`, curator 0.13). */
+  sidecars_carried?: number;
+  /** Sidecars that could not be carried; each image still landed. */
+  sidecars_failed?: number;
+  /** Where `run_stats` was written (`<dest>/run_stats.json`, curator 0.13). */
+  run_stats_path?: string | null;
 }
 
 export const DEFAULT_FILTER: FilterState = {
