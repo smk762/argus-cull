@@ -7,7 +7,7 @@ import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, fi
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
-import { exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
+import { defaultExportDest, exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
 import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
@@ -543,9 +543,10 @@ export function CullApp() {
     }
   }
 
-  function downloadRunStats() {
-    if (!summary) return;
-    const stats = runStats(summary, selection, labels, tags, cohorts, policyNames, new Date(), {
+  /** The Run stats JSON for the scan on screen: the button's download, and the copy an export writes beside its manifest. */
+  function currentRunStats() {
+    if (!summary) return null;
+    return runStats(summary, selection, labels, tags, cohorts, policyNames, new Date(), {
       curatorVersion: health?.version ?? null,
       cullVersion: CULL_VERSION,
       filters: selectionRequest.current,
@@ -553,6 +554,11 @@ export function CullApp() {
       faceNames: view.faceNames,
       policiesOff: offPolicies,
     });
+  }
+
+  function downloadRunStats() {
+    const stats = currentRunStats();
+    if (!summary || !stats) return;
     downloadText(runStatsFilename(summary, offPolicies), JSON.stringify(stats, null, 2), "application/json");
   }
 
@@ -752,12 +758,24 @@ export function CullApp() {
     setExporting(true);
     setExportError(null);
     setExportProgress(null);
+    const sidecars = Boolean(health?.export_sidecars);
+    const scanId = summary.scan_id;
     try {
-      const result = await exportScan(summary.scan_id, dest, mode, selectBody(view.filter, gates, summary), setExportProgress, {
+      const result = await exportScan(scanId, dest, mode, selectBody(view.filter, gates, summary), setExportProgress, {
         writeXmp,
         faceNames: view.faceNames,
+        carrySidecars: sidecars,
+        runStats: sidecars ? currentRunStats() : null,
       });
       setExportResult(result);
+      // Moved files are gone from the source folder: they leave the grid, the way a delete does.
+      // The curator drops them from the cached scan too (export_sidecars), so a reload agrees.
+      if (mode === "move") {
+        const moved = Object.keys(result.exported_paths);
+        if (moved.length > 0) dropDeleted(scanId, moved);
+        const body = await getScans().catch(() => null);
+        if (body) setScanList(body);
+      }
     } catch (err: unknown) {
       setExportError(err instanceof Error ? err.message : "Export failed.");
     } finally {
@@ -1108,6 +1126,10 @@ export function CullApp() {
       {exportOpen ? (
         <ExportDialog
           allowMove={Boolean(health?.allow_move)}
+          initialDest={summary && root != null ? defaultExportDest(folderLabel(summary.folder, root).rel) : "selection"}
+          exportRoot={health?.export_root ?? null}
+          sidecars={Boolean(health?.export_sidecars)}
+          kept={selection?.scan_id === summary?.scan_id ? (selection?.kept ?? null) : null}
           busy={exporting}
           progress={exportProgress}
           error={exportError}

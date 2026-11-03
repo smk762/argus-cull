@@ -32,11 +32,27 @@ export interface ExportBody extends SelectRequest {
   write_manifest: boolean;
   write_xmp?: boolean;
   face_names?: Record<string, string>;
+  carry_sidecars?: boolean;
+  run_stats?: unknown;
 }
 
 export interface ExportExtras {
   writeXmp?: boolean;
   faceNames?: Record<string, string>;
+  /** Move, copy or link each image's `.txt` / `.xmp` / `.json` sidecars with it. Sent only to a curator that reports `export_sidecars`. */
+  carrySidecars?: boolean;
+  /** The Run stats JSON, written into the export folder as `run_stats.json`. Same curator gate. */
+  runStats?: unknown;
+}
+
+/**
+ * Where an export of a scan lands by default: the scan folder's path under
+ * the source root, so the curated output root mirrors the source root's
+ * folders. A scan of the root itself has no path of its own and gets `selection`.
+ */
+export function defaultExportDest(scanRel: string): string {
+  const rel = scanRel.replace(/^\/+|\/+$/g, "");
+  return rel || "selection";
 }
 
 export function exportBody(
@@ -56,5 +72,7 @@ export function exportBody(
     write_manifest: true,
     ...(extras.writeXmp ? { write_xmp: true } : {}),
     ...(names ? { face_names: names } : {}),
+    ...(extras.carrySidecars ? { carry_sidecars: true } : {}),
+    ...(extras.runStats != null ? { run_stats: extras.runStats } : {}),
   };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "./detectors";
 import { contentRating, exposedLabelsForRequest, guardRuleCounts, guardRuleLabel, ruleMatches, isSensitive, rateContent, ratingCounts, recordedGuardRules } from "./moderation";
-import { exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
+import { defaultExportDest, exportedAbsPathList, exportBody, keptPathList, selectionJsonl } from "./paths";
 import { ageMissing, awaitingChecks, blurFromEnv, bodyAges, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, revealHeld, shouldBlur, shownAge, sortImages, usesSetAge, youngestAge } from "./chunks";
 import { evaluateSubset } from "./subset";
 import { cascadePath, displayGuardExplanation, finalJudgment, splitGuardExplanation } from "./guardText";
@@ -327,6 +327,22 @@ describe("path downloads", () => {
     });
     expect(named.write_xmp).toBe(true);
     expect(named.face_names).toEqual({ face_1: "Ada", face_3: "Ada" });
+  });
+
+  it("sends sidecars and run stats only when asked", () => {
+    const plain = exportBody("scan", "a/b", "move", selectBody(DEFAULT_FILTER, openGates()));
+    expect(plain).not.toHaveProperty("carry_sidecars");
+    expect(plain).not.toHaveProperty("run_stats");
+    const full = exportBody("scan", "a/b", "move", selectBody(DEFAULT_FILTER, openGates()), { carrySidecars: true, runStats: { scan_id: "scan" } });
+    expect(full.carry_sidecars).toBe(true);
+    expect(full.run_stats).toEqual({ scan_id: "scan" });
+    expect(exportBody("scan", "a/b", "copy", selectBody(DEFAULT_FILTER, openGates()), { carrySidecars: true, runStats: null })).not.toHaveProperty("run_stats");
+  });
+
+  it("mirrors the scan folder under the output root", () => {
+    expect(defaultExportDest("Alice/AliceN001C (04-25-23)")).toBe("Alice/AliceN001C (04-25-23)");
+    expect(defaultExportDest("/nested/")).toBe("nested");
+    expect(defaultExportDest("")).toBe("selection");
   });
 });
 
