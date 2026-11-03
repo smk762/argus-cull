@@ -27,7 +27,7 @@ The curator runs the CUDA image (`latest-gpu`, `gpus: all`), so the host needs t
 
 Put machine-local changes like those in `compose.override.yaml`, which compose merges automatically and git ignores. Check it after an update: an override that pins its own `image:` keeps the old curator, or names one that cannot be pulled.
 
-Exports land in the curated output root, `CURATED_OUTPUT_ROOT_PATH` in `.env` (`CURATOR_OUTPUT_PATH`, the older name, still works), mounted as `/data/out`. Move stays off unless `.env` sets `ALLOW_MOVE=1`, which compose passes to the curator as `CURATOR_ALLOW_MOVE`. The export dialog names move as destructive and disables it when the server refuses it.
+Exports land in the curated output root, `CURATED_OUTPUT_ROOT_PATH` in `.env`, mounted as `/data/out`. Move stays off unless `.env` sets `ALLOW_MOVE=1`, which compose passes to the curator as `CURATOR_ALLOW_MOVE`. The export dialog names move as destructive and disables it when the server refuses it.
 
 Without Docker, from `web/`:
 

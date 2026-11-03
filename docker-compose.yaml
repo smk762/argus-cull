@@ -68,8 +68,8 @@ services:
       - ARGUS_GPU_LEASE_TIMEOUT_S=${ARGUS_GPU_LEASE_TIMEOUT_S:-300}
     volumes:
       - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images
-      # The curated output root (CURATED_OUTPUT_ROOT_PATH; CURATOR_OUTPUT_PATH is the older name).
-      - ${CURATED_OUTPUT_ROOT_PATH:-${CURATOR_OUTPUT_PATH:-./out}}:/data/out
+      # The curated output root (CURATED_OUTPUT_ROOT_PATH in .env).
+      - ${CURATED_OUTPUT_ROOT_PATH:-./out}:/data/out
       - ~/.cache/argus_curator:/root/.cache/argus_curator
       - ~/.cache/huggingface:/root/.cache/huggingface
       - ~/.insightface:/root/.insightface
