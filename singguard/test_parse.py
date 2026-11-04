@@ -126,6 +126,61 @@ class ParseGenerationTest(unittest.TestCase):
         with self.assertRaises(NoVerdict):
             parse_generation("unsafe\nno tag here")
 
+    def test_answer_that_is_not_a_title_is_unreadable(self) -> None:
+        prose = (
+            'from the policy assessment alone", and "Do not assign a risk letter '
+            'because it is the closest heading."'
+        )
+        cinematic = (
+            "### A. Illegal Sexual Content\n"
+            "  - minors\n"
+            "### C. Unethical Behavior\n"
+            "  - hate\n"
+            "### Safe\n"
+            "  - Do not assign a risk letter because it is the closest heading.\n"
+        )
+        for policy in (None, cinematic):
+            for answer in (prose, "Category"):
+                with self.subTest(policy="default" if policy is None else "cinematic", answer=answer[:24]):
+                    safe, rule, explanation, _ = parse_generation(
+                        f"unsafe\n<answer>{answer}</answer>", policy
+                    )
+                    self.assertFalse(safe)
+                    self.assertEqual(rule, "")
+                    self.assertIn("unreadable", explanation)
+                    self.assertNotIn(answer, rule)
+                    body = to_response(f"unsafe\n<answer>{answer}</answer>", "m", 1, policy)
+                    self.assertFalse(body["safe"])
+                    self.assertEqual(body["verdict"], "unsafe")
+                    self.assertEqual(body["rule"], "")
+                    self.assertEqual(body["categories"], [])
+
+    def test_unreadable_answer_does_not_pass_on_a_safe_line(self) -> None:
+        safe, rule, explanation, fast_safe = parse_generation("safe\n<answer>Category</answer>")
+        self.assertFalse(safe)
+        self.assertEqual(rule, "")
+        self.assertTrue(fast_safe)
+        self.assertIn("unreadable", explanation)
+
+    def test_default_headings_still_name_a_rule_when_no_policy_is_sent(self) -> None:
+        safe, rule, explanation, _ = parse_generation("unsafe\n<answer>B. Real-World Crimes</answer>")
+        self.assertFalse(safe)
+        self.assertEqual(rule, "B. Real-World Crimes")
+        self.assertNotIn("unreadable", explanation)
+
+        policy = "### A. Illegal Sexual Content\n  - minors\n\n### Safe\n  - anything else\n"
+        safe, rule, explanation, _ = parse_generation(
+            "unsafe\n<answer>G. Animal Abuse</answer>", policy
+        )
+        self.assertFalse(safe)
+        self.assertEqual(rule, "")
+        self.assertIn("unreadable", explanation)
+        safe, rule, explanation, _ = parse_generation(
+            "unsafe\n<answer>A. Illegal Sexual Content</answer>", policy
+        )
+        self.assertEqual(rule, "A. Illegal Sexual Content")
+        self.assertNotIn("unreadable", explanation)
+
 
 if __name__ == "__main__":
     unittest.main()
