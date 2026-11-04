@@ -25,6 +25,7 @@ function destProblem(dest: string): string | null {
 
 export function ExportDialog({
   allowMove,
+  copyOnly = false,
   initialDest = "selection",
   exportRoot = null,
   sidecars = false,
@@ -38,6 +39,8 @@ export function ExportDialog({
   onDownloadExported,
 }: {
   allowMove: boolean;
+  /** The scan cropped images, which only a copy can write cropped: the curator refuses a symlink or a move. */
+  copyOnly?: boolean;
   /** Where the folder field starts: the scan folder's path under the source root, so the output mirrors it. */
   initialDest?: string;
   /** The curator's export root, to show where the files will land. */
@@ -55,7 +58,9 @@ export function ExportDialog({
   onDownloadExported: () => void;
 }) {
   const [dest, setDest] = useState(initialDest);
-  const [mode, setMode] = useState<ExportMode>("copy");
+  const [picked, setMode] = useState<ExportMode>("copy");
+  // A running scan can crop its first image while the dialog is open.
+  const mode = copyOnly ? "copy" : picked;
   const [writeXmp, setWriteXmp] = useState(false);
   const problem = destProblem(dest);
   const chosen = MODES.find((item) => item.id === mode) ?? MODES[0];
@@ -93,11 +98,13 @@ export function ExportDialog({
                 name="export-mode"
                 value={item.id}
                 checked={mode === item.id}
-                disabled={item.id === "move" && !allowMove}
+                disabled={(item.id === "move" && !allowMove) || (copyOnly && item.id !== "copy")}
                 onChange={() => setMode(item.id)}
               />
               {item.label}
-              {item.id === "move" && !allowMove ? (
+              {copyOnly && item.id !== "copy" ? (
+                <span className="text-caption text-text-muted">this scan cropped images, so it exports by copy</span>
+              ) : item.id === "move" && !allowMove ? (
                 <span className="text-caption text-text-muted">needs ALLOW_MOVE=1</span>
               ) : null}
             </label>

@@ -1,4 +1,4 @@
-# /health probe shared by the nudenet and erax sidecars.
+# /health probe shared by the nudenet, erax and watermark sidecars.
 x-sidecar-health: &sidecar-health
   test:
     [

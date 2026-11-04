@@ -1,7 +1,7 @@
-"""NudeNet-shaped ``POST /infer`` plumbing shared by the nudenet and erax sidecars.
+"""NudeNet-shaped ``POST /infer`` plumbing shared by the nudenet, erax and watermark sidecars.
 
 Each image copies this file in from the ``common`` build context (see
-docker-compose.yaml), so a fix here reaches both.
+docker-compose.yaml), so a fix here reaches all three.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ async def form_images(form) -> list[bytes]:
 def decode_bgr(data: bytes) -> np.ndarray:
     """Three-channel BGR in stored pixel order (no EXIF rotation).
 
-    Both sidecars decode the same way, so curator can compare EraX boxes
+    Every sidecar decodes the same way, so curator can compare EraX boxes
     with NudeNet's. Grayscale frames come back as three channels.
     """
     mat = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)

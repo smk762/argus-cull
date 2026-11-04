@@ -106,6 +106,11 @@ export interface ScanBody {
   crops?: CropConfig;
 }
 
+/** The scan looked for watermarks itself (`crops.detect`). */
+export function detectsWatermarks(config: CropConfig | undefined): boolean {
+  return config?.enabled === true && config.detect === true;
+}
+
 /** The scan request's prefilter block from the form's choices. */
 export function prefilterConfig(drops: readonly Prefilter[]): PrefilterConfig {
   return { drop_nsfw: drops.includes("nsfw"), drop_no_face: drops.includes("no-face"), drop_no_age: drops.includes("no-age") };

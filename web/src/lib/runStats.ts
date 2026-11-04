@@ -3,7 +3,7 @@ import { bandOf, cohortStats, type Band, type CohortConfig } from "./cohorts";
 import type { ImageLabel } from "./labels";
 import { ratingCounts } from "./moderation";
 import { dissentingPolicies, effectiveUnsafe, policyStats, rate, resolvedGuard, shieldState, verdictConflict } from "./policies";
-import { facetCounts } from "./select";
+import { detectsWatermarks, facetCounts } from "./select";
 import type { ContentRating, GuardResult, ImageResult, PrefilterConfig, ScanSummary, SelectRequest, SelectResult } from "./types";
 
 /** What produced the numbers, from outside the scan record: versions, the keep-set filters, and the blur settings. */
@@ -180,8 +180,15 @@ function count(values: Iterable<string>): Record<string, number> {
   return out;
 }
 
-/** `similar-to:17.jpg` counts as `similar-to`: the reason, not the file it names. */
+/** `crop:unchecked (timed out)` counts as `crop:unchecked`: the curator's detail differs image by image. */
+function rejectKind(reason: string): string {
+  const detail = reason.indexOf(" (");
+  return reason.startsWith("crop:") && detail > 0 ? reason.slice(0, detail) : reason;
+}
+
+/** `similar-to:17.jpg` counts as `similar-to`: the reason, not the file it names. A crop reject keeps its kind, since overlay and unchecked mean different things. */
 function reasonKind(reason: string): string {
+  if (reason.startsWith("crop:")) return rejectKind(reason);
   const colon = reason.indexOf(":");
   return colon > 0 ? reason.slice(0, colon) : reason;
 }
@@ -313,14 +320,14 @@ export function runStats(
       policy: guard?.policy ?? null,
       variants: [...(guard?.variants ?? [])],
       prefilter: summary.prefilter_config ?? null,
-      crop_watermarks: summary.crop_config?.enabled === true && summary.crop_config.detect === true,
+      crop_watermarks: detectsWatermarks(summary.crop_config),
     },
     images: {
       total: summary.total,
       passed: summary.passed,
       rejected: summary.rejected,
       duplicates: summary.duplicates,
-      reject_reasons: count(summary.results.filter((image) => image.reject_reason).map((image) => image.reject_reason as string)),
+      reject_reasons: count(summary.results.filter((image) => image.reject_reason).map((image) => rejectKind(image.reject_reason as string))),
       kept: rows ? rows.filter((row) => row.keep_reason === "").length : null,
       left_out: rows ? rows.filter((row) => row.keep_reason !== "").length : null,
       left_out_reasons: rows ? count(rows.filter((row) => row.keep_reason !== "").map((row) => reasonKind(row.keep_reason))) : null,
