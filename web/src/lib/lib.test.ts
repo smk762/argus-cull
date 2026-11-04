@@ -218,6 +218,22 @@ describe("select body", () => {
     expect(parseView(new URLSearchParams("")).cropWatermarks).toBe(false);
   });
 
+  it("sends the edge cut limit only off the curator's default, and keeps it in the URL", () => {
+    const checks = { withGarments: false, setAge: false, readBodies: false, cropWatermarks: true };
+    const detectors = { ...DETECTORS, watermark: true };
+    expect(scanBody("s", detectors, null, { ...checks, cropMaxCut: 15 }).crops).toEqual({ enabled: true, detect: true });
+    expect(scanBody("s", detectors, null, { ...checks, cropMaxCut: 25 }).crops).toEqual({ enabled: true, detect: true, max_cut: 0.25 });
+    // The curator refuses 0.5 and above, so a hand-edited value stays inside its range.
+    expect(scanBody("s", detectors, null, { ...checks, cropMaxCut: 80 }).crops?.max_cut).toBe(0.49);
+    const view = { ...DEFAULT_VIEW, cropWatermarks: true, cropMaxCut: 25 };
+    expect(serializeView(view)).toContain("cropcut=25");
+    expect(parseView(new URLSearchParams(serializeView(view).slice(1))).cropMaxCut).toBe(25);
+    expect(serializeView({ ...view, cropMaxCut: 15 })).not.toContain("cropcut");
+    expect(serializeView({ ...view, cropWatermarks: false })).not.toContain("cropcut");
+    expect(parseView(new URLSearchParams("cropcut=junk")).cropMaxCut).toBe(15);
+    expect(parseView(new URLSearchParams("")).cropMaxCut).toBe(15);
+  });
+
   it("requests a detector only when its weights are loaded", () => {
     expect(scanBody("shoots", NONE).faces).toEqual({ enabled: false, fairface: false, mivolo: false });
     expect(scanBody("shoots", NONE).scenes).toEqual({ enabled: false });

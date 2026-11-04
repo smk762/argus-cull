@@ -54,6 +54,8 @@ export interface RunStats {
     prefilter: PrefilterConfig | null;
     /** The scan found watermarks and cropped them away before every check (`crops.detect`). */
     crop_watermarks: boolean;
+    /** Most of a side one edge cut could take, as the curator records it (a fraction); null when the scan did not record one. */
+    crop_max_cut: number | null;
   };
   images: {
     total: number;
@@ -321,6 +323,7 @@ export function runStats(
       variants: [...(guard?.variants ?? [])],
       prefilter: summary.prefilter_config ?? null,
       crop_watermarks: detectsWatermarks(summary.crop_config),
+      crop_max_cut: summary.crop_config?.max_cut ?? null,
     },
     images: {
       total: summary.total,

@@ -314,7 +314,23 @@ export interface WatermarkDetection {
   bbox: number[];
 }
 
-/** What a scan crops before every check. Only `enabled` + `detect` is sent by cull. */
+/** The curator's default `max_cut`, in percent, and the whole percents it accepts (above 0, below 50). */
+export const DEFAULT_CROP_MAX_CUT = 15;
+export const MIN_CROP_MAX_CUT = 1;
+export const MAX_CROP_MAX_CUT = 49;
+
+/** *value* as a percent the curator accepts; anything that is not a number is the default. */
+export function cropMaxCutPercent(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_CROP_MAX_CUT;
+  return Math.min(MAX_CROP_MAX_CUT, Math.max(MIN_CROP_MAX_CUT, Math.round(value)));
+}
+
+/** The percent a recorded `max_cut` (a fraction of the side) stands for. */
+export function cropMaxCutFromFraction(value: unknown): number {
+  return typeof value === "number" ? cropMaxCutPercent(value * 100) : DEFAULT_CROP_MAX_CUT;
+}
+
+/** What a scan crops before every check. Cull sends `enabled`, `detect` and, off its default, `max_cut`. */
 export interface CropConfig {
   enabled: boolean;
   detect?: boolean;
@@ -574,6 +590,8 @@ export interface ViewState {
   drops: Prefilter[];
   /** The next scan finds watermarks and crops them away before every check. Off unless asked for: it changes what every check sees. */
   cropWatermarks: boolean;
+  /** Most of a side one edge cut may take, in percent. A cut takes only what the watermark needs, up to this. */
+  cropMaxCut: number;
   /** Person names by cluster id, for export (`face_names`). The cached scan is not changed. */
   faceNames: Record<string, string>;
   filter: FilterState;
@@ -678,6 +696,7 @@ export const DEFAULT_VIEW: ViewState = {
   readBodies: false,
   drops: [],
   cropWatermarks: false,
+  cropMaxCut: DEFAULT_CROP_MAX_CUT,
   faceNames: {},
   filter: DEFAULT_FILTER,
 };

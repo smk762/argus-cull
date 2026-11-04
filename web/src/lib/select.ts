@@ -1,6 +1,7 @@
 import { exposedLabelsForRequest } from "./moderation";
 import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
 import type { CheckConfig, CropConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, Prefilter, PrefilterConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
+import { cropMaxCutPercent, DEFAULT_CROP_MAX_CUT } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -147,6 +148,8 @@ export interface ScanChecks {
   prefilter?: boolean;
   /** Find watermarks and crop them away before every check (`crops.detect`). Sent only when /detectors names a watermark detector. */
   cropWatermarks?: boolean;
+  /** Most of a side one edge cut may take, in percent. Sent only when it differs from the curator's default. */
+  cropMaxCut?: number;
 }
 
 export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false, readBodies: false };
@@ -173,8 +176,13 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
     nsfw: { enabled: Boolean(detectors.nudenet) },
     guard: guardBody(detectors, policies),
     ...prefilterBody(detectors, checks),
-    ...(checks.cropWatermarks && detectors.watermark ? { crops: { enabled: true, detect: true } } : {}),
+    ...(checks.cropWatermarks && detectors.watermark ? { crops: cropsBody(checks) } : {}),
   };
+}
+
+function cropsBody(checks: ScanChecks): CropConfig {
+  const cut = cropMaxCutPercent(checks.cropMaxCut);
+  return { enabled: true, detect: true, ...(cut !== DEFAULT_CROP_MAX_CUT ? { max_cut: cut / 100 } : {}) };
 }
 
 function prefilterBody(detectors: Detectors, checks: ScanChecks): { prefilter?: PrefilterConfig } {
