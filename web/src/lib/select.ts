@@ -1,6 +1,6 @@
 import { exposedLabelsForRequest } from "./moderation";
 import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
-import type { CheckConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, Prefilter, PrefilterConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
+import type { CheckConfig, CropConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, Prefilter, PrefilterConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -104,6 +104,7 @@ export interface ScanBody {
   nsfw: CheckConfig;
   guard: GuardConfig;
   prefilter?: PrefilterConfig;
+  crops?: CropConfig;
 }
 
 /** The scan request's prefilter block from the form's choices. */
@@ -140,6 +141,8 @@ export interface ScanChecks {
    */
   drops?: readonly Prefilter[];
   prefilter?: boolean;
+  /** Find watermarks and crop them away before every check (`crops.detect`). Sent only when /detectors names a watermark detector. */
+  cropWatermarks?: boolean;
 }
 
 export const DEFAULT_CHECKS: ScanChecks = { withGarments: false, setAge: false, readBodies: false };
@@ -166,6 +169,7 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
     nsfw: { enabled: Boolean(detectors.nudenet) },
     guard: guardBody(detectors, policies),
     ...prefilterBody(detectors, checks),
+    ...(checks.cropWatermarks && detectors.watermark ? { crops: { enabled: true, detect: true } } : {}),
   };
 }
 

@@ -52,6 +52,8 @@ export interface RunStats {
     variants: string[];
     /** What the scan dropped before scenes, garments and SingGuard; null on a scan that did not record it. */
     prefilter: PrefilterConfig | null;
+    /** The scan found watermarks and cropped them away before every check (`crops.detect`). */
+    crop_watermarks: boolean;
   };
   images: {
     total: number;
@@ -67,6 +69,10 @@ export interface RunStats {
     left_out_reasons: Record<string, number> | null;
     /** Images the scan's prefilter dropped, by kind. Every section below leaves them out. */
     prefiltered: Record<string, number>;
+    /** Images every check saw cropped, by where the box came from (`detected`, `manual`). */
+    cropped: Record<string, number>;
+    /** Images the watermark detector found at least one hit on, cropped or not. */
+    watermarked: number;
   };
   age: {
     /** Frames with a face MiVOLO aged. */
@@ -307,6 +313,7 @@ export function runStats(
       policy: guard?.policy ?? null,
       variants: [...(guard?.variants ?? [])],
       prefilter: summary.prefilter_config ?? null,
+      crop_watermarks: summary.crop_config?.enabled === true && summary.crop_config.detect === true,
     },
     images: {
       total: summary.total,
@@ -318,6 +325,8 @@ export function runStats(
       left_out: rows ? rows.filter((row) => row.keep_reason !== "").length : null,
       left_out_reasons: rows ? count(rows.filter((row) => row.keep_reason !== "").map((row) => reasonKind(row.keep_reason))) : null,
       prefiltered: count(summary.results.filter(isPrefiltered).map((image) => (image.reject_reason as string).slice("prefilter:".length))),
+      cropped: count(summary.results.filter((image) => image.crop).map((image) => image.crop_source ?? "manual")),
+      watermarked: summary.results.filter((image) => (image.watermarks?.length ?? 0) > 0).length,
     },
     age: {
       frames_with_face_age: withFaceAge,

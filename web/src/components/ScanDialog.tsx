@@ -152,11 +152,13 @@ export function ScanDialog({
           setAge={draft.setAge}
           readBodies={draft.readBodies}
           drops={draft.drops}
+          cropWatermarks={draft.cropWatermarks}
           disabled={false}
           onWithGarments={(withGarments) => setDraft((current) => ({ ...current, withGarments }))}
           onSetAge={(setAge) => setDraft((current) => ({ ...current, setAge }))}
           onReadBodies={(readBodies) => setDraft((current) => ({ ...current, readBodies }))}
           onDrops={(drops) => setDraft((current) => ({ ...current, drops }))}
+          onCropWatermarks={(cropWatermarks) => setDraft((current) => ({ ...current, cropWatermarks }))}
         />
         {noImages ? <p className="text-caption text-warning">This folder has no images and no subfolders.</p> : null}
         {busyLabel ? <p className="text-caption text-text-muted">{busyLabel}</p> : null}
