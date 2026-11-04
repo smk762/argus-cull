@@ -164,7 +164,9 @@ def _judge(image: Image.Image, text: str, policy: str | None, thinking: str) -> 
     started = time.perf_counter()
     generated = _generate(image, text, policy, thinking)
     try:
-        response = to_response(generated, _MODEL_NAME, int((time.perf_counter() - started) * 1000))
+        response = to_response(
+            generated, _MODEL_NAME, int((time.perf_counter() - started) * 1000), policy
+        )
     except NoVerdict:
         # The tail says whether the budget ran out before the <answer> tag.
         log.warning("no verdict (%s, %d chars); tail: %r", thinking, len(generated), generated[-160:])
