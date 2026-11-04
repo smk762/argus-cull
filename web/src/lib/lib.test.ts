@@ -81,7 +81,6 @@ describe("url state", () => {
       filter: {
         ...DEFAULT_FILTER,
         minScore: 0.4,
-        includeRejected: true,
         keepSimilar: true,
         facePoses: ["profile", "frontal"] as FilterState["facePoses"],
         garments: ["dress"] as FilterState["garments"],
@@ -103,7 +102,6 @@ describe("url state", () => {
     expect(once.view).toBe("people");
     expect(once.cluster).toBe("face_1");
     expect(once.filter.minScore).toBe(0.4);
-    expect(once.filter.includeRejected).toBe(true);
     expect(once.filter.facePoses).toEqual(["frontal", "profile"]);
     expect(once.filter.garments).toEqual(["dress"]);
     expect(once.filter.minAgeYears).toBe(18);
@@ -504,6 +502,10 @@ describe("scan chunks", () => {
   it("lifts the blur under the NudeNet line and puts it back when policy flags the image", () => {
     const low = { nsfw: { detections: [], labels: {}, exposed_score: 0.2 } };
     expect(shouldBlur({}, ["nsfw"])).toBe(true);
+    // A rejected frame has no readings to clear it, and Unblur NSFW does not lift it.
+    expect(shouldBlur({ passed: false }, [])).toBe(true);
+    expect(shouldBlur({ passed: false }, [], { exposedScore: 0.25, policyBlur: true, unblurNsfw: true })).toBe(true);
+    expect(shouldBlur({ passed: true, nsfw: { detections: [], labels: {}, exposed_score: 0 } }, [])).toBe(false);
     expect(shouldBlur(low, ["guard"])).toBe(false);
     expect(shouldBlur({ nsfw: { detections: [], labels: {}, exposed_score: 0.25 } }, ["guard"])).toBe(true);
     expect(shouldBlur({ ...low, guard: { safe: false, rules: ["A"] } }, [])).toBe(true);

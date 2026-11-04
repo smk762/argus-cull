@@ -69,7 +69,6 @@ export function selectBody(filter: FilterState, gates: FilterAvailability, summa
   const guardActive = guardOn && (filter.guardUnsafe || filter.guardRules.length > 0);
   return {
     min_score: filter.minScore,
-    include_rejected: filter.includeRejected,
     keep_similar: filter.keepSimilar,
     face_clusters: listed(gates.faces, filter.faceClusters),
     face_poses: listed(gates.faces, filter.facePoses),

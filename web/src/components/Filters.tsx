@@ -247,12 +247,6 @@ export function Filters({
         onChange={(minScore) => onChange({ minScore })}
       />
       <Toggle
-        label="Keep hard rejects"
-        info="Adds images that failed blur, size, or aspect to the keep set when they pass the other filters. An image the scan prefiltered (prefilter:<kind>) is never kept."
-        checked={filter.includeRejected}
-        onChange={(includeRejected) => onChange({ includeRejected })}
-      />
-      <Toggle
         label="Keep near-duplicates"
         info="Adds near-duplicate frames to the keep set. It does not hide them in the grid."
         checked={filter.keepSimilar}

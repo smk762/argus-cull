@@ -530,7 +530,6 @@ export interface ScanList {
 
 export interface FilterState {
   minScore: number;
-  includeRejected: boolean;
   keepSimilar: boolean;
   faceClusters: string[];
   facePoses: FacePose[];
@@ -582,7 +581,6 @@ export interface ViewState {
 
 export interface SelectRequest {
   min_score: number;
-  include_rejected: boolean;
   keep_similar: boolean;
   face_clusters: string[] | null;
   face_poses: FacePose[] | null;
@@ -645,7 +643,6 @@ export interface ExportResult {
 
 export const DEFAULT_FILTER: FilterState = {
   minScore: 0.6,
-  includeRejected: false,
   keepSimilar: false,
   faceClusters: [],
   facePoses: [],
