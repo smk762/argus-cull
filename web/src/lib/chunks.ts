@@ -81,6 +81,7 @@ function mivoloYears(attrs: { age_years?: number | null; age_source?: string | n
 type AgedFace = { age_years?: number | null; age_source?: string | null } | null;
 
 type AgeChecked = {
+  passed?: boolean;
   nsfw?: { labels?: Record<string, number>; exposed_score?: number; detections?: unknown } | null;
   nudenet_failed?: boolean;
   guard?: GuardResult | null;
@@ -183,9 +184,12 @@ export function awaitingChecks(image: AgeChecked, pending: readonly string[]): b
  * frames whose under-18 status is not known yet. That is a frame NudeNet has
  * not reported on while it is running, and, while face detection is running,
  * a frame with no age yet whose exposed reading is 0.2 or more. Under 0.2
- * the under-18 rule cannot apply, so the age is not waited for.
+ * the under-18 rule cannot apply, so the age is not waited for. A rejected
+ * frame is held too: the curator gives it no age or NudeNet reading, so
+ * nothing could clear it.
  */
 export function revealHeld(image: AgeChecked, pending: readonly string[]): boolean {
+  if (image.passed === false) return true;
   if (isMinorExposed(image)) return true;
   if (minorAwaitingNude(image, pending)) return true;
   if (pending.includes("nsfw") && image.nsfw == null) return true;

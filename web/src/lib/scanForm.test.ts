@@ -259,8 +259,8 @@ describe("run stats", () => {
     expect(stats.verdicts).toEqual({ unsafe: 1, split: 1, safe: 2, none: 1, official_safe_variant_flagged: 1 });
     expect(stats.content).toMatchObject({ scenes: { bedroom: 1 }, environments: { indoor: 1 } });
     expect(stats.labels).toEqual({ labelled: 1, by_expect: { adult: 1 }, overrides: 0, tagged_by_hand: 1 });
-    // 01, 03 and 04 score at or above 0.25; no frame reads under 18, so Unblur reveals them all.
-    expect(stats.blur).toEqual({ blurred: 3, reasons: { held_minor_or_pending: 0, nudenet_score: 3, erax_only: 0, policy: 0 }, with_unblur: 0 });
+    // 01, 03 and 04 score at or above 0.25 and Unblur reveals them; 05 is rejected, so it is held whatever Unblur says.
+    expect(stats.blur).toEqual({ blurred: 4, reasons: { held_minor_or_pending: 1, nudenet_score: 3, erax_only: 0, policy: 0 }, with_unblur: 1 });
 
     const filters = { min_score: 0.4, min_scene_conf: 0.7 } as unknown as SelectRequest;
     const withContext = runStats(SUMMARY, { scan_id: SUMMARY.scan_id, total: 5, kept: 5, rows: [] }, new Map(), new Map(), NO_TAGS, [], new Date(), {
@@ -273,7 +273,7 @@ describe("run stats", () => {
     expect(withContext.filters).toBe(filters);
     // Scene counts follow the filters' confidence: bedroom read 0.6, under 0.7.
     expect(withContext.content.scenes).toEqual({});
-    expect(withContext.blur).toMatchObject({ blurred: 1, reasons: { nudenet_score: 1 } });
+    expect(withContext.blur).toMatchObject({ blurred: 2, reasons: { held_minor_or_pending: 1, nudenet_score: 1 } });
   });
 
   it("counts EraX sources, under-18 near the line, and cascade overrides", () => {

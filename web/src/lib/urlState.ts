@@ -114,7 +114,6 @@ export function parseView(params: URLSearchParams): ViewState {
     if (rating && !filter.contentRatings.includes(rating)) filter.contentRatings.push(rating);
   }
   filter.minScore = readNumber(params, "min_score", DEFAULT_FILTER.minScore);
-  filter.includeRejected = readFlag(params, "include_rejected");
   filter.keepSimilar = readFlag(params, "keep_similar");
   filter.minAgeYears = readOptional(params, "min_age");
   filter.maxAgeYears = readOptional(params, "max_age");
@@ -216,7 +215,6 @@ export function serializeView(view: ViewState): string {
   }
   for (const id of Object.keys(names).sort()) params.append("name", `${id}:${names[id]}`);
   if (filter.minScore !== DEFAULT_FILTER.minScore) params.set("min_score", String(filter.minScore));
-  if (filter.includeRejected) params.set("include_rejected", "1");
   if (filter.keepSimilar) params.set("keep_similar", "1");
   if (filter.minAgeYears != null) params.set("min_age", String(filter.minAgeYears));
   if (filter.maxAgeYears != null) params.set("max_age", String(filter.maxAgeYears));
