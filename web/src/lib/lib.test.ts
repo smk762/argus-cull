@@ -270,6 +270,11 @@ describe("select body", () => {
     expect(guardRuleLabel("A", adult)).toBe("A. Illegal Sexual Content");
     expect(guardRuleLabel("A", null)).toBe("A. Sexual Content Risk");
     expect(guardRuleLabel("B", adult)).toBe("B. Real-World Crimes & Public Safety");
+    const cinematic = { guard_config: { enabled: true, policy: "adult-cinematic" } } as unknown as ScanSummary;
+    expect(guardRuleLabel("A", cinematic)).toBe("A. Illegal Sexual Content");
+    expect(guardRuleLabel("B", cinematic)).toBe("B. Animal Abuse");
+    expect(guardRuleLabel("C", cinematic)).toBe("C. Unethical Behavior");
+    expect(guardRuleLabel("G", cinematic)).toBe("G. Criminal Instructions");
   });
 
   it("sends NudeNet and SingGuard filters only for a scan that ran them", () => {

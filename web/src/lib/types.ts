@@ -127,12 +127,20 @@ export const GUARD_RULES = [
  * A SingGuard policy name the curator lists in `singguard_policies`: `default`,
  * `adult` (rule A covers only apparent minors, non-consent and sexual violence,
  * and consensual adult nudity is safe), and the variants under evaluation.
- * Letters B to G mean the same thing under every policy.
+ * Letters B to G mean the same thing under every policy except `adult-cinematic`,
+ * which swaps B and G.
  */
 export type GuardPolicy = string;
 
 /** Rule A under the adult policy; B to G keep the default names. */
 export const ADULT_RULE_A = "A. Illegal Sexual Content";
+
+/** The letters `adult-cinematic` names differently from the default. C to F keep their names. */
+export const ADULT_CINEMATIC_RULES: Readonly<Record<string, string>> = {
+  A: ADULT_RULE_A,
+  B: "B. Animal Abuse",
+  G: "G. Criminal Instructions",
+};
 
 export type ExportMode = "copy" | "symlink" | "move";
 
