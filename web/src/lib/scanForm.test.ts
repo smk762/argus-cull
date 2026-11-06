@@ -6,7 +6,7 @@ import { policiesRun, withoutPolicies } from "./policies";
 import { runStats, runStatsFilename } from "./runStats";
 import { templateFromRunStats, templateFromSummary, templateFromView, templateSummary, viewWithTemplate } from "./scanTemplate";
 import { ago } from "./time";
-import { DEFAULT_VIEW, type Detectors, type FaceAttributes, type ImageResult, type ScanSummary, type SelectRequest } from "./types";
+import { DEFAULT_VIEW, type Detectors, type FaceAttributes, type ImageResult, type ScanSummary, type SelectRequest, type SelectResult } from "./types";
 
 const DETECTORS: Detectors = {
   torch: true,
@@ -207,6 +207,26 @@ describe("run stats", () => {
     expect(out.images.cropped).toEqual({ detected: 1 });
     expect(out.images.watermarked).toBe(2);
     expect(templateFromSummary(cropped, "/data/images", DETECTORS).cropWatermarks).toBe(true);
+  });
+
+  it("tallies crop rejects by kind, without the curator's per-image detail", () => {
+    const reasons = ["crop:overlay (2 watermark(s) no edge cut of 15% removes)", "crop:overlay (3 watermark(s) no edge cut of 15% removes)", "crop:unchecked (HTTP 500)"];
+    const rejected: ScanSummary = { ...SUMMARY, results: reasons.map((reason, i) => ({ ...SUMMARY.results[0], rel_path: `${i}.jpg`, passed: false, reject_reason: reason })) };
+    const selection = { scan_id: SUMMARY.scan_id, total: 3, kept: 0, rows: reasons.map((reason, i) => ({ rel_path: `${i}.jpg`, keep: false, keep_reason: reason })) };
+    const out = runStats(rejected, selection as unknown as SelectResult, new Map(), new Map(), NO_TAGS, []);
+    expect(out.images.reject_reasons).toEqual({ "crop:overlay": 2, "crop:unchecked": 1 });
+    expect(out.images.left_out_reasons).toEqual({ "crop:overlay": 2, "crop:unchecked": 1 });
+  });
+
+  it("carries watermark crops only to a curator with a detector, and says so", () => {
+    const file = { ...JSON.parse(JSON.stringify(stats)), config: { ...stats.config, crop_watermarks: true } };
+    expect(templateFromRunStats(file, "/data/images", { ...DETECTORS, watermark: true })).toMatchObject({ template: { cropWatermarks: true }, notes: [] });
+    const without = templateFromRunStats(file, "/data/images", { ...DETECTORS, watermark: false });
+    expect(without.template.cropWatermarks).toBe(false);
+    expect(without.notes.join(" ")).toContain("no watermark detector");
+    const template = { ...without.template, cropWatermarks: true };
+    expect(templateSummary(template, { ...DETECTORS, watermark: true })).toContain("crop watermarks");
+    expect(templateSummary(template, { ...DETECTORS, watermark: false })).not.toContain("crop watermarks");
   });
 
   it("reads the ages, measured and set", () => {

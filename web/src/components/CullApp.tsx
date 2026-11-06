@@ -1126,6 +1126,7 @@ export function CullApp() {
       {exportOpen ? (
         <ExportDialog
           allowMove={Boolean(health?.allow_move)}
+          copyOnly={Boolean(summary?.results.some((image) => image.crop))}
           initialDest={summary && root != null ? defaultExportDest(folderLabel(summary.folder, root).rel) : "selection"}
           exportRoot={health?.export_root ?? null}
           sidecars={Boolean(health?.export_sidecars)}

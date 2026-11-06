@@ -1,6 +1,7 @@
 import { folderLabel } from "./chunks";
 import { defaultPolicyChoice, type PolicyChoice } from "./policies";
 import { withoutScan } from "./purge";
+import { detectsWatermarks } from "./select";
 import { PREFILTERS, type Detectors, type Prefilter, type PrefilterConfig, type ScanSummary, type ViewState } from "./types";
 
 /**
@@ -61,7 +62,7 @@ export function templateFromSummary(summary: ScanSummary, root: string | null, d
     setAge: summary.faces_config.set_age === true,
     readBodies: summary.faces_config.mivolo_body === true,
     drops: dropsFrom(summary.prefilter_config),
-    cropWatermarks: summary.crop_config?.enabled === true && summary.crop_config.detect === true,
+    cropWatermarks: detectsWatermarks(summary.crop_config),
   };
 }
 
@@ -76,7 +77,7 @@ export interface ImportedRun {
  * policies its config names, and the garments, set-age and body checks. A file
  * saved with policies switched off names only the ones left on, so the form
  * runs those. Policies this curator does not offer are dropped and named in
- * `notes`. Throws on a file that is not run stats, or whose folder is outside
+ * `notes`, and so are watermark crops without a detector. Throws on a file that is not run stats, or whose folder is outside
  * the source root.
  */
 export function templateFromRunStats(raw: unknown, root: string | null, detectors: Detectors | null): ImportedRun {
@@ -106,6 +107,9 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
         : `The file was saved with ${off.join(", ")} switched off, so the form runs only the policies left on.`,
     );
   }
+  // Not known yet is not a refusal, the way an empty policy list is not.
+  const cropOffered = detectors == null || detectors.watermark === true;
+  if (config.crop_watermarks === true && !cropOffered) notes.push("The run cropped watermarks, but this curator has no watermark detector, so the form runs without crops.");
   const policy = offered.length > 0 ? { policy: offered[0], variants: offered.slice(1) } : defaultPolicyChoice(available);
   return {
     template: {
@@ -115,7 +119,7 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
       setAge: config.set_age === true,
       readBodies: config.mivolo_body === true,
       drops: dropsFrom(config.prefilter as Partial<Record<keyof PrefilterConfig, unknown>> | null | undefined),
-      cropWatermarks: config.crop_watermarks === true,
+      cropWatermarks: config.crop_watermarks === true && cropOffered,
     },
     notes,
   };
@@ -150,6 +154,6 @@ export function templateSummary(template: ScanTemplate, detectors: Detectors | n
   if (template.setAge) parts.push("set age");
   if (template.readBodies) parts.push("bodies");
   if (template.drops.length > 0) parts.push(`drop ${template.drops.join(", ")}`);
-  if (template.cropWatermarks) parts.push("crop watermarks");
+  if (detectors?.watermark && template.cropWatermarks) parts.push("crop watermarks");
   return parts.join(" · ");
 }
