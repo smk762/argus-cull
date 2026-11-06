@@ -1,6 +1,6 @@
 "use client";
 
-import { PREFILTERS, type Detectors, type Health, type Prefilter, type ScanSummary } from "@/lib/types";
+import { cropMaxCutPercent, DEFAULT_CROP_MAX_CUT, MAX_CROP_MAX_CUT, MIN_CROP_MAX_CUT, PREFILTERS, type Detectors, type Health, type Prefilter, type ScanSummary } from "@/lib/types";
 import { formatYears } from "@/lib/years";
 
 import { Info } from "./Tooltip";
@@ -44,12 +44,14 @@ export function ScanChecks({
   readBodies,
   drops = [],
   cropWatermarks = false,
+  cropMaxCut = DEFAULT_CROP_MAX_CUT,
   disabled,
   onWithGarments,
   onSetAge,
   onReadBodies,
   onDrops,
   onCropWatermarks,
+  onCropMaxCut,
 }: {
   detectors: Detectors | null;
   health: Health | null;
@@ -58,12 +60,14 @@ export function ScanChecks({
   readBodies: boolean;
   drops?: readonly Prefilter[];
   cropWatermarks?: boolean;
+  cropMaxCut?: number;
   disabled: boolean;
   onWithGarments: (on: boolean) => void;
   onSetAge: (on: boolean) => void;
   onReadBodies: (on: boolean) => void;
   onDrops?: (drops: Prefilter[]) => void;
   onCropWatermarks?: (on: boolean) => void;
+  onCropMaxCut?: (percent: number) => void;
 }) {
   const garments = Boolean(detectors?.garments);
   const set = Boolean(health?.set_age && detectors?.mivolo);
@@ -139,13 +143,20 @@ export function ScanChecks({
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={cropWatermarks} disabled={disabled} onChange={(event) => onCropWatermarks(event.target.checked)} />
             Crop watermarks
-            <Info text="Each frame goes to the watermark detector first. A watermark at the edge is cut away, at most 15% of a side per edge, and every check (faces, NudeNet, SingGuard) sees the cropped frame; export writes it cropped (copy only). A watermark no edge cut removes rejects the frame as crop:overlay; one the detector could not check is crop:unchecked. Source files are never changed." />
+            <Info text={`Each frame goes to the watermark detector first. A watermark at the edge is cut away, taking only what it needs, up to ${cropMaxCut}% of a side per edge, and every check (faces, NudeNet, SingGuard) sees the cropped frame; export writes it cropped (copy only). A watermark no edge cut removes rejects the frame as crop:overlay; one the detector could not check is crop:unchecked. Source files are never changed.`} />
           </label>
           <p className="text-caption text-text-muted">
             {cropWatermarks
               ? "This scan crops watermarks at the edges before every check, so verdicts read the frame without them. Scan the folder again with this off to compare."
               : "Off by default: it changes what every check sees. Turn it on to scan with edge watermarks cut away, and compare against a run without."}
           </p>
+          {cropWatermarks && onCropMaxCut ? (
+            <label className="flex flex-col gap-1 text-small">
+              <span>Most one edge may lose: {cropMaxCut}%</span>
+              <input type="range" min={MIN_CROP_MAX_CUT} max={MAX_CROP_MAX_CUT} value={cropMaxCut} disabled={disabled} onChange={(event) => onCropMaxCut(cropMaxCutPercent(event.target.valueAsNumber))} />
+              <span className="text-caption text-text-muted">A limit, not a fixed cut: each edge loses only what clears the watermark. Raise it and fewer frames reject as crop:overlay, but a deep cut can take part of the subject.</span>
+            </label>
+          ) : null}
         </>
       ) : null}
     </section>

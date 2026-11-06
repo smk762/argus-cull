@@ -2,7 +2,7 @@ import { folderLabel } from "./chunks";
 import { defaultPolicyChoice, type PolicyChoice } from "./policies";
 import { withoutScan } from "./purge";
 import { detectsWatermarks } from "./select";
-import { PREFILTERS, type Detectors, type Prefilter, type PrefilterConfig, type ScanSummary, type ViewState } from "./types";
+import { cropMaxCutFromFraction, DEFAULT_CROP_MAX_CUT, PREFILTERS, type Detectors, type Prefilter, type PrefilterConfig, type ScanSummary, type ViewState } from "./types";
 
 /**
  * What the scan form asks for. The same fields live in the URL (`folder`,
@@ -21,6 +21,8 @@ export interface ScanTemplate {
   drops: Prefilter[];
   /** Find watermarks and crop them away before every check. */
   cropWatermarks: boolean;
+  /** Most of a side one edge cut may take, in percent. */
+  cropMaxCut: number;
 }
 
 /** The form's choices from a recorded prefilter block (a summary's, or a Run stats file's). */
@@ -31,7 +33,7 @@ export function dropsFrom(config: Partial<Record<keyof PrefilterConfig, unknown>
 }
 
 /** The form as the URL has it. The policy falls back the way the picker does when the URL names none. */
-export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" | "guardVariants" | "withGarments" | "setAge" | "readBodies" | "drops" | "cropWatermarks">, detectors: Detectors | null): ScanTemplate {
+export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" | "guardVariants" | "withGarments" | "setAge" | "readBodies" | "drops" | "cropWatermarks" | "cropMaxCut">, detectors: Detectors | null): ScanTemplate {
   const base = defaultPolicyChoice(detectors?.singguard_policies);
   return {
     folder: view.folder,
@@ -41,6 +43,7 @@ export function templateFromView(view: Pick<ViewState, "folder" | "guardPolicy" 
     readBodies: view.readBodies,
     drops: [...view.drops],
     cropWatermarks: view.cropWatermarks,
+    cropMaxCut: view.cropMaxCut,
   };
 }
 
@@ -63,6 +66,7 @@ export function templateFromSummary(summary: ScanSummary, root: string | null, d
     readBodies: summary.faces_config.mivolo_body === true,
     drops: dropsFrom(summary.prefilter_config),
     cropWatermarks: detectsWatermarks(summary.crop_config),
+    cropMaxCut: cropMaxCutFromFraction(summary.crop_config?.max_cut),
   };
 }
 
@@ -120,6 +124,7 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
       readBodies: config.mivolo_body === true,
       drops: dropsFrom(config.prefilter as Partial<Record<keyof PrefilterConfig, unknown>> | null | undefined),
       cropWatermarks: config.crop_watermarks === true && cropOffered,
+      cropMaxCut: cropMaxCutFromFraction(config.crop_max_cut),
     },
     notes,
   };
@@ -140,6 +145,7 @@ export function viewWithTemplate(view: ViewState, template: ScanTemplate): ViewS
     readBodies: template.readBodies,
     drops: [...template.drops],
     cropWatermarks: template.cropWatermarks,
+    cropMaxCut: template.cropMaxCut,
     view: "grid",
   };
 }
@@ -154,6 +160,6 @@ export function templateSummary(template: ScanTemplate, detectors: Detectors | n
   if (template.setAge) parts.push("set age");
   if (template.readBodies) parts.push("bodies");
   if (template.drops.length > 0) parts.push(`drop ${template.drops.join(", ")}`);
-  if (detectors?.watermark && template.cropWatermarks) parts.push("crop watermarks");
+  if (detectors?.watermark && template.cropWatermarks) parts.push(template.cropMaxCut === DEFAULT_CROP_MAX_CUT ? "crop watermarks" : `crop watermarks ${template.cropMaxCut}%`);
   return parts.join(" · ");
 }

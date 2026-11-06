@@ -1,3 +1,4 @@
+import { cropMaxCutPercent, DEFAULT_CROP_MAX_CUT } from "./types";
 import { sameMembers } from "./moderation";
 import {
   CONTENT_RATINGS,
@@ -146,6 +147,7 @@ export function parseView(params: URLSearchParams): ViewState {
     readBodies: params.get("bodies") === "1",
     drops: PREFILTERS.filter((kind) => (params.get("drop") ?? "").split(",").includes(kind)),
     cropWatermarks: params.get("crop") === "detect",
+    cropMaxCut: params.has("cropcut") ? cropMaxCutPercent(Number(params.get("cropcut"))) : DEFAULT_CROP_MAX_CUT,
     faceNames,
     filter,
   };
@@ -208,6 +210,7 @@ export function serializeView(view: ViewState): string {
   if (view.readBodies) params.set("bodies", "1");
   if (view.drops.length > 0) params.set("drop", view.drops.join(","));
   if (view.cropWatermarks) params.set("crop", "detect");
+  if (view.cropWatermarks && view.cropMaxCut !== DEFAULT_CROP_MAX_CUT) params.set("cropcut", String(view.cropMaxCut));
   const names: Record<string, string> = {};
   for (const [id, name] of Object.entries(view.faceNames)) {
     const parsed = readFaceName(`${id}:${name}`);
