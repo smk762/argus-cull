@@ -1,5 +1,6 @@
 import { policyVerdicts, resolvedGuard } from "./policies";
 import {
+  ADULT_CINEMATIC_RULES,
   ADULT_RULE_A,
   EXPOSED_LABELS,
   GUARD_RULES,
@@ -102,6 +103,8 @@ export function guardRuleCounts(results: readonly ImageResult[], rules: readonly
 
 /** The name a rule letter has under the policy *summary* was judged by. */
 export function guardRuleLabel(id: string, summary: ScanSummary | null): string {
-  if (id === "A" && summary?.guard_config?.policy === "adult") return ADULT_RULE_A;
+  const policy = summary?.guard_config?.policy;
+  if (id === "A" && policy === "adult") return ADULT_RULE_A;
+  if (policy === "adult-cinematic" && id in ADULT_CINEMATIC_RULES) return ADULT_CINEMATIC_RULES[id];
   return GUARD_RULES.find((rule) => rule.id === id)?.label ?? id;
 }
