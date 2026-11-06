@@ -272,8 +272,11 @@ describe("select body", () => {
     expect(guardRuleLabel("B", adult)).toBe("B. Real-World Crimes & Public Safety");
     const cinematic = { guard_config: { enabled: true, policy: "adult-cinematic" } } as unknown as ScanSummary;
     expect(guardRuleLabel("A", cinematic)).toBe("A. Illegal Sexual Content");
-    expect(guardRuleLabel("B", cinematic)).toBe("B. Animal Abuse");
-    expect(guardRuleLabel("C", cinematic)).toBe("C. Unethical Behavior");
+    expect(guardRuleLabel("B", cinematic)).toBe("B. Unethical Behavior");
+    expect(guardRuleLabel("C", cinematic)).toBe("C. Cybersecurity & Information Manipulation");
+    expect(guardRuleLabel("D", cinematic)).toBe("D. Agent Safety");
+    expect(guardRuleLabel("E", cinematic)).toBe("E. Politically Sensitive Content");
+    expect(guardRuleLabel("F", cinematic)).toBe("F. Animal Abuse");
     expect(guardRuleLabel("G", cinematic)).toBe("G. Criminal Instructions");
   });
 

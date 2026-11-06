@@ -128,17 +128,21 @@ export const GUARD_RULES = [
  * `adult` (rule A covers only apparent minors, non-consent and sexual violence,
  * and consensual adult nudity is safe), and the variants under evaluation.
  * Letters B to G mean the same thing under every policy except `adult-cinematic`,
- * which swaps B and G.
+ * which has its own: see {@link ADULT_CINEMATIC_RULES}.
  */
 export type GuardPolicy = string;
 
 /** Rule A under the adult policy; B to G keep the default names. */
 export const ADULT_RULE_A = "A. Illegal Sexual Content";
 
-/** The letters `adult-cinematic` names differently from the default. C to F keep their names. */
+/** Rules A to G under `adult-cinematic`: B to F sit one letter up from the default, and G is how-to only. */
 export const ADULT_CINEMATIC_RULES: Readonly<Record<string, string>> = {
   A: ADULT_RULE_A,
-  B: "B. Animal Abuse",
+  B: "B. Unethical Behavior",
+  C: "C. Cybersecurity & Information Manipulation",
+  D: "D. Agent Safety",
+  E: "E. Politically Sensitive Content",
+  F: "F. Animal Abuse",
   G: "G. Criminal Instructions",
 };
 
