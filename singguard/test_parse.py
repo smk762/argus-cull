@@ -155,6 +155,25 @@ class ParseGenerationTest(unittest.TestCase):
                     self.assertEqual(body["rule"], "")
                     self.assertEqual(body["categories"], [])
 
+    def test_prose_opening_with_safe_is_unreadable_not_a_rule(self) -> None:
+        policy = "### A. Illegal Sexual Content\n  - minors\n### Safe\n  - anything else\n"
+        prose = "safe/unsafe...<category>. So if policy does not support unsafe for this image"
+        for active in (None, policy):
+            with self.subTest(policy="default" if active is None else "custom"):
+                body = to_response(f"unsafe\n<answer>{prose}</answer>", "m", 1, active)
+                self.assertFalse(body["safe"])
+                self.assertEqual(body["rule"], "")
+                self.assertEqual(body["categories"], [])
+                self.assertIn("unreadable", body["explanation"])
+
+    def test_answer_running_on_past_a_title_records_the_title(self) -> None:
+        safe, rule, explanation, _ = parse_generation(
+            "unsafe\n<answer>B. Real-World Crimes & Public Safety, since the image shows a robbery</answer>"
+        )
+        self.assertFalse(safe)
+        self.assertEqual(rule, "B. Real-World Crimes & Public Safety")
+        self.assertNotIn("unreadable", explanation)
+
     def test_unreadable_answer_does_not_pass_on_a_safe_line(self) -> None:
         safe, rule, explanation, fast_safe = parse_generation("safe\n<answer>Category</answer>")
         self.assertFalse(safe)
