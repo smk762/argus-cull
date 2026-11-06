@@ -33,7 +33,6 @@ _DEFAULT_TITLES = (
     "E. Agent Safety",
     "F. Politically Sensitive Content",
     "G. Animal Abuse",
-    "Safe",
 )
 _UNREADABLE = (
     "SingGuard's <answer> is not Safe and not a title in the active policy. "
@@ -90,18 +89,23 @@ def _late_judgment(raw: str) -> bool | None:
 
 
 def _titles(policy: str | None) -> list[str]:
-    """Headings an ``<answer>`` may name. No policy text means SingGuard's own."""
+    """Rule headings an unsafe ``<answer>`` may name. No policy text means SingGuard's own.
+
+    ``### Safe`` is not a rule, and as a title any prose opening with "safe" would match it.
+    """
     text = (policy or "").strip()
     if not text:
         return list(_DEFAULT_TITLES)
-    return [match.group(1).strip() for match in _HEADING.finditer(text)]
+    headings = (match.group(1).strip() for match in _HEADING.finditer(text))
+    return [heading for heading in headings if heading.casefold() != "safe"]
 
 
 def _rule_title(answer: str, policy: str | None) -> str | None:
     """The rule to record, or None when *answer* is not a title of *policy*.
 
-    A shortened heading matches (``B. Real-World Crimes`` for the full title).
-    The caller's wording is kept for that; an exact match uses the heading.
+    A shortened heading matches (``B. Real-World Crimes`` for the full title),
+    and the caller's wording is kept for that. An exact match uses the heading,
+    as does an answer that runs on past it, so prose is never recorded as a rule.
     """
     wanted = answer.casefold()
     if not wanted:
@@ -112,8 +116,10 @@ def _rule_title(answer: str, policy: str | None) -> str | None:
             return title
     for title in titles:
         name = title.casefold()
-        if name.startswith(wanted) or wanted.startswith(name):
+        if name.startswith(wanted):
             return answer
+        if wanted.startswith(name):
+            return title
     return None
 
 
