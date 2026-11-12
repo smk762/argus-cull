@@ -74,6 +74,21 @@ body {
   background: color-mix(in srgb, var(--color-accent-primary) 45%, transparent);
 }
 
+/*
+ * Native modal dialogs (components/Modal.tsx). The browser makes the page
+ * inert but still scrolls it under the backdrop; overscroll containment on
+ * both stops that without locking overflow on <html> or <body>.
+ */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.8);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
 :focus-visible {
   outline: 2px solid var(--color-accent-tertiary);
   outline-offset: 2px;

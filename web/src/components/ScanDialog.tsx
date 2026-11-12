@@ -7,6 +7,7 @@ import { templateFromRunStats, templateSummary, type ScanTemplate } from "@/lib/
 import type { Detectors, FolderListing, GuardPolicyInfo, Health } from "@/lib/types";
 
 import { FolderPicker } from "./FolderPicker";
+import { closeModal, Modal } from "./Modal";
 import { PolicyPicker } from "./PolicyPicker";
 import { ScanChecks } from "./ScanChecks";
 import { Info } from "./Tooltip";
@@ -66,14 +67,6 @@ export function ScanDialog({
   }
 
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  useEffect(() => {
     let cancel = false;
     getFolders(draft.folder)
       .then((body) => {
@@ -93,13 +86,9 @@ export function ScanDialog({
   const what = templateSummary(draft, detectors);
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80 p-4" role="presentation" onClick={onClose}>
+    <Modal labelledBy="scan-title" className="max-w-lg p-5" onClose={onClose}>
       <form
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="scan-title"
-        className="max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl bg-base-800 p-5 shadow-soft"
-        onClick={(event) => event.stopPropagation()}
+        className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
           if (canScan) onScan(draft);
@@ -168,12 +157,12 @@ export function ScanDialog({
           <button type="submit" className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40" disabled={!canScan}>
             Scan {listing?.path || "source root"}
           </button>
-          <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small" onClick={onClose}>
+          <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small" onClick={closeModal}>
             Cancel
           </button>
           {what ? <span className="text-caption text-text-muted">{what}</span> : null}
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

@@ -14,14 +14,17 @@ const HALF_WIDTH = 136;
 export function Tooltip({ text, children, className = "" }: { text: string; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const id = useId();
-  const [pos, setPos] = useState<{ x: number; y: number; below: boolean } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; below: boolean; host: Element } | null>(null);
 
   function show() {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     const below = rect.top < 120;
     const x = Math.min(Math.max(rect.left + rect.width / 2, HALF_WIDTH), window.innerWidth - HALF_WIDTH);
-    setPos({ x, y: below ? rect.bottom + 6 : rect.top - 6, below });
+    // Inside a modal <dialog> the body sits under the top layer and is inert,
+    // so the tooltip goes into the dialog to stay visible and describable.
+    const host = ref.current?.closest("dialog[open]") ?? document.body;
+    setPos({ x, y: below ? rect.bottom + 6 : rect.top - 6, below, host });
   }
 
   return (
@@ -45,7 +48,7 @@ export function Tooltip({ text, children, className = "" }: { text: string; chil
             >
               {text}
             </span>,
-            document.body,
+            pos.host,
           )
         : null}
     </span>
