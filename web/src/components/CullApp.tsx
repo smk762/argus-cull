@@ -1066,7 +1066,6 @@ export function CullApp() {
       </main>
       {photo && summary ? (
         <PhotoDialog
-          key={photo.rel_path}
           image={photo}
           scanId={summary.scan_id}
           reason={reasons?.get(photo.rel_path)}

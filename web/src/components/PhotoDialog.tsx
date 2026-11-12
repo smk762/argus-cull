@@ -544,7 +544,7 @@ function Summary({
   );
 }
 
-export function PhotoDialog({
+function PhotoPanel({
   image,
   scanId,
   reason,
@@ -552,7 +552,6 @@ export function PhotoDialog({
   facesRan = false,
   scanning = false,
   blur = DEFAULT_BLUR,
-  onClose,
   onDelete,
   onPrevious,
   onNext,
@@ -593,6 +592,9 @@ export function PhotoDialog({
 }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      // Arrows move the caret or the choice in the label fields, not the photo.
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, select, textarea"))) return;
       if (event.key === "ArrowLeft" && onPrevious) {
         event.preventDefault();
         onPrevious();
@@ -635,7 +637,7 @@ export function PhotoDialog({
   }
 
   return (
-    <Modal labelledBy="photo-title" className="max-w-5xl p-4" onClose={onClose}>
+    <>
       <div className="mb-3 flex items-start justify-between gap-3">
         <h2 id="photo-title" className="font-display text-subheading break-all">
           {image.rel_path}
@@ -739,6 +741,19 @@ export function PhotoDialog({
         ) : null}
         {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}
       </div>
+    </>
+  );
+}
+
+/**
+ * The photo modal. The dialog stays open across Previous and Next and only the
+ * panel inside remounts per image (resetting its reveal and delete state), so
+ * the opener focus returns to on close is the grid tile, not the page body.
+ */
+export function PhotoDialog(props: Parameters<typeof PhotoPanel>[0]) {
+  return (
+    <Modal labelledBy="photo-title" className="max-w-5xl p-4" onClose={props.onClose}>
+      <PhotoPanel key={props.image.rel_path} {...props} />
     </Modal>
   );
 }
