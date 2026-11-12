@@ -13,6 +13,7 @@ import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle 
 import { formatYears } from "@/lib/years";
 import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
+import { closeModal, Modal } from "./Modal";
 import { Shield } from "./Shield";
 
 const SCORE_PARTS: [string, string][] = [
@@ -592,7 +593,6 @@ export function PhotoDialog({
 }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
       if (event.key === "ArrowLeft" && onPrevious) {
         event.preventDefault();
         onPrevious();
@@ -604,7 +604,7 @@ export function PhotoDialog({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onPrevious, onNext]);
+  }, [onPrevious, onNext]);
 
   const [shown, setShown] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -635,118 +635,110 @@ export function PhotoDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/80 p-4" role="presentation" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="photo-title"
-        className="max-h-[90dvh] w-full max-w-5xl overflow-auto rounded-xl bg-base-800 p-4 shadow-soft"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <h2 id="photo-title" className="font-display text-subheading break-all">
-            {image.rel_path}
-          </h2>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small disabled:opacity-40" disabled={!onPrevious} onClick={() => onPrevious?.()}>
-              Previous
-            </button>
-            <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small disabled:opacity-40" disabled={!onNext} onClick={() => onNext?.()}>
-              Next
-            </button>
-            {position ? <span className="self-center text-caption text-text-muted">{position}</span> : null}
-            {blocked ? (
-              <button
-                type="button"
-                className="rounded-md border border-warning px-3 py-1 text-small text-warning disabled:opacity-40"
-                disabled={deleting}
-                onClick={() => void remove()}
-              >
-                {deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete"}
-              </button>
-            ) : obscured && !holdReveal ? (
-              <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small" onClick={() => setShown((open) => !open)}>
-                {shown ? "Blur" : "Unblur"}
-              </button>
-            ) : null}
-            <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small" onClick={onClose}>
-              Close
-            </button>
-          </div>
-        </div>
-        <div className="relative overflow-hidden rounded-lg bg-base-900">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={blocked ? thumbUrl(scanId, image.rel_path) : imageUrl(scanId, image.rel_path)}
-            alt={blurred ? "" : image.rel_path}
-            className={`max-h-[70dvh] w-full object-contain ${blurred ? "scale-105 blur-3xl" : ""}`}
-          />
-          {blurred && !blocked && !holdReveal ? (
+    <Modal labelledBy="photo-title" className="max-w-5xl p-4" onClose={onClose}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <h2 id="photo-title" className="font-display text-subheading break-all">
+          {image.rel_path}
+        </h2>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small disabled:opacity-40" disabled={!onPrevious} onClick={() => onPrevious?.()}>
+            Previous
+          </button>
+          <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small disabled:opacity-40" disabled={!onNext} onClick={() => onNext?.()}>
+            Next
+          </button>
+          {position ? <span className="self-center text-caption text-text-muted">{position}</span> : null}
+          {blocked ? (
             <button
               type="button"
-              className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small"
-              onClick={() => setShown(true)}
+              className="rounded-md border border-warning px-3 py-1 text-small text-warning disabled:opacity-40"
+              disabled={deleting}
+              onClick={() => void remove()}
             >
-              Unblur
+              {deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete"}
+            </button>
+          ) : obscured && !holdReveal ? (
+            <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small" onClick={() => setShown((open) => !open)}>
+              {shown ? "Blur" : "Unblur"}
             </button>
           ) : null}
-          {holdReveal && !blocked ? (
-            <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Scanning…</p>
-          ) : null}
-          {blocked ? (
-            <p className="absolute inset-x-4 bottom-4 rounded-md bg-base-800 px-3 py-2 text-caption text-text-secondary">
-              MiVOLO reads a face as under 18 and NudeNet reported an exposed score of at least 0.2. This photo stays blurred and will not be kept.
-            </p>
-          ) : null}
-        </div>
-        <div className="mt-4 space-y-4 text-small">
-          <Summary image={image} reason={reason} override={override} checking={checking} scanning={scanning} pending={pending} facesRan={facesRan} />
-          {blocked ? (
-            <p className="text-caption text-warning">
-              {deleteError ?? "Delete removes this file from the source folder. Review the ages and scores in this panel first."}
-            </p>
-          ) : null}
-          <AppearanceTable image={image} />
-          {/* The numbers the summary strip already gives are folded: the strip says how much, these say why. */}
-          <Fold title="Quality" summary={qualityLine(image)} open={false}>
-            <QualityTable image={image} />
-          </Fold>
-          {image.nsfw ? (
-            <Fold title="NudeNet" summary={nudeNetLine(image.nsfw, contentRating(image), nsfwSource(image))} open={false}>
-              <NudeNetTable nsfw={image.nsfw} rating={contentRating(image)} source={nsfwSource(image)} erax={image.erax ?? null} />
-            </Fold>
-          ) : null}
-          {image.scene ? (
-            <Fold title="Places365" summary={sceneLine(image.scene.categories, image.scene.environment)} open={false}>
-              <ConfTable rows={image.scene.categories.map((category) => ({ label: category.label, conf: category.conf }))} caption={`Environment: ${image.scene.environment}`} />
-            </Fold>
-          ) : null}
-          {worn.length > 0 ? (
-            <Fold title="Fashionpedia" summary={confLine(worn)} open={false}>
-              <ConfTable rows={worn} />
-            </Fold>
-          ) : null}
-          {image.nsfw && image.nsfw.exposed_score < 0.2 && effectiveUnsafe(image, override) ? (
-            <p className="text-caption leading-relaxed text-text-secondary">NudeNet scored no exposed class. SingGuard still marked the image unsafe under a policy.</p>
-          ) : null}
-          <PolicyReports image={image} override={override} />
-          {onLabel ? (
-            <TagControl
-              cohorts={cohorts}
-              auto={autoTags}
-              label={label}
-              caption={caption}
-              saving={labelSaving}
-              onChange={(tags) => {
-                const fields = labelFields(label);
-                delete fields.tags;
-                onLabel(tags ? { ...fields, tags } : fields);
-              }}
-            />
-          ) : null}
-          {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}
+          <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small" onClick={closeModal}>
+            Close
+          </button>
         </div>
       </div>
-    </div>
+      <div className="relative overflow-hidden rounded-lg bg-base-900">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={blocked ? thumbUrl(scanId, image.rel_path) : imageUrl(scanId, image.rel_path)}
+          alt={blurred ? "" : image.rel_path}
+          className={`max-h-[70dvh] w-full object-contain ${blurred ? "scale-105 blur-3xl" : ""}`}
+        />
+        {blurred && !blocked && !holdReveal ? (
+          <button
+            type="button"
+            className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small"
+            onClick={() => setShown(true)}
+          >
+            Unblur
+          </button>
+        ) : null}
+        {holdReveal && !blocked ? (
+          <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Scanning…</p>
+        ) : null}
+        {blocked ? (
+          <p className="absolute inset-x-4 bottom-4 rounded-md bg-base-800 px-3 py-2 text-caption text-text-secondary">
+            MiVOLO reads a face as under 18 and NudeNet reported an exposed score of at least 0.2. This photo stays blurred and will not be kept.
+          </p>
+        ) : null}
+      </div>
+      <div className="mt-4 space-y-4 text-small">
+        <Summary image={image} reason={reason} override={override} checking={checking} scanning={scanning} pending={pending} facesRan={facesRan} />
+        {blocked ? (
+          <p className="text-caption text-warning">
+            {deleteError ?? "Delete removes this file from the source folder. Review the ages and scores in this panel first."}
+          </p>
+        ) : null}
+        <AppearanceTable image={image} />
+        {/* The numbers the summary strip already gives are folded: the strip says how much, these say why. */}
+        <Fold title="Quality" summary={qualityLine(image)} open={false}>
+          <QualityTable image={image} />
+        </Fold>
+        {image.nsfw ? (
+          <Fold title="NudeNet" summary={nudeNetLine(image.nsfw, contentRating(image), nsfwSource(image))} open={false}>
+            <NudeNetTable nsfw={image.nsfw} rating={contentRating(image)} source={nsfwSource(image)} erax={image.erax ?? null} />
+          </Fold>
+        ) : null}
+        {image.scene ? (
+          <Fold title="Places365" summary={sceneLine(image.scene.categories, image.scene.environment)} open={false}>
+            <ConfTable rows={image.scene.categories.map((category) => ({ label: category.label, conf: category.conf }))} caption={`Environment: ${image.scene.environment}`} />
+          </Fold>
+        ) : null}
+        {worn.length > 0 ? (
+          <Fold title="Fashionpedia" summary={confLine(worn)} open={false}>
+            <ConfTable rows={worn} />
+          </Fold>
+        ) : null}
+        {image.nsfw && image.nsfw.exposed_score < 0.2 && effectiveUnsafe(image, override) ? (
+          <p className="text-caption leading-relaxed text-text-secondary">NudeNet scored no exposed class. SingGuard still marked the image unsafe under a policy.</p>
+        ) : null}
+        <PolicyReports image={image} override={override} />
+        {onLabel ? (
+          <TagControl
+            cohorts={cohorts}
+            auto={autoTags}
+            label={label}
+            caption={caption}
+            saving={labelSaving}
+            onChange={(tags) => {
+              const fields = labelFields(label);
+              delete fields.tags;
+              onLabel(tags ? { ...fields, tags } : fields);
+            }}
+          />
+        ) : null}
+        {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}
+      </div>
+    </Modal>
   );
 }
