@@ -12,11 +12,14 @@ First public release, and the first with a web image published to `ghcr.io/smk76
 - A watermark sidecar and a *Crop watermarks* scan check. Cropped scans export by copy, crop rejects are tallied by kind, and the edge cut limit is configurable (#51, #54, #55).
 - Rejected frames are held and shown blurred (#53).
 - MIT license.
+- A *Scanned by* line on each scan: the curator version, and the SingGuard policy, variants and model the scan recorded (#70).
+- `make check` and a curator sync record (`sync/argus-curator.json`). Cull now follows argus-curator's `dev` branch at a recorded commit instead of a release. CI installs curator at that commit and checks the recorded fixture scan, and a daily job flags when `dev` moves on (#70).
 
 ### Changed
 
 - Guard rules are labelled with adult-cinematic's own letters. SingGuard prose is no longer recorded as the rule that fired, and an answer that is not a rule title is treated as unreadable (#52, #56, #57).
 - The five modals use the native `<dialog>` element (#60).
+- Tooltips close on Escape without closing the dialog they sit in, and stay open while the pointer is over them. Grid thumbnails past the first two rows load lazily (#69).
 - LAN addresses in defaults and examples are replaced with placeholders. The SingGuard URL is now empty by default (#62).
 - The README and spec use the UI's control names, cover *Evaluate keep set*, the sidecar tuning variables and their `POST /infer` contract, and the curator versions behind each feature (#66).
 
