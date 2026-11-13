@@ -18,6 +18,7 @@ First public release, and the first with a web image published to `ghcr.io/smk76
 - Guard rules are labelled with adult-cinematic's own letters. SingGuard prose is no longer recorded as the rule that fired, and an answer that is not a rule title is treated as unreadable (#52, #56, #57).
 - The five modals use the native `<dialog>` element (#60).
 - LAN addresses in defaults and examples are replaced with placeholders. The SingGuard URL is now empty by default (#62).
+- The README and spec use the UI's control names, cover *Evaluate keep set*, the sidecar tuning variables and their `POST /infer` contract, and the curator versions behind each feature (#66).
 
 ### Removed
 
@@ -32,7 +33,11 @@ Which argus-curator release added each feature this page uses. The page checks `
 - **0.7** adds the set age (`set_age` on `/health`).
 - **0.8** adds `GET /guard/policies` (`guard_policy_text` on `/health`) so the page can show the wording a verdict was judged against.
 - **0.8.1** names SingGuard's own "Adult Content (Non-criminal)" under Safe, because a "not this rule" line under a risk heading was read as a match.
+- **0.9** adds XMP sidecars on export (`write_xmp`, with `face_names` from People and the content rating) and NudeNet's content-rating facet (`content_ratings`: `safe` / `suggestive` / `explicit`).
 - **0.10** adds the CUDA image, person boxes and `people_check`, and falls back to `fast` on a SingGuard server without `cascade`.
 - **0.11** adds the EraX-NSFW fallback (`ARGUS_CURATOR_ERAX_URL`, `erax` on `/detectors`): when NudeNet returns no exposed score, EraX hits fill the same labels.
 - **0.11.1** drops an EraX nipple hit only when its centre lies inside a NudeNet `MALE_BREAST_EXPOSED` box.
 - **0.12** adds the scan prefilter (`prefilter` on `/health`), `DELETE /scan/{id}` (`scan_delete`), and deleting any scanned image behind `CURATOR_ALLOW_DELETE` (`delete_any`).
+- **0.13** carries each image's `.txt`, `.xmp` and `.json` sidecars with it on export and writes `run_stats.json` into the export folder (`export_sidecars` on `/health`). A move drops the moved images from the cached scan.
+- **0.14** adds watermark detection and in-memory crops (`crops: {enabled, detect, max_cut}` on the scan; `watermark_detect` on `/health`, `watermark` on `/detectors`). A cropped scan exports only by copy.
+- **0.14.1** refuses a scan that asks for watermark detection while the detector is down (HTTP 503), and sends no NudeNet score for a row until EraX has also answered.
