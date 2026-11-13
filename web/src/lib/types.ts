@@ -5,8 +5,8 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
 /** Curator origin for the page the browser actually opened.
 
 The port and scheme come from CURATOR_URL. When that URL names a loopback host
-(the default), the host follows the page, so http://192.168.30.39:3000 calls
-http://192.168.30.39:8101 and a localhost page keeps calling localhost. A
+(the default), the host follows the page, so http://203.0.113.39:3000 calls
+http://203.0.113.39:8101 and a localhost page keeps calling localhost. A
 CURATOR_URL that names another machine is used as written. */
 export function curatorUrl(pageHost?: string, configured: string = CURATOR_URL): string {
   const host = pageHost ?? (typeof window === "undefined" ? "" : window.location.hostname);

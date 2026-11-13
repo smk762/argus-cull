@@ -439,16 +439,16 @@ describe("moderation", () => {
 
 describe("curator url", () => {
   it("follows the host the page was opened as and keeps the curator port", () => {
-    expect(curatorUrl("192.168.30.39")).toBe("http://192.168.30.39:8101");
+    expect(curatorUrl("203.0.113.39")).toBe("http://203.0.113.39:8101");
     expect(curatorUrl("localhost")).toBe("http://localhost:8101");
     expect(curatorUrl("")).toBe("http://localhost:8101");
   });
 
   it("uses a curator on another machine as configured", () => {
-    expect(curatorUrl("192.168.30.39", "http://nas.local:8101")).toBe("http://nas.local:8101");
-    expect(curatorUrl("192.168.30.39", "https://curator.example/")).toBe("https://curator.example");
-    expect(curatorUrl("192.168.30.39", "http://127.0.0.1:8101")).toBe("http://192.168.30.39:8101");
-    expect(curatorUrl("192.168.30.39", "not a url")).toBe("not a url");
+    expect(curatorUrl("203.0.113.39", "http://nas.local:8101")).toBe("http://nas.local:8101");
+    expect(curatorUrl("203.0.113.39", "https://curator.example/")).toBe("https://curator.example");
+    expect(curatorUrl("203.0.113.39", "http://127.0.0.1:8101")).toBe("http://203.0.113.39:8101");
+    expect(curatorUrl("203.0.113.39", "not a url")).toBe("not a url");
   });
 });
 

@@ -40,8 +40,10 @@ services:
       # Watermark detector for a scan's crops.detect. It runs only when a scan
       # asks for it, so the URL being set costs nothing. Empty refuses detect.
       - ARGUS_CURATOR_WATERMARK_URL=${ARGUS_CURATOR_WATERMARK_URL-http://watermark:8080}
-      # Darkroom's guard: agent-composer on the LAN. Empty turns the check off.
-      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-http://192.168.1.198:9150}
+      # Darkroom's guard: agent-composer's /api/guard/check. Off (empty) until
+      # .env sets it to your composer host, e.g. http://composer.example:9150,
+      # or http://singguard:9150 with the local-singguard profile.
+      - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-}
       # cascade: fast on every frame (about a second), slow on the frames
       # fast flags and on a MiVOLO age under 18 with an exposed score of at
       # least 0.2; slow's verdict stands. fast is a verdict and rule only;
