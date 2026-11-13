@@ -1,0 +1,9 @@
+{
+  "$comment": "Where cull's curator docs and demo data come from: argus-curator's dev branch at one commit. scripts/sync_check.py (make check) holds the docs and sync/fixture-scan.json to it offline; .github/workflows/sync-drift.yml flags when dev moves on. docs stays empty until argus-curator#138 splits the docs for import.",
+  "package": "argus-curator",
+  "repo": "smk762/argus-curator",
+  "branch": "dev",
+  "commit": "7d687400dbcb8fecd808771645324faace118f44",
+  "version": "0.14.2.dev24+g7d687400d",
+  "docs": {}
+}

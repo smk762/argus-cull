@@ -27,6 +27,8 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # Cull follows curator's dev branch, not a release: install the commit
+  # sync/argus-curator.json records, then check the fixture and its record.
   fixture:
     runs-on: ubuntu-latest
     steps:
@@ -34,5 +36,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install 'argus-curator>=0.5,<0.6'
+      - name: Offline sync check
+        run: python scripts/sync_check.py
+      - name: Install curator at the recorded dev commit
+        run: |
+          commit=$(python -c "import json; print(json.load(open('sync/argus-curator.json'))['commit'])")
+          pip install "argus-curator @ git+https://github.com/smk762/argus-curator@${commit}"
       - run: python scripts/check_fixture.py
+      - run: python scripts/record_fixture.py --check

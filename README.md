@@ -139,3 +139,5 @@ NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold o
 cd web
 npm run lint && npm run typecheck && npm test && npm run build
 ```
+
+`make check` runs those web checks and `scripts/sync_check.py`. That script checks offline that the recorded fixture scan (`sync/fixture-scan.json`) and any imported curator docs match `sync/argus-curator.json`, the argus-curator `dev` commit and version cull follows. CI installs curator at that commit, checks the fixture, and compares a fresh scan with the record. A daily job (`.github/workflows/sync-drift.yml`) opens a PR with a new record when curator's `dev` moves on, or an issue if the fixture no longer passes. To move by hand, run `make sync-curator`, optionally with `COMMIT=<sha>`.

@@ -1,0 +1,94 @@
+{
+  "curator": {
+    "version": "0.14.2.dev24+g7d687400d",
+    "commit": "7d687400dbcb8fecd808771645324faace118f44"
+  },
+  "scan": {
+    "total": 10,
+    "passed": 9,
+    "rejected": 1,
+    "duplicates": 1,
+    "results": [
+      {
+        "rel_path": "duplicates/copy.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "9595689d72b54aa3",
+        "is_duplicate": false,
+        "group_size": 2
+      },
+      {
+        "rel_path": "duplicates/original.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "9595689d72b54aa3",
+        "is_duplicate": true,
+        "group_size": 2
+      },
+      {
+        "rel_path": "faces/front.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "cf61349e3361c39a",
+        "is_duplicate": false,
+        "group_size": 1
+      },
+      {
+        "rel_path": "faces/profile.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "99f6649926669399",
+        "is_duplicate": false,
+        "group_size": 1
+      },
+      {
+        "rel_path": "faces/three-quarter.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "cd7636cd3132c1c9",
+        "is_duplicate": false,
+        "group_size": 1
+      },
+      {
+        "rel_path": "garments/dress.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "e69a99679e619889",
+        "is_duplicate": false,
+        "group_size": 1
+      },
+      {
+        "rel_path": "garments/jacket.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "e86a968778996179",
+        "is_duplicate": false,
+        "group_size": 1
+      },
+      {
+        "rel_path": "rejects/blurry.png",
+        "passed": false,
+        "reject_reason": "blurry (sharpness=3.3 < 100.0)",
+        "phash": "9595689d72b54aa3",
+        "is_duplicate": false,
+        "group_size": 1
+      },
+      {
+        "rel_path": "scenes/room.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "e161e1611e1f1e1f",
+        "is_duplicate": false,
+        "group_size": 1
+      },
+      {
+        "rel_path": "scenes/sky.png",
+        "passed": true,
+        "reject_reason": null,
+        "phash": "e891d26e8d431edc",
+        "is_duplicate": false,
+        "group_size": 1
+      }
+    ]
+  }
+}
