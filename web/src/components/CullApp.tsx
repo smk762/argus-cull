@@ -7,6 +7,7 @@ import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, fi
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
+import { madeWith } from "@/lib/madeWith";
 import { defaultExportDest, exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
 import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
@@ -862,6 +863,18 @@ export function CullApp() {
                   ? `${summary.total} images`
                   : "No scan yet"}
           </p>
+          {summary && summary.total > 0 ? (
+            (() => {
+              const made = madeWith(summary, health?.version);
+              return (
+                <Tooltip text={made.versionNote}>
+                  <p className="text-caption text-text-muted" tabIndex={0}>
+                    {made.line}
+                  </p>
+                </Tooltip>
+              );
+            })()
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Tooltip text="Every image in the scan, as tiles you can filter, sort and select.">
               <button
