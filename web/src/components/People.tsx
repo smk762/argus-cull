@@ -52,6 +52,8 @@ export function People({
                 <img
                   src={thumbUrl(scanId, cluster.representative_rel_path)}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className={`aspect-square w-full object-cover ${sensitive.has(cluster.representative_rel_path) ? "scale-110 blur-2xl" : ""}`}
                 />
                 <span className="block space-y-1 p-2 pb-0">

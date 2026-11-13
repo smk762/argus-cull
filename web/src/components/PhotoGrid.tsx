@@ -10,6 +10,9 @@ import { formatYears } from "@/lib/years";
 import { Shield } from "./Shield";
 import { Info } from "./Tooltip";
 
+/** Tiles that load at once: about the first two rows. The rest of a page loads lazily. */
+const EAGER_TILES = 8;
+
 /** The file name alone; the folder is in the tile's tooltip and the detail view. */
 function baseName(relPath: string): string {
   return relPath.split("/").pop() || relPath;
@@ -284,7 +287,7 @@ export function PhotoGrid({
       {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, ageFrom, ageTo, faceView, shieldView)}</p> : null}
       {/* Tiles are at least 12rem wide, whatever the sidebar leaves, so the quality · nude · age row never gets cut. Phones keep two across. */}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]">
-        {slice.map((image) => {
+        {slice.map((image, index) => {
           const reason = reasons?.get(image.rel_path);
           const kept = reason === "";
           const override = labels?.get(image.rel_path)?.override ?? null;
@@ -317,6 +320,8 @@ export function PhotoGrid({
                   <img
                     src={thumbUrl(scanId, image.rel_path)}
                     alt=""
+                    loading={index < EAGER_TILES ? undefined : "lazy"}
+                    decoding="async"
                     className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
                   />
                   {/* A blur speaks for itself; only a frame still waiting on checks gets a word. */}
