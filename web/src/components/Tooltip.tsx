@@ -1,22 +1,63 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const HALF_WIDTH = 136;
+/** Long enough to move the pointer across the 6px gap onto the tooltip. */
+const HIDE_DELAY_MS = 150;
 
 /**
  * A tooltip for whatever it wraps, on hover or keyboard focus. It renders into
  * the page body at a fixed position, so a scrolling sidebar does not clip it,
  * and it keeps inside the viewport's sides. Above the target unless that would
  * leave the top of the screen.
+ *
+ * WCAG 1.4.13: Escape dismisses it without moving focus or the pointer (and
+ * only it: an open dialog stays open), and the pointer can move onto it
+ * without it closing, so a magnified reader can follow the text.
  */
 export function Tooltip({ text, children, className = "" }: { text: string; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const id = useId();
   const [pos, setPos] = useState<{ x: number; y: number; below: boolean; host: Element } | null>(null);
+  const open = pos !== null;
+
+  function cancelHide() {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  }
+
+  function hideSoon() {
+    cancelHide();
+    hideTimer.current = setTimeout(() => setPos(null), HIDE_DELAY_MS);
+  }
+
+  function hideNow() {
+    cancelHide();
+    setPos(null);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      // Close the tooltip, not the <dialog> it sits in: a dialog's close request comes from this keydown.
+      event.preventDefault();
+      event.stopPropagation();
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+      setPos(null);
+    }
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [open]);
+
+  useEffect(() => cancelHide, []);
 
   function show() {
+    cancelHide();
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     const below = rect.top < 120;
@@ -33,9 +74,9 @@ export function Tooltip({ text, children, className = "" }: { text: string; chil
       className={`inline-flex ${className}`}
       aria-describedby={pos ? id : undefined}
       onMouseEnter={show}
-      onMouseLeave={() => setPos(null)}
+      onMouseLeave={hideSoon}
       onFocus={show}
-      onBlur={() => setPos(null)}
+      onBlur={hideNow}
     >
       {children}
       {pos
@@ -43,7 +84,9 @@ export function Tooltip({ text, children, className = "" }: { text: string; chil
             <span
               id={id}
               role="tooltip"
-              className="pointer-events-none fixed z-50 w-max max-w-64 rounded-md border border-base-600 bg-base-900 px-2 py-1.5 text-caption font-normal text-text-secondary shadow-lg"
+              onMouseEnter={cancelHide}
+              onMouseLeave={hideSoon}
+              className="fixed z-50 w-max max-w-64 rounded-md border border-base-600 bg-base-900 px-2 py-1.5 text-caption font-normal text-text-secondary shadow-lg"
               style={{ left: pos.x, top: pos.y, transform: `translate(-50%, ${pos.below ? "0" : "-100%"})` }}
             >
               {text}
