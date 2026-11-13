@@ -1,5 +1,29 @@
 # Changelog
 
+Each release has a `## [x.y.z]` section here. The release workflow uses that section as the GitHub Release notes.
+
+## [0.4.0] - 2026-11-13
+
+First public release, and the first with a web image published to `ghcr.io/smk762/argus-cull`.
+
+### Added
+
+- Export into a curated output root: `ALLOW_MOVE`, `CURATED_OUTPUT_ROOT_PATH`, sidecars and run stats (#50).
+- A watermark sidecar and a *Crop watermarks* scan check. Cropped scans export by copy, crop rejects are tallied by kind, and the edge cut limit is configurable (#51, #54, #55).
+- Rejected frames are held and shown blurred (#53).
+- MIT license.
+
+### Changed
+
+- Guard rules are labelled with adult-cinematic's own letters. SingGuard prose is no longer recorded as the rule that fired, and an answer that is not a rule title is treated as unreadable (#52, #56, #57).
+- The five modals use the native `<dialog>` element (#60).
+- LAN addresses in defaults and examples are replaced with placeholders. The SingGuard URL is now empty by default (#62).
+
+### Removed
+
+- The `CURATOR_OUTPUT_PATH` fallback. Set `CURATED_OUTPUT_ROOT_PATH` instead (#50).
+- The *Keep hard rejects* toggle (#53).
+
 ## Curator compatibility
 
 Which argus-curator release added each feature this page uses. The page checks `/health` and `/detectors` and shows a control only when the curator reports it.
