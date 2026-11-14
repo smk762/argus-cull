@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getDisplay, getGuardPolicies, getHealth, getImageDetail, getLabels, getScan, getScans, deleteCachedScan, purgeScans, putLabel, resetDemoLabels, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { IN_BROWSER, LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
+import { LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
 import { loadTape } from "@/lib/staticApi";
 import type { Tape } from "@/lib/tape";
 import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
@@ -36,7 +36,7 @@ import { withFaceName, withFilter } from "@/lib/urlState";
 import { veilFor, type Veil } from "@/lib/veil";
 import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch } from "@/lib/urlStore";
 
-import { DemoBadge, NotInDemo } from "./DemoBadge";
+import { DemoBadge } from "./DemoBadge";
 import { DemoProvenance } from "./DemoProvenance";
 import { ExportDialog } from "./ExportDialog";
 import { ExternalLink } from "./ExternalLink";
@@ -392,7 +392,7 @@ export function CullApp() {
   const [ageTo, setAgeTo] = useState<number | null>(null);
   const [faceView, setFaceView] = useState<FaceView>("all");
   const [shieldView, setShieldView] = useState<ShieldView>("all");
-  const [keepView, setKeepView] = useState<KeepView>("all");
+  const keepView: KeepView = view.show;
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -863,23 +863,6 @@ export function CullApp() {
     );
   }
 
-  const scansTable = (
-    <ScansTable
-      scans={scanList}
-      root={root}
-      current={view.scan}
-      canPurge={scanControl && !STATIC}
-      purging={purging}
-      rerunning={rerunning}
-      onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
-      onRerun={STATIC ? undefined : (scanId) => void openRerun(scanId)}
-      onPurge={() => void onPurge()}
-      canForget={Boolean(health?.scan_delete) && !STATIC}
-      forgetting={forgetting}
-      onForget={(scanId) => void onForget(scanId)}
-    />
-  );
-
   return (
     <div className="cull-shell grid min-h-(--cull-h) lg:grid-cols-[19rem_1fr]">
       <aside className="space-y-5 overflow-y-auto border-base-700 p-4 lg:max-h-(--cull-h) lg:border-r">
@@ -917,7 +900,21 @@ export function CullApp() {
         >
           {scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "New scan"}
         </button>
-        {scansTable}
+        {/* The live app only: the demo is one recorded scan, so it has no list of scans. */}
+        <ScansTable
+          scans={scanList}
+          root={root}
+          current={view.scan}
+          canPurge={scanControl}
+          purging={purging}
+          rerunning={rerunning}
+          onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
+          onRerun={(scanId) => void openRerun(scanId)}
+          onPurge={() => void onPurge()}
+          canForget={Boolean(health?.scan_delete)}
+          forgetting={forgetting}
+          onForget={(scanId) => void onForget(scanId)}
+        />
           </>
         )}
         <SetAgeOutcome summary={summary} />
@@ -930,13 +927,11 @@ export function CullApp() {
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
-          // The same switch as Show → Kept on the grid: on hides every image the keep set leaves out.
-          hideRejected={keepView === "kept"}
-          hideRejectedReady={reasons != null}
-          onHideRejected={(next) => {
-            setKeepView(next ? "kept" : "all");
-            if (view.page !== 1) replaceView({ ...view, page: 1 });
-          }}
+          // All, Kept or Left out: what the grid shows by the keep set, in the URL as `show`.
+          keepView={keepView}
+          keptCount={keepCounts?.kept ?? null}
+          leftOutCount={keepCounts?.leftOut ?? null}
+          onKeepView={(next) => replaceView({ ...view, show: next, page: 1 })}
           policies={allPolicies}
           policyFlags={policyFlags}
           policiesOff={offPolicies}
@@ -944,13 +939,12 @@ export function CullApp() {
             if (rawSummary) setPolicyOff({ scanId: rawSummary.scan_id, off });
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
-          keepSetNote={STATIC ? IN_BROWSER.keepSet : null}
         />
         {STATIC ? (
-          // The demo's preamble, at the foot so the filters lead: where the tape came from, the replay, the scan, and what stays in this browser.
+          // The demo's preamble, at the foot so the filters lead: where the tape came from and the replay.
           <section id="about-demo" aria-label="About this demo" tabIndex={-1} className="space-y-4 border-t border-base-700 pt-4">
             <p className="text-small text-text-secondary">{DEMO_INTRO}</p>
-            <DemoProvenance tape={tape} error={tapeError} />
+            <DemoProvenance tape={tape} error={tapeError} onResetLabels={summary ? () => void resetLabels() : null} />
             <div className="space-y-2">
               <button
                 type="button"
@@ -961,17 +955,6 @@ export function CullApp() {
                 {scanning ? "Replaying…" : "Replay recorded scan"}
               </button>
               <p className="text-caption text-text-muted">Streams the recorded results in batches, the way a live scan arrives: frames stay blurred until their scores land.</p>
-              <NotInDemo reason={OFF.scan} />
-            </div>
-            {scansTable}
-            <div className="space-y-1 text-caption text-text-muted">
-              <p className="flex flex-wrap items-center gap-2">
-                <DemoBadge state="browser" title="Labels and tag edits are kept in this browser's localStorage; nothing is sent anywhere" />
-                Labels and tag edits stay in this browser (localStorage).
-              </p>
-              <button type="button" className="rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40" disabled={!summary} onClick={() => void resetLabels()}>
-                Reset to the recorded labels
-              </button>
             </div>
           </section>
         ) : null}
@@ -1053,12 +1036,15 @@ export function CullApp() {
                 Run stats
               </button>
             </Tooltip>
-            <Tooltip text={STATIC ? `Not in this demo. ${OFF.export}` : selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
+            <Tooltip text={STATIC ? OFF.export : selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
               <button
                 type="button"
-                className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40"
-                disabled={!selection || STATIC}
+                className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
+                // The demo keeps Export focusable, so its tooltip says why on focus as well as hover.
+                disabled={!selection && !STATIC}
+                aria-disabled={STATIC || undefined}
                 onClick={() => {
+                  if (STATIC) return;
                   setExportResult(null);
                   setExportError(null);
                   setExportProgress(null);
@@ -1070,15 +1056,6 @@ export function CullApp() {
             </Tooltip>
           </div>
           </div>
-          {STATIC ? (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <p className="flex flex-wrap items-center gap-2 text-caption text-text-muted">
-                <DemoBadge state="browser" />
-                Download paths, Run stats and the labels JSONL are written in your browser from the tape.
-              </p>
-              <NotInDemo reason={OFF.export} />
-            </div>
-          ) : null}
           {liveProgress ? (
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
@@ -1146,12 +1123,6 @@ export function CullApp() {
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
             keepView={keepView}
-            keptCount={keepCounts?.kept ?? null}
-            leftOutCount={keepCounts?.leftOut ?? null}
-            onKeepView={(next) => {
-              setKeepView(next);
-              if (view.page !== 1) replaceView({ ...view, page: 1 });
-            }}
             onPage={(nextPage) => replaceView({ ...view, page: nextPage })}
             onOpen={openPhoto}
             selected={selected}
@@ -1195,12 +1166,6 @@ export function CullApp() {
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
             keepView={keepView}
-            keptCount={keepCounts?.kept ?? null}
-            leftOutCount={keepCounts?.leftOut ?? null}
-            onKeepView={(next) => {
-              setKeepView(next);
-              if (view.page !== 1) replaceView({ ...view, page: 1 });
-            }}
             onPage={(nextPage) => replaceView({ ...view, page: nextPage })}
             onOpen={openPhoto}
             selected={selected}

@@ -587,6 +587,8 @@ export interface ViewState {
   page: number;
   photo: string | null;
   view: "grid" | "people";
+  /** Which images the grid shows by the keep set (lib/chunks KeepView): all, only kept, or only left out. */
+  show: "all" | "kept" | "left-out";
   cluster: string | null;
   /** The official SingGuard policy the next scan asks for. Null takes the curator's `adult` when offered, else its first. */
   guardPolicy: GuardPolicy | null;
@@ -700,6 +702,7 @@ export const DEFAULT_VIEW: ViewState = {
   page: 1,
   photo: null,
   view: "grid",
+  show: "all",
   cluster: null,
   guardPolicy: null,
   guardVariants: [],

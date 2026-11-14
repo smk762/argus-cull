@@ -22,18 +22,14 @@ export const CURATOR_REPO_URL = "https://github.com/smk762/argus-curator";
 export const LIGHTBOX_DEMO_URL = "https://lightbox.dragonhound.dev/";
 export const LIGHTBOX_REPO_URL = "https://github.com/smk762/argus-lightbox";
 
-/** One-line reasons beside each control the demo turns off ("Not in this demo"). */
+/** The tooltip on each control the demo shows disabled: why it is off. */
 export const OFF = {
-  scan: "Scanning runs the curator's GPU models; this page replays one recorded scan.",
-  export: "Export writes files on the curator's host.",
-  delete: "Delete removes files from the curator's source folder.",
-  rerun: "Rerunning a scan needs the curator.",
+  export: "Not in this demo: export writes files on the curator's host.",
+  delete: "Not in this demo: delete removes files from the curator's source folder.",
 } as const;
 
-/** What the demo works out in the browser instead of asking the curator ("In-browser"). */
-export const IN_BROWSER = {
-  keepSet: "Worked out in your browser from the recorded scores, by the curator's rules.",
-} as const;
+/** The one line in About this tape that says what runs here and what does not. */
+export const DEMO_RUNS_HERE = "Everything here runs in your browser from the recording; scanning, export and delete need a running curator.";
 
 /** Thrown by the static data layer for anything that needs the curator or the page's server. */
 export class NotInDemo extends Error {

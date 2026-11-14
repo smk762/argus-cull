@@ -14,7 +14,6 @@ import { veilFor, watermarkBoxes } from "@/lib/veil";
 import { formatYears } from "@/lib/years";
 import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
-import { NotInDemo } from "./DemoBadge";
 import { closeModal, Modal } from "./Modal";
 import { Shield } from "./Shield";
 import { cellsAcross, VeilFrame } from "./VeilFrame";
@@ -726,7 +725,6 @@ function PhotoPanel({
             {deleteError ?? "Delete removes this file from the source folder. Review the ages and scores in this panel first."}
           </p>
         ) : null}
-        {blocked && deleteOff ? <NotInDemo reason={deleteOff} /> : null}
         <AppearanceTable image={image} />
         {/* The numbers the summary strip already gives are folded: the strip says how much, these say why. */}
         <Fold title="Quality" summary={qualityLine(image)} open={false}>

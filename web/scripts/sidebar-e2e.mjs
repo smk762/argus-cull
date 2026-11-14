@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Browser regression for the demo sidebar (the static build in web/out):
 // every section starts closed; every checkbox in it toggles on click, on Space
-// and on its label, and changes the grid; unticking puts the grid back.
+// and on its label, and changes the grid; unticking puts the grid back. The
+// Display section's All / Kept / Left out switch moves the grid and the URL by
+// click and by arrow key, and the toolbar carries no view switch or demo badges.
 //
-//   make pages && node web/scripts/sidebar-e2e.mjs [web/out]
+//   make pages && node web/scripts/sidebar-e2e.mjs [web/out | https://preview.example]
 //
 // Needs Playwright and a Chromium it can launch. It is not a dependency of the
 // app: point PLAYWRIGHT_DIR at a folder whose node_modules holds `playwright`
@@ -13,7 +15,9 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { extname, join, normalize, resolve } from "node:path";
 
-const root = resolve(process.argv[2] ?? new URL("../out", import.meta.url).pathname);
+const target = process.argv[2] ?? new URL("../out", import.meta.url).pathname;
+const remote = /^https?:\/\//.test(target);
+const root = remote ? null : resolve(target);
 const require = createRequire(join(resolve(process.env.PLAYWRIGHT_DIR ?? "."), "node_modules/"));
 let chromium;
 try {
@@ -40,8 +44,8 @@ const server = createServer(async (req, res) => {
   res.writeHead(404);
   res.end();
 });
-await new Promise((done) => server.listen(0, done));
-const url = `http://localhost:${server.address().port}/`;
+if (!remote) await new Promise((done) => server.listen(0, done));
+const url = remote ? target : `http://localhost:${server.address().port}/`;
 
 const failures = [];
 const check = (ok, message) => {
@@ -111,15 +115,52 @@ const quiet = new Set(["Uncropped only", "Drop exposed nudity"]);
 unchanged = unchanged.filter((name) => !quiet.has(name.replace(/\s*\(\d+\)$/, "")));
 check(unchanged.length === 0, `these boxes left the grid as it was: ${unchanged.join(", ")}`);
 
+// The view switch: in Display, a radio group with counts; it moves the grid, the URL and the section's count.
+check((await page.locator("main header").getByText(/^Kept \(\d+\)$/).count()) === 0, "the toolbar still carries the view switch");
+const bodyText = await page.locator("body").innerText();
+check(!/In-browser|Not in this demo/.test(bodyText), "an In-browser or Not-in-this-demo badge or line is still on the page");
+check((await page.locator("aside table").count()) === 0, "the demo still shows a Scans table");
+const display = page.locator('aside details[data-section="display"]');
+const radios = display.locator('fieldset input[type=radio][name="keep-view"]');
+check((await radios.count()) === 3, `expected three view radios in Display, found ${await radios.count()}`);
+check((await display.locator("fieldset").first().evaluate((el) => el === el.parentElement?.firstElementChild || el.previousElementSibling?.tagName === "P")) === true, "the view switch is not at the top of Display");
+const keptLabel = (await radios.nth(1).evaluate((input) => input.closest("label")?.textContent ?? "")).trim();
+check(/^Kept \(\d+\)$/.test(keptLabel), `Kept has no count: "${keptLabel}"`);
+const summary = () => display.locator("summary").innerText();
+check(!(await summary()).includes("on"), `Display says it has a filter on before any: ${await summary()}`);
+const allView = await grid();
+await radios.nth(1).locator("xpath=ancestor::label[1]").click();
+await settle();
+check(await radios.nth(1).isChecked(), "Kept did not select on click");
+check(new URL(page.url()).searchParams.get("show") === "kept", `the URL did not take show=kept: ${page.url()}`);
+check((await grid()) !== allView, "Kept left the grid as it was");
+check((await summary()).includes("1 on"), `Display's summary does not count the view: ${await summary()}`);
+await radios.nth(1).focus();
+await page.keyboard.press("ArrowRight");
+await settle();
+check(await radios.nth(2).isChecked(), "ArrowRight did not move to Left out");
+check(new URL(page.url()).searchParams.get("show") === "left-out", `the URL did not take show=left-out: ${page.url()}`);
+await page.reload();
+await page.waitForSelector("ul.grid > li");
+await page.waitForFunction(() => !document.body.innerText.includes("Replaying…") && !document.body.innerText.includes("Selecting…"), null, { timeout: 60_000 });
+check(await radios.nth(2).isChecked(), "Left out did not survive a reload from the URL");
+await radios.nth(2).focus();
+await page.keyboard.press("ArrowLeft");
+await page.keyboard.press("ArrowLeft");
+await settle();
+check(await radios.nth(0).isChecked(), "ArrowLeft did not move back to All");
+check(!new URL(page.url()).searchParams.has("show"), `All left show in the URL: ${page.url()}`);
+check((await grid()) === allView, "All did not put the grid back");
+
 await page.reload();
 await page.waitForSelector("ul.grid > li");
 check((await page.locator("aside details[data-section]:not([open])").count()) === 0, "opened sections were not remembered across a reload");
 check(errors.length === 0, `console errors: ${errors.join(" | ")}`);
 
 await browser.close();
-server.close();
+if (!remote) server.close();
 if (failures.length > 0) {
   console.error(`sidebar-e2e: ${failures.length} failure(s)\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`sidebar-e2e: ${count} sections, ${total} checkboxes toggle on click, Space and label, and move the grid`);
+console.log(`sidebar-e2e: ${count} sections, ${total} checkboxes toggle on click, Space and label, and move the grid; the view switch moves the grid and the URL by click and arrow key`);

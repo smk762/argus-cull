@@ -4,6 +4,7 @@ import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
 import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
+import type { KeepView } from "@/lib/chunks";
 import { checkStage, checkStageNote } from "@/lib/progress";
 import { facetCounts, recordedScenes, type FilterAvailability } from "@/lib/select";
 import { CLOSED_SECTIONS, sidebarSections } from "@/lib/sidebarSections";
@@ -25,7 +26,6 @@ import {
 } from "@/lib/types";
 import { clearedFilter, clusterLabel, isDefaultFilter, toggleValue } from "@/lib/urlState";
 
-import { DemoBadge } from "./DemoBadge";
 import { Info, Tooltip } from "./Tooltip";
 
 const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
@@ -142,6 +142,45 @@ function Toggle({ label, info, checked, disabled = false, onChange }: { label: s
   );
 }
 
+/**
+ * All, Kept or Left out: a segmented control over native radios, so arrow keys
+ * move along it and a screen reader hears one group of three. Kept and Left
+ * out wait for the keep set and carry its counts.
+ */
+function KeepViewSwitch({ value, keptCount, leftOutCount, onChange }: { value: KeepView; keptCount: number | null; leftOutCount: number | null; onChange: (view: KeepView) => void }) {
+  const options: { view: KeepView; label: string; count: number | null; ready: boolean }[] = [
+    { view: "all", label: "All", count: null, ready: true },
+    { view: "kept", label: "Kept", count: keptCount, ready: keptCount != null },
+    { view: "left-out", label: "Left out", count: leftOutCount, ready: leftOutCount != null },
+  ];
+  return (
+    <fieldset className="space-y-1">
+      <legend className="flex items-center gap-1.5 text-caption text-text-muted">
+        View
+        <Info text="Which images the grid shows by the keep set: every image, only those kept, or only those left out (a hard reject, a near-duplicate, or dropped by a filter below). Kept and Left out wait for the keep set." />
+      </legend>
+      <div className="cull-segmented flex rounded-md border border-base-600 text-small">
+        {options.map((option) => (
+          // A view left on from an earlier keep set stays clearable: only an unselected, unready option is off.
+          <label key={option.view} className={`cull-segment flex-1 cursor-pointer px-2 py-1 text-center ${!option.ready && value !== option.view ? "cursor-not-allowed opacity-40" : ""}`}>
+            <input
+              type="radio"
+              name="keep-view"
+              className="sr-only"
+              value={option.view}
+              checked={value === option.view}
+              disabled={!option.ready && value !== option.view}
+              onChange={() => onChange(option.view)}
+            />
+            {option.label}
+            {option.count != null ? <span className="tabular-nums text-text-secondary"> ({option.count})</span> : null}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function Caption({ text, info }: { text: string; info?: string }) {
   return (
     <p className="flex items-center gap-1.5 text-caption text-text-muted">
@@ -160,15 +199,15 @@ export function Filters({
   onChange,
   unblurNsfw,
   onUnblurNsfw,
-  hideRejected,
-  hideRejectedReady,
-  onHideRejected,
+  keepView,
+  keptCount,
+  leftOutCount,
+  onKeepView,
   policies = [],
   policyFlags,
   policiesOff = [],
   onPoliciesOff,
   live,
-  keepSetNote = null,
 }: {
   filter: FilterState;
   detectors: Detectors | null;
@@ -178,11 +217,12 @@ export function Filters({
   onChange: (patch: Partial<FilterState>) => void;
   unblurNsfw: boolean;
   onUnblurNsfw: (unblurNsfw: boolean) => void;
-  /** Grid only: hide every image the keep set leaves out. Mirrors Show → Kept on the grid. */
-  hideRejected: boolean;
-  /** The keep set has been calculated, so there is something to hide by. */
-  hideRejectedReady: boolean;
-  onHideRejected: (hideRejected: boolean) => void;
+  /** Grid only: every image, only the kept ones, or only those left out. */
+  keepView: KeepView;
+  /** Null until the keep set has been calculated. */
+  keptCount: number | null;
+  leftOutCount: number | null;
+  onKeepView: (view: KeepView) => void;
   /** Every policy the scan ran, official first, and how many images each flagged. */
   policies?: readonly string[];
   policyFlags?: ReadonlyMap<string, number>;
@@ -191,8 +231,6 @@ export function Filters({
   onPoliciesOff?: (off: string[]) => void;
   /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
   live: { phases: readonly Progress[]; pending: readonly string[] } | null;
-  /** The static demo: the keep set is worked out in the browser, and this says so beside an In-browser badge. */
-  keepSetNote?: string | null;
 }) {
   // A running scan's summary is partial and records no check as run yet, so say where the scan is instead.
   const liveNote = (...checks: string[]): string | null => (live ? checkStageNote(checkStage(checks, live.phases, live.pending)) : null);
@@ -220,7 +258,7 @@ export function Filters({
   const f = filter;
   const D = DEFAULT_FILTER;
   const on = {
-    display: (unblurNsfw ? 1 : 0) + (hideRejected ? 1 : 0),
+    display: (unblurNsfw ? 1 : 0) + (keepView !== "all" ? 1 : 0),
     quality: moved(f.minScore, D.minScore) + (f.keepSimilar ? 1 : 0),
     people: ticked(f.faceClusters, f.facePoses),
     appearance: ticked(f.faceGenders) + moved(f.minAgeYears, null) + moved(f.maxAgeYears, null) + moved(f.minAttributeConf, D.minAttributeConf),
@@ -235,31 +273,20 @@ export function Filters({
   return (
     <section className="space-y-1" aria-label="Filters">
       <Section id="display" title="Display" info="Changes what the grid shows. The keep set and export do not change." active={on.display}>
+        <KeepViewSwitch value={keepView} keptCount={keptCount} leftOutCount={leftOutCount} onChange={onKeepView} />
         <Toggle
           label="Unblur NSFW"
           info="Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame the scan has not finished checking."
           checked={unblurNsfw}
           onChange={onUnblurNsfw}
         />
-        <Toggle
-          label="Hide rejected"
-          info={
-            hideRejectedReady
-              ? "Hides every image the keep set leaves out, whether a hard reject (blur, size, aspect), a near-duplicate, or dropped by a filter below. The same switch as Show → Kept on the grid."
-              : "Available once the keep set is calculated, after the scan."
-          }
-          checked={hideRejected}
-          // Still clearable when on, so a switch left on from an earlier keep set is never stuck.
-          disabled={!hideRejectedReady && !hideRejected}
-          onChange={onHideRejected}
-        />
       </Section>
 
       <div className="space-y-2 border-t border-base-700 pt-3 pb-1">
         <h2 className="flex items-center gap-1.5 font-display text-small font-semibold">
           Keep set
-          <Info text="These filters decide which images are kept, for Kept and Left out on the grid, Download paths, and Export." />
-          <Tooltip text="Untick every filter below and put the sliders back to their defaults. Unblur NSFW and Hide rejected stay as they are." className="ml-auto">
+          <Info text="These filters decide which images are kept, for Kept and Left out under Display, Download paths, and Export." />
+          <Tooltip text="Untick every filter below and put the sliders back to their defaults. Display (the view and Unblur NSFW) stays as it is." className="ml-auto">
             <button
               type="button"
               className="rounded-md border border-base-600 px-1.5 py-0.5 text-caption font-normal text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
@@ -270,12 +297,6 @@ export function Filters({
             </button>
           </Tooltip>
         </h2>
-        {keepSetNote ? (
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-muted">
-            <DemoBadge state="browser" title={keepSetNote} />
-            <span>{keepSetNote}</span>
-          </p>
-        ) : null}
       </div>
 
       <Section id="quality" title="Quality score" active={on.quality}>

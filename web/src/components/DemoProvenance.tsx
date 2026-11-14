@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 
-import { CURATOR_REPO_URL, tapeBase } from "@/lib/demo";
+import { CURATOR_REPO_URL, DEMO_RUNS_HERE, tapeBase } from "@/lib/demo";
 import type { Tape } from "@/lib/tape";
 
 import { DemoBadge } from "./DemoBadge";
@@ -29,9 +29,11 @@ export function checksLine(config: Record<string, unknown>): string {
 /**
  * What the demo shows and where it came from, in the sidebar where the live
  * page says whether the curator is up: the Recorded or Sample data badge, the
- * curator version and date, and the scan's checks and counts folded below.
+ * curator version and date, and the scan's checks and counts folded below,
+ * with the one line on what runs here and the button that drops this
+ * browser's label edits.
  */
-export function DemoProvenance({ tape, error }: { tape: Tape | null; error: string | null }) {
+export function DemoProvenance({ tape, error, onResetLabels = null }: { tape: Tape | null; error: string | null; onResetLabels?: (() => void) | null }) {
   if (error) return <p className="text-caption text-error" role="status">{error}</p>;
   if (!tape) return <p className="text-caption text-text-muted" role="status">Loading the recorded scan…</p>;
   const { provenance, stats } = tape;
@@ -91,6 +93,17 @@ export function DemoProvenance({ tape, error }: { tape: Tape | null; error: stri
           </ExternalLink>
           &apos;s, as recorded.
         </p>
+        <p className="mt-2">{DEMO_RUNS_HERE}</p>
+        {onResetLabels ? (
+          <button
+            type="button"
+            className="mt-2 rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary"
+            title="Label and tag edits are kept in this browser; this puts back the labels the tape recorded."
+            onClick={onResetLabels}
+          >
+            Reset to the recorded labels
+          </button>
+        ) : null}
       </details>
     </div>
   );

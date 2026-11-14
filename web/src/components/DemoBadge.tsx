@@ -1,6 +1,8 @@
 // The family's four demo states (dh-shared README, "Demo-state vocabulary"), styled by
-// vendor/dh/dh-badge.css. The sidebar names what kind of data the page shows; a control
-// the demo can't run carries "Not in this demo" beside it with a one-line reason.
+// vendor/dh/dh-badge.css. The sidebar names what kind of data the page shows. A control
+// the demo can't run stays visibly disabled with its reason as a tooltip (lib/demo OFF),
+// and About this tape says in one line what runs here; In-browser and Not-in-this-demo
+// stay in the vocabulary but this page no longer prints them.
 
 export const DEMO_STATES = {
   recorded: { label: "Recorded", className: "dh-badge", title: "Recorded output from a real run; no model runs while you browse" },
@@ -17,15 +19,5 @@ export function DemoBadge({ state, title }: { state: DemoState; title?: string }
     <span className={`${s.className} shrink-0`} title={title ?? s.title}>
       {s.label}
     </span>
-  );
-}
-
-/** A control the demo turns off: the badge, then why, on one line. */
-export function NotInDemo({ reason, className = "" }: { reason: string; className?: string }) {
-  return (
-    <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-muted ${className}`}>
-      <DemoBadge state="off" title={reason} />
-      <span>{reason}</span>
-    </p>
   );
 }

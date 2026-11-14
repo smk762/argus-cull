@@ -128,6 +128,7 @@ export function parseView(params: URLSearchParams): ViewState {
 
   const page = readNumber(params, "page", 1);
   const view = params.get("view") === "people" ? "people" : "grid";
+  const show = params.get("show");
   const faceNames: Record<string, string> = {};
   for (const raw of params.getAll("name")) {
     const parsed = readFaceName(raw);
@@ -139,6 +140,7 @@ export function parseView(params: URLSearchParams): ViewState {
     page: page >= 1 ? Math.floor(page) : 1,
     photo: params.get("photo") || null,
     view,
+    show: show === "kept" || show === "left-out" ? show : "all",
     cluster: params.get("cluster") || null,
     guardPolicy: policyName(params.get("policy")),
     guardVariants: (params.get("variants") ?? "").split(",").map((name) => policyName(name)).filter((name): name is string => name != null),
@@ -202,6 +204,7 @@ export function serializeView(view: ViewState): string {
   if (view.page > 1) params.set("page", String(view.page));
   if (view.photo) params.set("photo", view.photo);
   if (view.view === "people") params.set("view", "people");
+  if (view.show !== "all") params.set("show", view.show);
   if (view.cluster) params.set("cluster", view.cluster);
   if (view.guardPolicy) params.set("policy", view.guardPolicy);
   if (view.guardVariants.length > 0) params.set("variants", view.guardVariants.join(","));
