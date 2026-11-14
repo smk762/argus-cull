@@ -1,0 +1,7 @@
+[
+  { "label": "Set", "text": "Synthetic: 29 photoreal frames generated for this demo. No real photos." },
+  { "label": "People", "text": "Four fictional adults, written as 35 to 47 years old. None depicts or imitates a real person." },
+  { "label": "Content", "text": "Bland to mildly suggestive (one-piece swimsuits, gym wear, a slip dress); no nudity. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks." },
+  { "label": "Checkpoint", "text": "CyberRealistic XL Desire v2.0 (SDXL), CreativeML Open RAIL-M." },
+  { "label": "Identity", "text": "InstantID (Apache-2.0). Its face encoder, InsightFace antelopev2, has non-commercial research weights; used only for this non-commercial demo." }
+]

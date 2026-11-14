@@ -20,6 +20,10 @@ export interface TapeProvenance {
   source: "curator" | "saved-scan" | string;
   curator: { version: string | null; commit: string | null };
   note: string | null;
+  /** What the set is, as label and text lines for About this tape. Older tapes leave it out. */
+  about?: { label: string; text: string }[] | null;
+  /** A provenance document beside tape.json (PROVENANCE.md), linked from About this tape. */
+  document?: string | null;
 }
 
 export interface TapeStats {

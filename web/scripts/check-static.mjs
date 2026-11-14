@@ -32,6 +32,8 @@ else {
       if (!existsSync(join(out, tapeDir, part))) problems.push(`tape file missing: ${part}`);
     }
   }
+  const doc = tape.provenance?.document;
+  if (doc && !existsSync(join(out, tapeDir, doc))) problems.push(`tape file missing: ${doc}`);
 }
 if (problems.length) {
   console.error(`check-static: ${problems.length} problem(s)\n  ${problems.join("\n  ")}`);

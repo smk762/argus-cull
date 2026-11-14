@@ -137,7 +137,8 @@ NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold o
 
 ```bash
 # From a running curator: the newest finished scan, or SCAN_ID=…
-make tape CURATOR_URL=http://localhost:8101 IMAGES=/path/to/the/scanned/folder LABELS=labels/<folder>-<digest>.json NOTE="What the set is"
+make tape CURATOR_URL=http://localhost:8101 IMAGES=/path/to/the/scanned/folder LABELS=labels/<folder>-<digest>.json NOTE="What the set is" \
+  ABOUT=tape/demo/about.json PROVENANCE=tape/demo/PROVENANCE.md CURATOR_COMMIT=<sha>
 
 # Offline: a saved scan (GET /scan/{id}) and the folder it read
 python scripts/record_tape.py saved --scan scan.json --images ./set --health health.json --detectors detectors.json --policies policies.json --select select.json
@@ -150,6 +151,7 @@ python scripts/record_tape.py saved --scan scan.json --images ./set --health hea
 | `detail/<id>.json` | per image: `score_breakdown` and the NudeNet and EraX boxes, read when the detail view opens |
 | `cohorts.json`, `captions.json`, `labels.json` | the cohort rules, the caption sidecars by `abs_path`, and the labels file for the folder |
 | `thumbs/<id>.webp`, `images/<id>.webp` | 480 px and 1600 px renditions, with no metadata carried over |
+| `PROVENANCE.md` | where the images came from (`PROVENANCE`), linked from the sidebar's *About this tape*, which also lists the `ABOUT` lines (a JSON list of `{label, text}`) |
 
 Paths are rewritten under `/data/images`, the container's source mount, and the recorder fails if a home directory, a private address or a `.local`/`.lan` host name is still in the JSON. `CULL_TAPE_DIR` (or `--out`) writes the tape elsewhere; build with `make pages TAPE_DIR=web/public/<dir>` and the page reads it from `/<dir>` (`NEXT_PUBLIC_CULL_TAPE_URL`). The tape must be on the same site: the CSP names no other origin.
 
@@ -157,7 +159,7 @@ Paths are rewritten under `/data/images`, the container's source mount, and the 
 
 **The build.** `CULL_STATIC=1` switches `next.config.ts` to `output: "export"` and leaves out the API routes (they are named `route.live.ts`, which only the live build treats as routes). `scripts/csp.mjs` then gives each page a `<meta>` Content-Security-Policy with the hashes of its inline scripts and a Trusted Types policy (from argus-lightbox), plus `_headers` for `frame-ancestors` and the rest, and `scripts/check-static.mjs` fails the build if an API route was exported, a page has no CSP, or a tape file is missing. The live image leaves the tape out (`.dockerignore`).
 
-The committed tape is a **stand-in**: `make tape-sample` builds it from `fixture/` with hand-written detector results (`scripts/make_sample_scan.py`, inputs in `tape/sample/`), and the page labels it *Sample data*. To drop in the real demo set, record it with `make tape`, check the sidebar says *Recorded*, run `make pages`, and commit `web/public/data-tape/`.
+The committed tape is **recorded**: a real argus-curator 0.15.0 scan (GPU image, NudeNet, EraX, MiVOLO, Places365, watermark crops and SingGuard) of a synthetic set of 29 frames of four fictional adults, made for this demo. `tape/demo/` holds its *About this tape* lines and its public provenance (recipe, checkpoint and licences). `make tape-sample` still builds the old stand-in from `fixture/` with hand-written detector results (`scripts/make_sample_scan.py`, inputs in `tape/sample/`), which the page labels *Sample data*. To record a new set, scan it, run `make tape`, check the sidebar says *Recorded*, run `make pages`, and commit `web/public/data-tape/`.
 
 The page shares the Dragonhound Labs design layer (`web/vendor/dh`, dh-shared, vendored from dragonhound-site with `sync-shared.mjs` and checked in CI with `make shared-check`): the tokens behind both themes, the family theme toggle and cookie, the demo badges and, in the static build, the demo strip.
 

@@ -21,6 +21,8 @@ the page's API routes:
     captions.json      caption sidecars by abs_path, from --images or --captions
     labels.json        the labels file for the scanned folder (--labels), or empty
     run_stats.json     the page's Run stats download, when --run-stats names one
+    PROVENANCE.md      where the images came from (--provenance-doc), linked from the
+                       sidebar's About this tape beside the --about summary
     thumbs/<id>.webp   480 px thumbnails;  images/<id>.webp  1600 px views
 
 Paths are rewritten under /data/images (the container's source mount), so no
@@ -245,7 +247,7 @@ def encode(data: bytes, longest: int, quality: int) -> bytes:
 
 
 def check_leaks(out: Path) -> None:
-    for path in sorted(out.rglob("*.json")):
+    for path in sorted([*out.rglob("*.json"), *out.rglob("*.md")]):
         found = LEAKS.search(path.read_text())
         if found:
             raise SystemExit(f"{path.relative_to(out)} still names {found.group(0)!r}; scrub it before publishing the tape")
@@ -308,6 +310,9 @@ def record(args: argparse.Namespace) -> None:
     labels_in = read_json(args.labels) or {}
     labels = {"folder": folder, "labels": labels_in.get("labels", {})}
     cohorts = json.loads(Path(args.cohorts or ROOT / "cohorts.json").read_text())
+    about = read_json(args.about)
+    if about is not None and not (isinstance(about, list) and all(isinstance(row, dict) and {"label", "text"} <= row.keys() for row in about)):
+        raise SystemExit("--about must be a JSON list of {label, text}")
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     if out.exists():
@@ -340,6 +345,9 @@ def record(args: argparse.Namespace) -> None:
             "source": source,
             "curator": {"version": curator_version, "commit": args.curator_commit},
             "note": args.note,
+            # Short label/text lines for About this tape, and the full provenance beside the tape.
+            "about": about,
+            "document": "PROVENANCE.md" if args.provenance_doc else None,
         },
         "scan_config": {key: summary[key] for key in CONFIG_KEYS if key in summary},
         "stats": run_stats(summary, select),
@@ -359,6 +367,8 @@ def record(args: argparse.Namespace) -> None:
     write("labels.json", labels)
     if args.run_stats:
         write("run_stats.json", scrub(read_json(args.run_stats)))
+    if args.provenance_doc:
+        shutil.copyfile(args.provenance_doc, out / "PROVENANCE.md")
     check_leaks(out)
     print(f"tape: {len(files)} images, {tape['provenance']['kind']}, curator {curator_version or 'unknown'} -> {out}")
 
@@ -376,6 +386,8 @@ def main() -> None:
         p.add_argument("--run-stats", help="a Run stats download of the same scan, kept beside the tape")
         p.add_argument("--curator-commit", help="the curator commit, when known")
         p.add_argument("--note", default=None, help="one line on what the set is, shown on the page")
+        p.add_argument("--about", help="JSON list of {label, text}: what the set is, for the sidebar's About this tape")
+        p.add_argument("--provenance-doc", help="a public provenance document (Markdown), copied beside the tape as PROVENANCE.md")
         p.add_argument("--sample", action="store_true", help="hand-written or synthetic results: the page says Sample data, not Recorded")
     live = sub.choices["live"]
     live.add_argument("--curator", default="http://localhost:8101")

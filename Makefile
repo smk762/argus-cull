@@ -30,7 +30,12 @@ SCAN_ID ?=
 IMAGES ?=
 LABELS ?=
 NOTE ?=
-TAPE_ARGS = --out $(TAPE_DIR) $(if $(IMAGES),--images $(IMAGES)) $(if $(LABELS),--labels $(LABELS)) $(if $(NOTE),--note "$(NOTE)")
+# What the set is, for the sidebar's About this tape: a JSON list of {label, text} and a public provenance document.
+ABOUT ?=
+PROVENANCE ?=
+CURATOR_COMMIT ?=
+TAPE_ARGS = --out $(TAPE_DIR) $(if $(IMAGES),--images $(IMAGES)) $(if $(LABELS),--labels $(LABELS)) $(if $(NOTE),--note "$(NOTE)") \
+	$(if $(ABOUT),--about $(ABOUT)) $(if $(PROVENANCE),--provenance-doc $(PROVENANCE)) $(if $(CURATOR_COMMIT),--curator-commit $(CURATOR_COMMIT))
 
 # Record the newest finished scan (or SCAN_ID) from the curator at CURATOR_URL. Needs Pillow.
 tape:

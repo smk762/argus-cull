@@ -1,4 +1,6 @@
-import { CURATOR_REPO_URL } from "@/lib/demo";
+import { Fragment } from "react";
+
+import { CURATOR_REPO_URL, tapeBase } from "@/lib/demo";
 import type { Tape } from "@/lib/tape";
 
 import { DemoBadge } from "./DemoBadge";
@@ -64,6 +66,24 @@ export function DemoProvenance({ tape, error }: { tape: Tape | null; error: stri
             {stats.kept != null ? ` · ${stats.kept} kept` : ""}
           </dd>
         </dl>
+        {provenance.about?.length ? (
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1" aria-label="About the images">
+            {provenance.about.map((row) => (
+              <Fragment key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.text}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        ) : null}
+        {provenance.document && /^[\w.-]+$/.test(provenance.document) ? (
+          <p className="mt-2">
+            <a className="underline underline-offset-2 hover:text-text-primary" href={`${tapeBase()}/${provenance.document}`}>
+              Full provenance
+            </a>{" "}
+            (recipe, prompts, licences).
+          </p>
+        ) : null}
         <p className="mt-2">
           No model runs while you browse. Scores, ages and verdicts are{" "}
           <ExternalLink className="underline underline-offset-2" href={CURATOR_REPO_URL}>

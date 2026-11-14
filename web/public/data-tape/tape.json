@@ -1,68 +1,142 @@
 {
  "format": "argus-cull-tape",
  "version": 1,
- "generated_at": "2026-11-14T09:13:02Z",
+ "generated_at": "2026-11-14T09:48:46Z",
  "provenance": {
-  "kind": "sample",
-  "source": "saved-scan",
+  "kind": "recorded",
+  "source": "curator",
   "curator": {
-   "version": "sample",
-   "commit": null
+   "version": "0.15.0",
+   "commit": "2adc2bc5759f0c124b9b5f3138db5a5efea51198"
   },
-  "note": "The repo's drawn-shape fixture with hand-written detector results, standing in until the demo set is approved."
+  "note": "Synthetic photoreal adults (fictional), generated for this demo; see About this tape.",
+  "about": [
+   {
+    "label": "Set",
+    "text": "Synthetic: 29 photoreal frames generated for this demo. No real photos."
+   },
+   {
+    "label": "People",
+    "text": "Four fictional adults, written as 35 to 47 years old. None depicts or imitates a real person."
+   },
+   {
+    "label": "Content",
+    "text": "Bland to mildly suggestive (one-piece swimsuits, gym wear, a slip dress); no nudity. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+   },
+   {
+    "label": "Checkpoint",
+    "text": "CyberRealistic XL Desire v2.0 (SDXL), CreativeML Open RAIL-M."
+   },
+   {
+    "label": "Identity",
+    "text": "InstantID (Apache-2.0). Its face encoder, InsightFace antelopev2, has non-commercial research weights; used only for this non-commercial demo."
+   }
+  ],
+  "document": "PROVENANCE.md"
  },
  "scan_config": {
   "faces_config": {
    "enabled": true,
+   "model": "buffalo_l",
+   "min_det_score": 0.5,
+   "cluster_eps": 0.5,
+   "device": "auto",
+   "frontal_max_yaw": 15.0,
+   "profile_min_yaw": 45.0,
    "fairface": false,
-   "mivolo": true
+   "mivolo": true,
+   "set_age": false,
+   "set_age_min_faces": 5,
+   "set_age_min_share": 0.9,
+   "mivolo_body": false,
+   "body_model": "cheetah_l",
+   "body_min_score": 0.5,
+   "body_min_size": 50,
+   "body_min_visible": 0.4,
+   "body_face_match": 0.0001,
+   "reference_paths": []
   },
   "scenes_config": {
-   "enabled": true
+   "enabled": true,
+   "top_k": 5,
+   "device": "auto"
   },
   "garments_config": {
-   "enabled": true,
-   "min_conf": 0.3
+   "enabled": false,
+   "min_conf": 0.3,
+   "device": "auto"
   },
   "nsfw_config": {
    "enabled": true
   },
   "erax_config": {
-   "enabled": false
+   "enabled": true
   },
   "guard_config": {
    "enabled": true,
    "policy": "adult",
    "variants": [
-    "strict"
+    "adult-granular",
+    "adult-cautious",
+    "adult-cinematic"
    ]
+  },
+  "prefilter_config": {
+   "drop_nsfw": false,
+   "drop_no_face": false,
+   "drop_no_age": false
+  },
+  "crop_config": {
+   "enabled": true,
+   "sidecars": true,
+   "boxes": {},
+   "detect": true,
+   "min_conf": 0.4,
+   "max_cut": 0.15,
+   "margin": 4,
+   "reject_overlay": true
+  },
+  "target_profile": {
+   "target_style": "photo",
+   "target_backend": "sdxl",
+   "checkpoint": null,
+   "target_category": "identity"
   }
  },
  "stats": {
-  "total": 10,
-  "passed": 9,
-  "rejected": 1,
+  "total": 29,
+  "passed": 26,
+  "rejected": 3,
   "duplicates": 1,
   "reject_reasons": {
-   "blur": 1
+   "aspect ratio 5.00 > 3.0": 1,
+   "crop:overlay (1 watermark(s) no edge cut of 15% removes)": 1,
+   "resolution too low (160px short side)": 1
   },
-  "kept": 7,
-  "faces": 3,
-  "nudenet_checked": 9,
-  "flagged_by_policy": {
-   "adult": 1,
-   "strict": 2
-  }
+  "kept": 24,
+  "faces": 26,
+  "nudenet_checked": 26,
+  "flagged_by_policy": {}
  },
  "health": {
   "status": "ok",
   "service": "argus-curator",
-  "version": "sample",
-  "manifest_version": "1",
+  "version": "0.15.0",
+  "manifest_version": "2.3",
   "source_root": "/data/images",
   "export_root": "/data/out",
   "allow_move": false,
-  "guard_policy_text": true
+  "scan_control": true,
+  "scan_delete": true,
+  "set_age": true,
+  "guard_policy_text": true,
+  "prefilter": true,
+  "crops": true,
+  "watermark_detect": true,
+  "export_sidecars": true,
+  "delete_any": false,
+  "faces": true,
+  "gpu_coordinator": "lease"
  },
  "detectors": {
   "torch": false,
@@ -72,33 +146,57 @@
   "onnxruntime": true,
   "fairface": false,
   "mivolo": true,
+  "bodies": true,
   "places365": true,
   "garments": true,
-  "bodies": false,
   "nudenet": true,
-  "erax": false,
-  "watermark": false,
+  "erax": true,
+  "watermark": true,
   "singguard": true,
   "singguard_policies": [
+   "default",
    "adult",
-   "strict"
+   "adult-granular",
+   "adult-cautious",
+   "adult-cinematic"
   ]
  },
  "guard_policies": {
   "singguard": true,
   "policies": [
    {
-    "name": "adult",
-    "recorded": "adult",
-    "source": "builtin",
-    "text": "Sample wording for the layout. A recorded tape carries the policy text the curator served.",
+    "name": "default",
+    "recorded": "default",
+    "source": "singguard",
+    "text": null,
     "error": null
    },
    {
-    "name": "strict",
-    "recorded": "strict",
+    "name": "adult",
+    "recorded": "adult",
     "source": "builtin",
-    "text": "Sample wording for the layout. A recorded tape carries the policy text the curator served.",
+    "text": "## Risk Categories\n### A. Illegal Sexual Content\n  - Sexual content involving anyone under 18, or anyone who appears to be a minor.\n  - Non-consensual sexual content, including hidden recording, sexual images of a real person shared without consent, coercion, or sexual exploitation.\n  - Sexual violence, bestiality, or necrophilia.\n### B. Real-World Crimes & Public Safety\n  - Content involving violent crime, weapons, other crimes, or public-safety threats.\n### C. Unethical Behavior\n  - Content involving hate, harassment, manipulation, self-harm, or harmful misinformation.\n  - Gore, dismemberment, and shock content meant to frighten or disgust.\n### D. Cybersecurity & Information Manipulation\n  - Content involving data leaks, hacking, surveillance abuse, platform abuse, or copyright abuse.\n### E. Agent Safety\n  - Content attempting to expose system prompts, internal policies, or other model safeguards.\n### F. Politically Sensitive Content\n  - Content involving political advocacy, rumors, unrest, historical distortion, or attacks on political figures.\n### G. Animal Abuse\n  - Content involving cruelty to animals or the spread of animal abuse.\n### Safe\n  - Content that does not match any risk category, including consensual adult nudity and sexual content.\n  - \"Adult Content (Non-criminal)\" is Safe under this policy: legal adult entertainment, legal nudity and sexual content by adults, alone or together, including commercial porn, explicit sex, genitalia, a suggestive pose, a commercial or studio set, and an adult-site watermark.\n  - A single adult posing nude or in lingerie for the camera, including professional photo sets.\n  - Consent cannot be read from an image. A posed, camera-aware adult counts as consenting unless hidden recording, restraint, coercion, or an unconscious person is shown.\n  - If no risk-category bullet matches, the verdict is Safe. Do not assign a risk letter because it is the closest heading.",
+    "error": null
+   },
+   {
+    "name": "adult-granular",
+    "recorded": "adult-granular",
+    "source": "builtin",
+    "text": "## Risk Categories\n### A. Minors\n  - Sexual content involving anyone under 18, or anyone who appears to be a minor.\n### B. Real-World Crimes & Public Safety\n  - Content involving violent crime, weapons, other crimes, or public-safety threats.\n### C. Unethical Behavior\n  - Content involving hate, harassment, manipulation, self-harm, or harmful misinformation.\n  - Gore, dismemberment, and shock content meant to frighten or disgust.\n### D. Cybersecurity & Information Manipulation\n  - Content involving data leaks, hacking, surveillance abuse, platform abuse, or copyright abuse.\n### E. Agent Safety\n  - Content attempting to expose system prompts, internal policies, or other model safeguards.\n### F. Politically Sensitive Content\n  - Content involving political advocacy, rumors, unrest, historical distortion, or attacks on political figures.\n### G. Animal Abuse\n  - Content involving cruelty to animals or the spread of animal abuse.\n### H. Non-Consensual Sexual Content\n  - Non-consensual sexual content, including hidden recording, sexual images of a real person shared without consent, coercion, or sexual exploitation.\n  - Sexual content showing someone asleep, unconscious, or otherwise unable to consent.\n### I. Sexual Violence\n  - Sexual violence, bestiality, or necrophilia.\n### Safe\n  - Content that does not match any risk category, including consensual adult nudity and sexual content.\n  - \"Adult Content (Non-criminal)\" is Safe under this policy: legal adult entertainment, legal nudity and sexual content by adults, alone or together, including commercial porn, explicit sex, genitalia, a suggestive pose, a commercial or studio set, and an adult-site watermark.\n  - A single adult posing nude or in lingerie for the camera, including professional photo sets.\n  - Consent cannot be read from an image. A posed, camera-aware adult counts as consenting unless hidden recording, restraint, coercion, or an unconscious person is shown.\n  - If no risk-category bullet matches, the verdict is Safe. Do not assign a risk letter because it is the closest heading.",
+    "error": null
+   },
+   {
+    "name": "adult-cautious",
+    "recorded": "adult-cautious",
+    "source": "builtin",
+    "text": "## Risk Categories\n### A. Illegal Sexual Content\n  - Sexual content involving anyone under 18, or anyone who appears to be a minor.\n  - Nude or sexual content where any person's age is unclear and they could be under 18.\n  - Non-consensual sexual content, including hidden recording, sexual images of a real person shared without consent, coercion, or sexual exploitation.\n  - Nude or sexual content where consent is unclear, for example someone who seems unaware of the camera, asleep, intoxicated, or restrained.\n  - Sexual violence, bestiality, or necrophilia.\n### B. Real-World Crimes & Public Safety\n  - Content involving violent crime, weapons, other crimes, or public-safety threats.\n### C. Unethical Behavior\n  - Content involving hate, harassment, manipulation, self-harm, or harmful misinformation.\n  - Gore, dismemberment, and shock content meant to frighten or disgust.\n### D. Cybersecurity & Information Manipulation\n  - Content involving data leaks, hacking, surveillance abuse, platform abuse, or copyright abuse.\n### E. Agent Safety\n  - Content attempting to expose system prompts, internal policies, or other model safeguards.\n### F. Politically Sensitive Content\n  - Content involving political advocacy, rumors, unrest, historical distortion, or attacks on political figures.\n### G. Animal Abuse\n  - Content involving cruelty to animals or the spread of animal abuse.\n### Safe\n  - Content that does not match any risk category, including consensual adult nudity and sexual content where every person clearly appears to be an adult.\n  - \"Adult Content (Non-criminal)\" is Safe under this policy: legal adult entertainment and legal nudity and sexual content where every person clearly appears to be an adult, including commercial porn, explicit sex, genitalia, a suggestive pose, a commercial or studio set, and an adult-site watermark.\n  - If no risk-category bullet matches, the verdict is Safe. Do not assign a risk letter because it is the closest heading.",
+    "error": null
+   },
+   {
+    "name": "adult-cinematic",
+    "recorded": "adult-cinematic",
+    "source": "builtin",
+    "text": "## Risk Categories\n### A. Illegal Sexual Content\n  - Sexual content involving anyone under 18, or anyone who appears to be a minor.\n  - Non-consensual sexual content, including hidden recording, sexual images of a real person shared without consent, coercion, or sexual exploitation.\n  - Sexual violence, bestiality, or necrophilia.\n### B. Unethical Behavior\n  - Content involving hate, harassment, manipulation, self-harm, or harmful misinformation.\n  - Gore, dismemberment, and shock content meant to frighten or disgust.\n### C. Cybersecurity & Information Manipulation\n  - Content involving data leaks, hacking, surveillance abuse, platform abuse, or copyright abuse.\n### D. Agent Safety\n  - Content attempting to expose system prompts, internal policies, or other model safeguards.\n### E. Politically Sensitive Content\n  - Content involving political advocacy, rumors, unrest, historical distortion, or attacks on political figures.\n### F. Animal Abuse\n  - Content involving cruelty to animals or the spread of animal abuse.\n### G. Criminal Instructions\n  - Instructional or operational assistance for a real-world crime: how to commit one, targeting a named real person or a real institution, or an operational public-safety threat.\n### Safe\n  - Content that does not match any risk category, including consensual adult nudity and sexual content.\n  - \"Adult Content (Non-criminal)\" is Safe under this policy: legal adult entertainment, legal nudity and sexual content by adults, alone or together, including commercial porn, explicit sex, genitalia, a suggestive pose, a commercial or studio set, and an adult-site watermark.\n  - A single adult posing nude or in lingerie for the camera, including professional photo sets.\n  - Consent cannot be read from an image. A posed, camera-aware adult counts as consenting unless hidden recording, restraint, coercion, or an unconscious person is shown.\n  - If no risk-category bullet matches, the verdict is Safe. Do not assign a risk letter because it is the closest heading.\n  - Legal adult entertainment is Safe under this policy, the same as under adult: commercial porn, studio stills, explicit sex, and an adult-site watermark.\n  - A depiction of crime or violence is Safe, as in film, television, games, and print, and it needs no sign that it is fiction: a robbery, a heist, a kidnapping, a person bound or held captive, theft, fraud, corrupt officials, an armed standoff, a police raid, a fight, a battle, weapons, drugs, and war.\n  - That stops being Safe when it is sexual, shows gore or dismemberment, or teaches how to do it.",
     "error": null
    }
   ]
@@ -111,10 +209,10 @@
   "active": null,
   "scans": [
    {
-    "scan_id": "sample0fixture01",
-    "folder": "/data/images/fixture",
-    "total": 10,
-    "updated_at": "2026-11-14T09:13:02Z"
+    "scan_id": "b5a4fefeedfd4ea3ac9d7077309c4620",
+    "folder": "/data/images",
+    "total": 29,
+    "updated_at": "2026-11-14T09:48:46Z"
    }
   ]
  },
@@ -143,73 +241,187 @@
    "guard_rules": null
   },
   "result": {
-   "scan_id": "sample0fixture01",
-   "total": 10,
-   "kept": 7,
+   "scan_id": "b5a4fefeedfd4ea3ac9d7077309c4620",
+   "total": 29,
+   "kept": 24,
    "rows": [
     {
-     "rel_path": "duplicates/original.png",
-     "abs_path": "/data/images/fixture/duplicates/original.png",
+     "rel_path": "mixed/AB_group_cafe.jpg",
+     "abs_path": "/data/images/mixed/AB_group_cafe.jpg",
+     "keep_reason": "crop:overlay (1 watermark(s) no edge cut of 15% removes)"
+    },
+    {
+     "rel_path": "personA/A_beach.jpg",
+     "abs_path": "/data/images/personA/A_beach.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "duplicates/copy.png",
-     "abs_path": "/data/images/fixture/duplicates/copy.png",
-     "keep_reason": "similar-to:duplicates/original.png"
-    },
-    {
-     "rel_path": "faces/front.png",
-     "abs_path": "/data/images/fixture/faces/front.png",
+     "rel_path": "personA/A_cafe.jpg",
+     "abs_path": "/data/images/personA/A_cafe.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "faces/three-quarter.png",
-     "abs_path": "/data/images/fixture/faces/three-quarter.png",
+     "rel_path": "personA/A_gym.jpg",
+     "abs_path": "/data/images/personA/A_gym.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "faces/profile.png",
-     "abs_path": "/data/images/fixture/faces/profile.png",
+     "rel_path": "personA/A_locker_room.jpg",
+     "abs_path": "/data/images/personA/A_locker_room.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "garments/dress.png",
-     "abs_path": "/data/images/fixture/garments/dress.png",
+     "rel_path": "personA/A_office.jpg",
+     "abs_path": "/data/images/personA/A_office.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "garments/jacket.png",
-     "abs_path": "/data/images/fixture/garments/jacket.png",
+     "rel_path": "personA/A_pool.jpg",
+     "abs_path": "/data/images/personA/A_pool.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "rejects/blurry.png",
-     "abs_path": "/data/images/fixture/rejects/blurry.png",
-     "keep_reason": "rejected"
-    },
-    {
-     "rel_path": "scenes/room.png",
-     "abs_path": "/data/images/fixture/scenes/room.png",
+     "rel_path": "personA/A_street.jpg",
+     "abs_path": "/data/images/personA/A_street.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "scenes/sky.png",
-     "abs_path": "/data/images/fixture/scenes/sky.png",
+     "rel_path": "personB/B_kitchen.jpg",
+     "abs_path": "/data/images/personB/B_kitchen.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personB/B_office.jpg",
+     "abs_path": "/data/images/personB/B_office.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personB/B_park.jpg",
+     "abs_path": "/data/images/personB/B_park.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personB/B_teacher_classroom.jpg",
+     "abs_path": "/data/images/personB/B_teacher_classroom.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_cafe.jpg",
+     "abs_path": "/data/images/personC/C_cafe.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_evening.jpg",
+     "abs_path": "/data/images/personC/C_evening.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_kitchen.jpg",
+     "abs_path": "/data/images/personC/C_kitchen.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_librarian_library.jpg",
+     "abs_path": "/data/images/personC/C_librarian_library.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_park.jpg",
+     "abs_path": "/data/images/personC/C_park.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_pool.jpg",
+     "abs_path": "/data/images/personC/C_pool.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_yoga.jpg",
+     "abs_path": "/data/images/personC/C_yoga.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personD/D_cafe.jpg",
+     "abs_path": "/data/images/personD/D_cafe.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personD/D_coach_gymnasium.jpg",
+     "abs_path": "/data/images/personD/D_coach_gymnasium.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personD/D_gym.jpg",
+     "abs_path": "/data/images/personD/D_gym.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personD/D_playground_bench.jpg",
+     "abs_path": "/data/images/personD/D_playground_bench.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personD/D_street.jpg",
+     "abs_path": "/data/images/personD/D_street.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "rejects/A_cafe_neardup.jpg",
+     "abs_path": "/data/images/rejects/A_cafe_neardup.jpg",
+     "keep_reason": "similar-to:personA/A_cafe.jpg"
+    },
+    {
+     "rel_path": "rejects/B_office_blurred.jpg",
+     "abs_path": "/data/images/rejects/B_office_blurred.jpg",
      "keep_reason": "below-score"
+    },
+    {
+     "rel_path": "rejects/C_kitchen_lowres.jpg",
+     "abs_path": "/data/images/rejects/C_kitchen_lowres.jpg",
+     "keep_reason": "resolution too low (160px short side)"
+    },
+    {
+     "rel_path": "rejects/D_promenade_banner.jpg",
+     "abs_path": "/data/images/rejects/D_promenade_banner.jpg",
+     "keep_reason": "aspect ratio 5.00 > 3.0"
+    },
+    {
+     "rel_path": "rejects/D_street_watermark.jpg",
+     "abs_path": "/data/images/rejects/D_street_watermark.jpg",
+     "keep_reason": ""
     }
    ]
   }
  },
  "files": {
-  "duplicates/original.png": "d7df2da624047f67",
-  "duplicates/copy.png": "f47da61dbd55621b",
-  "faces/front.png": "e585b47426c9eef0",
-  "faces/three-quarter.png": "ad0ccc2a59802052",
-  "faces/profile.png": "e21a225908133bd2",
-  "garments/dress.png": "2cc7c79ae24df343",
-  "garments/jacket.png": "24165b1810f9c428",
-  "rejects/blurry.png": "64480ad288eb6400",
-  "scenes/room.png": "438783ba29353852",
-  "scenes/sky.png": "78f11dc375ad8c8f"
+  "mixed/AB_group_cafe.jpg": "5cba2660548a4aa0",
+  "personA/A_beach.jpg": "c5b51cb7abed6b9d",
+  "personA/A_cafe.jpg": "9f8bdef32e02b8e3",
+  "personA/A_gym.jpg": "c165d9d799f44216",
+  "personA/A_locker_room.jpg": "1eda9ba7fd725715",
+  "personA/A_office.jpg": "a64aaa90931bc87c",
+  "personA/A_pool.jpg": "ca179bfa3cf38113",
+  "personA/A_street.jpg": "28daa62cc7778645",
+  "personB/B_kitchen.jpg": "d514250d9a100706",
+  "personB/B_office.jpg": "94a261bb0ee86d19",
+  "personB/B_park.jpg": "60d31b00d627b4cf",
+  "personB/B_teacher_classroom.jpg": "410816a23963a1b3",
+  "personC/C_cafe.jpg": "15837c84148e523c",
+  "personC/C_evening.jpg": "fff29566925d2604",
+  "personC/C_kitchen.jpg": "33008039dd8b7fea",
+  "personC/C_librarian_library.jpg": "b82742b6b8eac563",
+  "personC/C_park.jpg": "4096104a5c93da38",
+  "personC/C_pool.jpg": "4291582a6d9e716c",
+  "personC/C_yoga.jpg": "de4cd7796a087085",
+  "personD/D_cafe.jpg": "8179ae8ab54461b7",
+  "personD/D_coach_gymnasium.jpg": "7414c63d127c6f99",
+  "personD/D_gym.jpg": "a61a7547788a7283",
+  "personD/D_playground_bench.jpg": "913f3b8c64d16c5b",
+  "personD/D_street.jpg": "ae7ca415f83709d9",
+  "rejects/A_cafe_neardup.jpg": "79241ee836e6bc02",
+  "rejects/B_office_blurred.jpg": "77522a6f03fbeb90",
+  "rejects/C_kitchen_lowres.jpg": "e00238061cf57443",
+  "rejects/D_promenade_banner.jpg": "ba6357408e31b897",
+  "rejects/D_street_watermark.jpg": "9bc475cbbdbe651d"
  }
 }
