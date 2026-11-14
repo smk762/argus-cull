@@ -1,7 +1,7 @@
 import { exposedLabelsForRequest } from "./moderation";
 import { normalisePolicyChoice, policiesRun, type PolicyChoice } from "./policies";
 import type { CheckConfig, CropConfig, Detectors, FaceConfig, FilterState, GarmentConfig, GuardConfig, ImageResult, Prefilter, PrefilterConfig, ScanSummary, SceneConfig, SelectRequest } from "./types";
-import { cropMaxCutPercent, DEFAULT_CROP_MAX_CUT } from "./types";
+import { cropMaxCutPercent } from "./types";
 
 export interface FilterAvailability {
   faces: boolean;
@@ -181,8 +181,8 @@ export function scanBody(folder: string, detectors: Detectors, policies: PolicyC
 }
 
 function cropsBody(checks: ScanChecks): CropConfig {
-  const cut = cropMaxCutPercent(checks.cropMaxCut);
-  return { enabled: true, detect: true, ...(cut !== DEFAULT_CROP_MAX_CUT ? { max_cut: cut / 100 } : {}) };
+  // Always sent: the curator's own default is lower than this form's.
+  return { enabled: true, detect: true, max_cut: cropMaxCutPercent(checks.cropMaxCut) / 100 };
 }
 
 function prefilterBody(detectors: Detectors, checks: ScanChecks): { prefilter?: PrefilterConfig } {

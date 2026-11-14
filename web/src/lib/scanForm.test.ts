@@ -115,10 +115,10 @@ describe("shown age", () => {
 describe("scan template", () => {
   it("reads the form back out of a finished scan", () => {
     const template = templateFromSummary(SUMMARY, "/data/images", DETECTORS);
-    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 });
+    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 });
     // A scan that ran garments runs them again; one with no recorded policy takes the picker's default.
     const plain = { ...SUMMARY, garments_config: { enabled: true, min_conf: 0.3 }, guard_config: { enabled: false }, faces_config: { enabled: true, fairface: true, mivolo: true } };
-    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 });
+    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 });
     // The curator writes a policy name even when SingGuard was off; that is not a choice to repeat.
     const off: ScanSummary = { ...SUMMARY, guard_config: { enabled: false, policy: "default" } };
     expect(templateFromSummary(off, "/data/images", DETECTORS).policy).toEqual({ policy: "adult", variants: [] });
@@ -144,8 +144,8 @@ describe("scan template", () => {
 
   it("names what a template runs", () => {
     expect(templateSummary(templateFromSummary(SUMMARY, "/data/images", DETECTORS), DETECTORS)).toBe("adult + adult-v2 · set age");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 }, DETECTORS)).toBe("default · garments");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 }, DETECTORS)).toBe("default · garments");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
   });
 });
 
@@ -347,7 +347,7 @@ describe("run stats", () => {
   it("fills the scan form back from its own file", () => {
     const file = JSON.parse(JSON.stringify(stats));
     expect(templateFromRunStats(file, "/data/images", DETECTORS)).toEqual({
-      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 },
+      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 },
       notes: [],
     });
     // A curator without adult-v2 drops it and says so.

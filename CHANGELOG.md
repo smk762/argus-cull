@@ -11,6 +11,7 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ### Changed
 
+- *Most one edge may lose* defaults to 17%, not the curator's 15%, and the scan always sends `max_cut`: the frames 15% rejected as `crop:overlay` needed cuts of up to 16.8%.
 - Compose builds argus-curator's `dev` branch at the commit `sync/argus-curator.json` records, instead of the last release (`:latest-gpu`). `make check` fails when `docker-compose.yaml` builds another commit or version, and the drift job and `make sync-curator` move it with the record. `CURATOR_GPU=0` builds the CPU image (#63).
 - The page uses the shared tokens and the system font stack instead of Inter and DM Sans from Google Fonts.
 
