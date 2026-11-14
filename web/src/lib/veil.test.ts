@@ -14,6 +14,24 @@ const readTape = (name: string) => JSON.parse(readFileSync(new URL(name, TAPE), 
 const tape = parseTape(readTape("tape.json"));
 const scan = parseScan(readTape("scan.json"), tape);
 const frame = (name: string): ImageResult => scan.results.find((image) => image.rel_path.endsWith(name))!;
+// The recorded set has no watermark false positive and no NudeNet flag left, so these two
+// cases are built from real frames with the one field that matters changed.
+const heldWatermark: ImageResult = {
+  ...frame("D_cafe_watermark.jpg"),
+  passed: false,
+  reject_reason: "crop:overlay (1 watermark(s) no edge cut of 15% removes)",
+  crop: null,
+  nsfw: null,
+  guard: null,
+  guard_variants: undefined,
+  width: 832,
+  height: 1216,
+  watermarks: [{ label: "watermark", score: 0.62, bbox: [415.1, 1024, 160, 192] }],
+};
+const nudeFlag: ImageResult = {
+  ...frame("A_gym_sportsbra.jpg"),
+  nsfw: { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.39, FACE_FEMALE: 0.9 }, exposed_score: 0.39 },
+};
 
 describe("rejectWords", () => {
   it("puts each reject reason in plain words, keeping the curator's code", () => {
@@ -45,13 +63,13 @@ describe("rejectWords", () => {
 
 describe("veilFor on the recorded scan", () => {
   it("holds the watermark false positive at the medium strength, with no unblur", () => {
-    const veil = veilFor(frame("B_park.jpg"), [], DEFAULT_BLUR)!;
+    const veil = veilFor(heldWatermark, [], DEFAULT_BLUR)!;
     expect(veil).toMatchObject({ kind: "held", strength: "medium", chip: "Held", headline: "Held: not safety-checked", unblur: false });
     expect(veil.detail).toMatch(/crop:overlay/);
   });
 
   it("veils the NudeNet and policy flags at the same strength, with unblur and a short reason", () => {
-    const nude = veilFor(frame("E_locker_room.jpg"), [], DEFAULT_BLUR)!;
+    const nude = veilFor(nudeFlag, [], DEFAULT_BLUR)!;
     expect(nude).toMatchObject({ kind: "nudenet", strength: "medium", chip: "Veiled: NudeNet", unblur: true });
     expect(nude.detail).toMatch(/^NudeNet: [a-z ]+ exposed 0\.39\./);
     expect(nude.short).toMatch(/^NudeNet: [a-z ]+ exposed 0\.39$/);
@@ -75,21 +93,21 @@ describe("veilFor on the recorded scan", () => {
   it("holds an unscored frame while NudeNet runs, and an under-18 exposed one, at the one strength", () => {
     const unscored = { ...frame("A_cafe.jpg"), nsfw: null };
     expect(veilFor(unscored, ["nsfw"], DEFAULT_BLUR)).toMatchObject({ kind: "scanning", strength: "medium", chip: null, unblur: false, headline: "Held: still scanning" });
-    const base = frame("E_locker_room.jpg");
+    const base = nudeFlag;
     const minor = { ...base, faces: base.faces!.map((face) => ({ ...face, attributes: { ...face.attributes!, age_years: 16 } })) };
     expect(veilFor(minor, [], { ...DEFAULT_BLUR, unblurNsfw: true })).toMatchObject({ kind: "minor", strength: "medium", unblur: false });
   });
 
   it("names the policy and rule that flagged", () => {
     const image = frame("A_noir_detective.jpg");
-    expect(policyLine(image)).toMatch(/^Adult and 2 more policies flagged rule B/);
+    expect(policyLine(image)).toMatch(/^Adult and 3 more policies flagged rule B/);
     expect(policyLine(image, "adult-granular")).toMatch(/^The adult-granular policy flagged rule B/);
   });
 });
 
 describe("watermarkBoxes", () => {
   it("outlines the detected watermark on a crop reject, as fractions of the frame", () => {
-    const [box, ...rest] = watermarkBoxes(frame("B_park.jpg"));
+    const [box, ...rest] = watermarkBoxes(heldWatermark);
     expect(rest).toHaveLength(0);
     expect(box[0]).toBeCloseTo(415.1 / 832, 4);
     expect(box[1]).toBeCloseTo(1024 / 1216, 4);
@@ -186,8 +204,8 @@ describe("tileVerdict: the grid chip and its colour", () => {
   });
 
   it("says Held (danger) for a reject, with the reason on the frame rather than a line", () => {
-    const image = frame("B_park.jpg");
-    expect(tileVerdict(image, image.reject_reason, veiled("B_park.jpg"))).toEqual({ chip: "Held", tone: "held", title: "Held: not safety-checked", line: null });
+    const image = heldWatermark;
+    expect(tileVerdict(image, image.reject_reason, veilFor(image, [], DEFAULT_BLUR))).toEqual({ chip: "Held", tone: "held", title: "Held: not safety-checked", line: null });
   });
 
   it("says Held for a reject that is somehow shown, with the reason as a line", () => {
@@ -195,7 +213,7 @@ describe("tileVerdict: the grid chip and its colour", () => {
   });
 
   it("says Veiled · Keep (warn) for a policy or NudeNet veil in the keep set; the frame's panel says why", () => {
-    expect(tileVerdict(frame("E_locker_room.jpg"), "", veiled("E_locker_room.jpg"))).toEqual({ chip: "Veiled · Keep", tone: "veiled", line: null, title: "Veiled: NudeNet. In the keep set" });
+    expect(tileVerdict(nudeFlag, "", veilFor(nudeFlag, [], DEFAULT_BLUR))).toEqual({ chip: "Veiled · Keep", tone: "veiled", line: null, title: "Veiled: NudeNet. In the keep set" });
     expect(tileVerdict(frame("D_action_film.jpg"), "", veiled("D_action_film.jpg"))).toMatchObject({ chip: "Veiled · Keep", tone: "veiled", title: "Veiled: policy. In the keep set" });
   });
 

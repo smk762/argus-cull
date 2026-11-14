@@ -218,9 +218,13 @@ def run_stats(summary: dict, select: dict | None) -> dict:
     flagged: Counter[str] = Counter()
     for image in results:
         guard = image.get("guard")
+        official = (guard or {}).get("policy") or (summary.get("guard_config") or {}).get("policy") or "official"
         if guard and guard.get("safe") is False:
-            flagged[guard.get("policy") or (summary.get("guard_config") or {}).get("policy") or "official"] += 1
+            flagged[official] += 1
         for name, verdict in (image.get("guard_variants") or {}).items():
+            # Curator repeats the official verdict among the variants; count it once.
+            if name == official:
+                continue
             if verdict and verdict.get("safe") is False:
                 flagged[name] += 1
     return {

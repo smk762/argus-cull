@@ -1,7 +1,7 @@
 {
  "format": "argus-cull-tape",
  "version": 1,
- "generated_at": "2026-11-14T11:34:56Z",
+ "generated_at": "2026-11-14T19:35:28Z",
  "provenance": {
   "kind": "recorded",
   "source": "curator",
@@ -13,15 +13,19 @@
   "about": [
    {
     "label": "Set",
-    "text": "Synthetic: 41 photoreal frames generated for this demo. No real photos."
+    "text": "Synthetic: 51 photoreal frames generated for this demo. No real photos."
    },
    {
     "label": "People",
-    "text": "Five fictional adults, written as 27 to 30; MiVOLO reads them as about 26 to 39. None depicts or imitates a real person."
+    "text": "Five fictional adults, written as 27 to 30; MiVOLO reads every face as 25 or older. None depicts or imitates a real person."
    },
    {
     "label": "Content",
-    "text": "Bland to swimsuit-magazine level (bikinis, sports tops, shirtless men, an open jacket, satin evening dresses with a cut-out and a deeper neckline); no nudity, no nipples, nothing see-through. Two film-style stills hold a prop handgun, pointed away from the camera, to show a weapons verdict. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal, a smuggler with cash, a blindfolded hostage), with no blood or injury, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+   },
+   {
+    "label": "Faces",
+    "text": "Face clustering distance 0.8, tuned for this synthetic set: each person has one main cluster and no two people merge. A few dark, half-lit crime-film stills form small clusters of their own. Curator's default is 0.5."
    },
    {
     "label": "Checkpoint",
@@ -43,7 +47,7 @@
    "enabled": true,
    "model": "buffalo_l",
    "min_det_score": 0.5,
-   "cluster_eps": 0.5,
+   "cluster_eps": 0.8,
    "device": "auto",
    "frontal_max_yaw": 15.0,
    "profile_min_yaw": 45.0,
@@ -80,6 +84,7 @@
    "enabled": true,
    "policy": "adult",
    "variants": [
+    "default",
     "adult-granular",
     "adult-cautious",
     "adult-cinematic"
@@ -108,23 +113,24 @@
   }
  },
  "stats": {
-  "total": 41,
-  "passed": 36,
-  "rejected": 5,
+  "total": 51,
+  "passed": 48,
+  "rejected": 3,
   "duplicates": 1,
   "reject_reasons": {
    "aspect ratio 5.00 > 3.0": 1,
    "blurry (sharpness=3.9 < 100.0)": 1,
-   "crop:overlay (1 watermark(s) no edge cut of 15% removes)": 2,
    "resolution too low (160px short side)": 1
   },
-  "kept": 34,
-  "faces": 36,
-  "nudenet_checked": 36,
+  "kept": 46,
+  "faces": 48,
+  "nudenet_checked": 48,
   "flagged_by_policy": {
-   "adult": 4,
-   "adult-cautious": 2,
-   "adult-granular": 2
+   "adult": 10,
+   "adult-cautious": 9,
+   "adult-cinematic": 1,
+   "adult-granular": 10,
+   "default": 8
   }
  },
  "health": {
@@ -218,10 +224,10 @@
   "active": null,
   "scans": [
    {
-    "scan_id": "a99ea54dad9741a3ba79b5c62fd81c99",
-    "folder": "/data/images",
-    "total": 41,
-    "updated_at": "2026-11-14T11:34:56Z"
+    "scan_id": "7cb097a158484c7096febdf49ab5cf43",
+    "folder": "/data/images/final",
+    "total": 51,
+    "updated_at": "2026-11-14T19:35:28Z"
    }
   ]
  },
@@ -250,263 +256,322 @@
    "guard_rules": null
   },
   "result": {
-   "scan_id": "a99ea54dad9741a3ba79b5c62fd81c99",
-   "total": 41,
-   "kept": 34,
+   "scan_id": "7cb097a158484c7096febdf49ab5cf43",
+   "total": 51,
+   "kept": 46,
    "rows": [
     {
-     "rel_path": "mixed/BE_group_cafe.jpg",
-     "abs_path": "/data/images/mixed/BE_group_cafe.jpg",
-     "keep_reason": "below-score"
-    },
-    {
      "rel_path": "personA/A_beach_bikini.jpg",
-     "abs_path": "/data/images/personA/A_beach_bikini.jpg",
+     "abs_path": "/data/images/final/personA/A_beach_bikini.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personA/A_cafe.jpg",
-     "abs_path": "/data/images/personA/A_cafe.jpg",
+     "abs_path": "/data/images/final/personA/A_cafe.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personA/A_gym_sportsbra.jpg",
-     "abs_path": "/data/images/personA/A_gym_sportsbra.jpg",
+     "abs_path": "/data/images/final/personA/A_gym_sportsbra.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personA/A_heist_film.jpg",
+     "abs_path": "/data/images/final/personA/A_heist_film.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personA/A_noir_detective.jpg",
-     "abs_path": "/data/images/personA/A_noir_detective.jpg",
+     "abs_path": "/data/images/final/personA/A_noir_detective.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personA/A_office.jpg",
-     "abs_path": "/data/images/personA/A_office.jpg",
+     "abs_path": "/data/images/final/personA/A_office.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personA/A_street.jpg",
-     "abs_path": "/data/images/personA/A_street.jpg",
+     "abs_path": "/data/images/final/personA/A_street.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personA/A_street_openJacket.jpg",
+     "abs_path": "/data/images/final/personA/A_street_openJacket.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personA/A_teacher_classroom.jpg",
-     "abs_path": "/data/images/personA/A_teacher_classroom.jpg",
+     "abs_path": "/data/images/final/personA/A_teacher_classroom.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personB/B_coach_gymnasium.jpg",
-     "abs_path": "/data/images/personB/B_coach_gymnasium.jpg",
+     "abs_path": "/data/images/final/personB/B_coach_gymnasium.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personB/B_detective_film.jpg",
+     "abs_path": "/data/images/final/personB/B_detective_film.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personB/B_drugdeal_film.jpg",
+     "abs_path": "/data/images/final/personB/B_drugdeal_film.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personB/B_gym_shirtless.jpg",
-     "abs_path": "/data/images/personB/B_gym_shirtless.jpg",
+     "abs_path": "/data/images/final/personB/B_gym_shirtless.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personB/B_kitchen.jpg",
-     "abs_path": "/data/images/personB/B_kitchen.jpg",
+     "abs_path": "/data/images/final/personB/B_kitchen.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personB/B_office.jpg",
-     "abs_path": "/data/images/personB/B_office.jpg",
+     "abs_path": "/data/images/final/personB/B_office.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personB/B_park.jpg",
-     "abs_path": "/data/images/personB/B_park.jpg",
-     "keep_reason": "crop:overlay (1 watermark(s) no edge cut of 15% removes)"
-    },
-    {
-     "rel_path": "personB/B_pool_shirtless.jpg",
-     "abs_path": "/data/images/personB/B_pool_shirtless.jpg",
+     "abs_path": "/data/images/final/personB/B_park.jpg",
      "keep_reason": ""
     },
     {
-     "rel_path": "personB/B_street_openJacket.jpg",
-     "abs_path": "/data/images/personB/B_street_openJacket.jpg",
+     "rel_path": "personB/B_pool_shirtless.jpg",
+     "abs_path": "/data/images/final/personB/B_pool_shirtless.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personC/C_cafe.jpg",
-     "abs_path": "/data/images/personC/C_cafe.jpg",
-     "keep_reason": "crop:overlay (1 watermark(s) no edge cut of 15% removes)"
+     "abs_path": "/data/images/final/personC/C_cafe.jpg",
+     "keep_reason": ""
     },
     {
      "rel_path": "personC/C_evening_cutout.jpg",
-     "abs_path": "/data/images/personC/C_evening_cutout.jpg",
+     "abs_path": "/data/images/final/personC/C_evening_cutout.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personC/C_evening_gown.jpg",
-     "abs_path": "/data/images/personC/C_evening_gown.jpg",
+     "abs_path": "/data/images/final/personC/C_evening_gown.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personC/C_evening_neckline.jpg",
-     "abs_path": "/data/images/personC/C_evening_neckline.jpg",
+     "abs_path": "/data/images/final/personC/C_evening_neckline.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personC/C_kitchen.jpg",
-     "abs_path": "/data/images/personC/C_kitchen.jpg",
+     "abs_path": "/data/images/final/personC/C_kitchen.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personC/C_librarian_library.jpg",
-     "abs_path": "/data/images/personC/C_librarian_library.jpg",
+     "abs_path": "/data/images/final/personC/C_librarian_library.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_lingerie.jpg",
+     "abs_path": "/data/images/final/personC/C_lingerie.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personC/C_park.jpg",
-     "abs_path": "/data/images/personC/C_park.jpg",
+     "abs_path": "/data/images/final/personC/C_park.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personC/C_pool_bikini.jpg",
-     "abs_path": "/data/images/personC/C_pool_bikini.jpg",
+     "abs_path": "/data/images/final/personC/C_pool_bikini.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_rooftop_film.jpg",
+     "abs_path": "/data/images/final/personC/C_rooftop_film.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personC/C_spy_film.jpg",
+     "abs_path": "/data/images/final/personC/C_spy_film.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personD/D_action_film.jpg",
-     "abs_path": "/data/images/personD/D_action_film.jpg",
+     "abs_path": "/data/images/final/personD/D_action_film.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personD/D_beach_shirtless.jpg",
-     "abs_path": "/data/images/personD/D_beach_shirtless.jpg",
+     "abs_path": "/data/images/final/personD/D_beach_shirtless.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personD/D_cafe.jpg",
-     "abs_path": "/data/images/personD/D_cafe.jpg",
+     "abs_path": "/data/images/final/personD/D_cafe.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personD/D_gym_shirtless.jpg",
-     "abs_path": "/data/images/personD/D_gym_shirtless.jpg",
+     "abs_path": "/data/images/final/personD/D_gym_shirtless.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personD/D_hostage_film.jpg",
+     "abs_path": "/data/images/final/personD/D_hostage_film.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personD/D_playground_bench.jpg",
-     "abs_path": "/data/images/personD/D_playground_bench.jpg",
+     "abs_path": "/data/images/final/personD/D_playground_bench.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personD/D_smuggler_film.jpg",
+     "abs_path": "/data/images/final/personD/D_smuggler_film.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personD/D_street.jpg",
-     "abs_path": "/data/images/personD/D_street.jpg",
+     "abs_path": "/data/images/final/personD/D_street.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personD/D_surf_shirtless.jpg",
-     "abs_path": "/data/images/personD/D_surf_shirtless.jpg",
+     "abs_path": "/data/images/final/personD/D_surf_shirtless.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personE/E_beach_bikini.jpg",
-     "abs_path": "/data/images/personE/E_beach_bikini.jpg",
+     "abs_path": "/data/images/final/personE/E_beach_bikini.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personE/E_cafe.jpg",
-     "abs_path": "/data/images/personE/E_cafe.jpg",
+     "abs_path": "/data/images/final/personE/E_cafe.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personE/E_getaway_film.jpg",
+     "abs_path": "/data/images/final/personE/E_getaway_film.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personE/E_heist_film.jpg",
+     "abs_path": "/data/images/final/personE/E_heist_film.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personE/E_locker_room.jpg",
-     "abs_path": "/data/images/personE/E_locker_room.jpg",
+     "abs_path": "/data/images/final/personE/E_locker_room.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personE/E_office.jpg",
-     "abs_path": "/data/images/personE/E_office.jpg",
+     "abs_path": "/data/images/final/personE/E_office.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personE/E_park.jpg",
-     "abs_path": "/data/images/personE/E_park.jpg",
+     "abs_path": "/data/images/final/personE/E_park.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "personE/E_run_cropTop.jpg",
-     "abs_path": "/data/images/personE/E_run_cropTop.jpg",
+     "abs_path": "/data/images/final/personE/E_run_cropTop.jpg",
      "keep_reason": ""
     },
     {
      "rel_path": "rejects/A_cafe_neardup.jpg",
-     "abs_path": "/data/images/rejects/A_cafe_neardup.jpg",
+     "abs_path": "/data/images/final/rejects/A_cafe_neardup.jpg",
      "keep_reason": "similar-to:personA/A_cafe.jpg"
     },
     {
+     "rel_path": "rejects/BE_group_cafe.jpg",
+     "abs_path": "/data/images/final/rejects/BE_group_cafe.jpg",
+     "keep_reason": "below-score"
+    },
+    {
      "rel_path": "rejects/B_office_blurred.jpg",
-     "abs_path": "/data/images/rejects/B_office_blurred.jpg",
+     "abs_path": "/data/images/final/rejects/B_office_blurred.jpg",
      "keep_reason": "blurry (sharpness=3.9 < 100.0)"
     },
     {
      "rel_path": "rejects/C_kitchen_lowres.jpg",
-     "abs_path": "/data/images/rejects/C_kitchen_lowres.jpg",
+     "abs_path": "/data/images/final/rejects/C_kitchen_lowres.jpg",
      "keep_reason": "resolution too low (160px short side)"
     },
     {
      "rel_path": "rejects/D_beach_banner.jpg",
-     "abs_path": "/data/images/rejects/D_beach_banner.jpg",
+     "abs_path": "/data/images/final/rejects/D_beach_banner.jpg",
      "keep_reason": "aspect ratio 5.00 > 3.0"
     },
     {
      "rel_path": "rejects/D_cafe_watermark.jpg",
-     "abs_path": "/data/images/rejects/D_cafe_watermark.jpg",
+     "abs_path": "/data/images/final/rejects/D_cafe_watermark.jpg",
      "keep_reason": ""
     }
    ]
   }
  },
  "files": {
-  "mixed/BE_group_cafe.jpg": "eb40ec36e41035fe",
   "personA/A_beach_bikini.jpg": "e8ac3c8db0836a98",
   "personA/A_cafe.jpg": "9f8bdef32e02b8e3",
   "personA/A_gym_sportsbra.jpg": "248e79ab02281f4e",
+  "personA/A_heist_film.jpg": "79713d88b818a79d",
   "personA/A_noir_detective.jpg": "b3670d4eb3c64bf6",
   "personA/A_office.jpg": "a64aaa90931bc87c",
   "personA/A_street.jpg": "28daa62cc7778645",
+  "personA/A_street_openJacket.jpg": "cc58d0f1a45caa35",
   "personA/A_teacher_classroom.jpg": "8e77831a653526cc",
   "personB/B_coach_gymnasium.jpg": "f91d5cc46ef8c821",
+  "personB/B_detective_film.jpg": "fab68ad5fa39eed8",
+  "personB/B_drugdeal_film.jpg": "6746984c68a81580",
   "personB/B_gym_shirtless.jpg": "36aa15abf476dbe2",
   "personB/B_kitchen.jpg": "d514250d9a100706",
   "personB/B_office.jpg": "94a261bb0ee86d19",
   "personB/B_park.jpg": "60d31b00d627b4cf",
   "personB/B_pool_shirtless.jpg": "e12d2a6c8697cce1",
-  "personB/B_street_openJacket.jpg": "df50bb6e2cd4bcba",
   "personC/C_cafe.jpg": "15837c84148e523c",
   "personC/C_evening_cutout.jpg": "b0a89d9e3d0266fe",
   "personC/C_evening_gown.jpg": "be089b3b37c62e08",
   "personC/C_evening_neckline.jpg": "6314cc7770723bac",
   "personC/C_kitchen.jpg": "33008039dd8b7fea",
   "personC/C_librarian_library.jpg": "b82742b6b8eac563",
+  "personC/C_lingerie.jpg": "7e8821d96f6c7d5a",
   "personC/C_park.jpg": "4096104a5c93da38",
   "personC/C_pool_bikini.jpg": "ae32bb56d882854f",
+  "personC/C_rooftop_film.jpg": "5fdd32abaad3b3c7",
+  "personC/C_spy_film.jpg": "3dfa071d5c4c41d9",
   "personD/D_action_film.jpg": "abde0009251ca209",
   "personD/D_beach_shirtless.jpg": "d4fee38a4ea564fa",
   "personD/D_cafe.jpg": "8179ae8ab54461b7",
   "personD/D_gym_shirtless.jpg": "e8f246d0c5d42e64",
+  "personD/D_hostage_film.jpg": "cdc47dc5df637504",
   "personD/D_playground_bench.jpg": "913f3b8c64d16c5b",
+  "personD/D_smuggler_film.jpg": "ffc733fcd4398862",
   "personD/D_street.jpg": "ae7ca415f83709d9",
   "personD/D_surf_shirtless.jpg": "4ae6fdfdccdc56c9",
   "personE/E_beach_bikini.jpg": "4eda7444bcf433a9",
   "personE/E_cafe.jpg": "d367fbadc7e52f45",
+  "personE/E_getaway_film.jpg": "bea8f17971bc8db8",
+  "personE/E_heist_film.jpg": "774051ebfd182f05",
   "personE/E_locker_room.jpg": "ac7264120253ce47",
   "personE/E_office.jpg": "a303407f89451b10",
   "personE/E_park.jpg": "61da1dc8cacaa5dc",
   "personE/E_run_cropTop.jpg": "df63f5840dd90058",
   "rejects/A_cafe_neardup.jpg": "79241ee836e6bc02",
+  "rejects/BE_group_cafe.jpg": "c752b37b5c0bd16a",
   "rejects/B_office_blurred.jpg": "77522a6f03fbeb90",
   "rejects/C_kitchen_lowres.jpg": "e00238061cf57443",
   "rejects/D_beach_banner.jpg": "86c5bc936a100daf",
   "rejects/D_cafe_watermark.jpg": "54ee8911d761e7ef"
  },
  "veils": {
-  "medium": 28,
-  "coarse": 16
+  "medium": 28
  }
 }

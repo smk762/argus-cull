@@ -1,8 +1,30 @@
 [
-  { "label": "Set", "text": "Synthetic: 41 photoreal frames generated for this demo. No real photos." },
-  { "label": "People", "text": "Five fictional adults, written as 27 to 30; MiVOLO reads them as about 26 to 39. None depicts or imitates a real person." },
-  { "label": "Content", "text": "Bland to swimsuit-magazine level (bikinis, sports tops, shirtless men, an open jacket, satin evening dresses with a cut-out and a deeper neckline); no nudity, no nipples, nothing see-through. Two film-style stills hold a prop handgun, pointed away from the camera, to show a weapons verdict. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks." },
-  { "label": "Checkpoint", "text": "CyberRealistic XL Desire v2.0 (SDXL), CreativeML Open RAIL-M." },
-  { "label": "Identity", "text": "InstantID (Apache-2.0). Its face encoder, InsightFace antelopev2, has non-commercial research weights; used only for this non-commercial demo." },
-  { "label": "Edits", "text": "One retouch: logos and sign glyphs inpainted out of the gym-hall frame. The reject frames are derived from renders; nothing else was edited." }
+  {
+    "label": "Set",
+    "text": "Synthetic: 51 photoreal frames generated for this demo. No real photos."
+  },
+  {
+    "label": "People",
+    "text": "Five fictional adults, written as 27 to 30; MiVOLO reads every face as 25 or older. None depicts or imitates a real person."
+  },
+  {
+    "label": "Content",
+    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal, a smuggler with cash, a blindfolded hostage), with no blood or injury, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+  },
+  {
+    "label": "Faces",
+    "text": "Face clustering distance 0.8, tuned for this synthetic set: each person has one main cluster and no two people merge. A few dark, half-lit crime-film stills form small clusters of their own. Curator's default is 0.5."
+  },
+  {
+    "label": "Checkpoint",
+    "text": "CyberRealistic XL Desire v2.0 (SDXL), CreativeML Open RAIL-M."
+  },
+  {
+    "label": "Identity",
+    "text": "InstantID (Apache-2.0). Its face encoder, InsightFace antelopev2, has non-commercial research weights; used only for this non-commercial demo."
+  },
+  {
+    "label": "Edits",
+    "text": "One retouch: logos and sign glyphs inpainted out of the gym-hall frame. The reject frames are derived from renders; nothing else was edited."
+  }
 ]
