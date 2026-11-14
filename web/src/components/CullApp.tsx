@@ -991,7 +991,7 @@ export function CullApp() {
               const made = madeWith(summary, health?.version);
               return (
                 <p className="flex flex-wrap items-center gap-x-2 text-caption text-text-muted">
-                  <Tooltip text={made.versionNote}>
+                  <Tooltip text={made.note}>
                     <span tabIndex={0}>{made.line}</span>
                   </Tooltip>
                   <DocLink href={DOCS.home} label="argus-curator docs" />
