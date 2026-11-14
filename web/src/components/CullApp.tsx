@@ -10,6 +10,7 @@ import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, fi
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
+import { DOCS } from "@/lib/docsLinks";
 import { madeWith } from "@/lib/madeWith";
 import { defaultExportDest, exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
 import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
@@ -38,6 +39,7 @@ import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch 
 
 import { DemoBadge, NotInDemo } from "./DemoBadge";
 import { DemoProvenance } from "./DemoProvenance";
+import { DocLink } from "./DocLink";
 import { ExportDialog } from "./ExportDialog";
 import { ExternalLink } from "./ExternalLink";
 import { ThemeToggle } from "./ThemeToggle";
@@ -873,7 +875,12 @@ export function CullApp() {
             <h1 className="font-display text-heading">Argus Cull</h1>
             <p className="text-caption text-text-secondary">Which files would make the training set.</p>
           </div>
-          <ThemeToggle />
+          <div className="flex shrink-0 items-center gap-2">
+            <DocLink href={DOCS.home} label="argus-curator docs" className="text-small">
+              Docs
+            </DocLink>
+            <ThemeToggle />
+          </div>
         </div>
         {STATIC ? <p className="text-small text-text-secondary">{DEMO_INTRO}</p> : null}
         {STATIC ? (
@@ -983,11 +990,12 @@ export function CullApp() {
             (() => {
               const made = madeWith(summary, health?.version);
               return (
-                <Tooltip text={made.versionNote}>
-                  <p className="text-caption text-text-muted" tabIndex={0}>
-                    {made.line}
-                  </p>
-                </Tooltip>
+                <p className="flex flex-wrap items-center gap-x-2 text-caption text-text-muted">
+                  <Tooltip text={made.versionNote}>
+                    <span tabIndex={0}>{made.line}</span>
+                  </Tooltip>
+                  <DocLink href={DOCS.home} label="argus-curator docs" />
+                </p>
               );
             })()
           ) : null}
@@ -1031,6 +1039,9 @@ export function CullApp() {
                 Run stats
               </button>
             </Tooltip>
+            <DocLink href={DOCS.runStats} label="The run stats format" className="self-center">
+              Run stats format
+            </DocLink>
             <Tooltip text={STATIC ? `Not in this demo. ${OFF.export}` : selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
               <button
                 type="button"

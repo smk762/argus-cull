@@ -1,9 +1,26 @@
 {
-  "$comment": "Where cull's curator docs and demo data come from: argus-curator's dev branch at one commit. scripts/sync_check.py (make check) holds the docs and sync/fixture-scan.json to it offline; .github/workflows/sync-drift.yml flags when dev moves on. docs stays empty until argus-curator#138 splits the docs for import.",
+  "$comment": "Where cull's curator docs and demo data come from: argus-curator's dev branch at one commit. docs holds a sha256 per file web/scripts/curator-docs.mjs imported at that commit. scripts/sync_check.py and curator-docs.mjs --check (make check) hold the docs, sync/fixture-scan.json and docker-compose.yaml to it offline; .github/workflows/sync-drift.yml flags when dev moves on.",
   "package": "argus-curator",
   "repo": "smk762/argus-curator",
   "branch": "dev",
   "commit": "06a7eae8499b752dd843c846d725a85b47b8799a",
   "version": "0.15.1.dev6+g06a7eae84",
-  "docs": {}
+  "docs": {
+    "web/content/curator/docs/cli.md": "2c2cf6e292a8f5c57b38c17fe80f6637c18a54b04f141ab6fcebe2eaf61606f0",
+    "web/content/curator/docs/crops.md": "b836606ee147f8595946d7c8d069ae2abce2d3321870634016167f2930196003",
+    "web/content/curator/docs/face-attributes.md": "fe577bfb74133580a17d4e3afee4b0057b36f987aba7b74ce9f1723a745f93c0",
+    "web/content/curator/docs/garments.md": "28329b9da6ebe1815ee87b14b1d7dfd984a480298dcfe02c7969f19be9763aa0",
+    "web/content/curator/docs/gpu.md": "3308207ec0a1b733705ff64da236f0302cc7a374fd1bfe7a30a8c3e31a1cb98e",
+    "web/content/curator/docs/http-api.md": "f2fc3616ee2d93fdeca6e9f38d0d86f8cfaead78e7d8312faeb97330ab5c82ba",
+    "web/content/curator/docs/manifest.md": "b30406daef784ae5d3d1ed7c234e2e4612038d40895a53caa04f447233b018ab",
+    "web/content/curator/docs/moderation.md": "d2dbc136e512d39b7e0f8fa3fb92503a00a6ad268108951899dea684dd896991",
+    "web/content/curator/docs/nudity.md": "05ecb61e9d990300f71fca95e0ad4f7507b32729b0dde67c8d60c1bb64e13486",
+    "web/content/curator/docs/policy-check.md": "0e050cce3625a38c76f400ebe0588f42eed0e881a16f6ec213b0cafb23bc6267",
+    "web/content/curator/docs/prefilter.md": "bb45c99522d9ce8856340c1e12ea9eec5d1af1f153f81b84514ed8ca5d8468da",
+    "web/content/curator/docs/scene-tags.md": "8fb733d4c428762f3fa0711361cbad011a1171507faf7632f1cc2b674eb384fe",
+    "web/content/curator/docs/scoring.md": "91b52750b1deaa28278ec2e5d4d6e7381bd8c26c30ec53c0d945486c148cdac7",
+    "web/content/curator/docs/sidecars.md": "724b0b530604694f76991e740b591c9a304580df3c660362af9f19c0cce7b0ac",
+    "web/content/curator/docs/xmp.md": "943cb59854be467a3497644933ae43a3a68c50b432f226b9439d676725a8330d",
+    "web/content/curator/README.md": "7b456f5c8a98a51f823182836ed169f51bce6b41fe756d5b478ed1a906b9a92d"
+  }
 }

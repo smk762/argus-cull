@@ -20,8 +20,13 @@ for (const file of files.filter((f) => f.endsWith(".html"))) {
 if (!existsSync(join(out, "_headers"))) problems.push("no _headers file");
 // Chunks may still name the live paths as strings; what matters is that the static branch never calls them,
 // which src/lib/static.test.ts checks. Here: no page HTML references them.
+// The imported curator docs (out/docs/) name the curator's port in their prose ("HTTP API (:8101)"), so
+// there only an href or src that points at it counts.
+const docsDir = join(out, "docs");
 for (const file of files.filter((f) => f.endsWith(".html"))) {
-  if (/\/api\/(labels|cohorts|captions|display)|:8101/.test(readFileSync(file, "utf8"))) problems.push(`${file} references the live API`);
+  const html = readFileSync(file, "utf8");
+  const port = file.startsWith(docsDir) ? /(?:href|src)="[^"]*:8101/ : /:8101/;
+  if (/\/api\/(labels|cohorts|captions|display)/.test(html) || port.test(html)) problems.push(`${file} references the live API`);
 }
 const tapeJson = join(out, tapeDir, "tape.json");
 if (!existsSync(tapeJson)) problems.push(`no tape at ${tapeJson}`);

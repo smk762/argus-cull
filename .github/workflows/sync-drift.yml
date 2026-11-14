@@ -4,8 +4,8 @@ name: Curator drift
 # sync/argus-curator.json? If so, install the new HEAD, check and re-record the
 # fixture, move the curator docker-compose.yaml builds, and open a PR into dev
 # with the new record. If the PR cannot be
-# opened (or the fixture check fails), open an issue instead. Once curator's
-# docs are imported (argus-curator#138), the same PR re-pulls them.
+# opened (or the fixture check fails, or the docs fail the opsec gate), open an
+# issue instead. The same PR re-imports curator's docs at the new commit.
 
 on:
   schedule:
@@ -47,6 +47,10 @@ jobs:
             echo "moved=true" >> "$GITHUB_OUTPUT"
           fi
       - if: steps.compare.outputs.moved == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.compare.outputs.moved == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -55,11 +59,15 @@ jobs:
         continue-on-error: true
         env:
           HEAD_SHA: ${{ steps.compare.outputs.head }}
+          # Private terms the docs' opsec gate refuses (never committed, never echoed).
+          OPSEC_DENYLIST: ${{ secrets.OPSEC_DENYLIST }}
         run: |
           pip install "argus-curator @ git+https://github.com/smk762/argus-curator@${HEAD_SHA}"
           python scripts/check_fixture.py
           python scripts/record_fixture.py --commit "$HEAD_SHA"
+          node web/scripts/curator-docs.mjs --pull
           python scripts/sync_check.py
+          node web/scripts/curator-docs.mjs --check
       - id: pr
         if: steps.compare.outputs.moved == 'true' && steps.record.outcome == 'success'
         continue-on-error: true
@@ -72,7 +80,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git add sync/ docker-compose.yaml
+          git add sync/ docker-compose.yaml web/content/curator web/public/docs
           git commit -m "sync: argus-curator dev ${HEAD_SHA:0:9} (${version})"
           git push origin "$BRANCH"
           gh pr create --base dev --head "$BRANCH" \

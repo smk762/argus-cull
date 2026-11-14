@@ -1,24 +1,29 @@
 .PHONY: check sync-check web-check sync-curator tape tape-sample pages shared-check
 
-# Offline: the docs and the recorded fixture scan match sync/argus-curator.json,
-# and the web checks pass. No curator install and no network.
+# Offline: the imported curator docs (web/content/curator), the recorded fixture
+# scan and the curator compose builds all match sync/argus-curator.json, the
+# docs pass the opsec gate, and the web checks pass. No curator install and no network.
 check: sync-check web-check
 
 sync-check:
 	python3 scripts/sync_check.py
+	node web/scripts/curator-docs.mjs --check
 
 web-check:
 	cd web && npm run lint && npm run typecheck && npm test
 
 # Move cull to curator dev HEAD (or COMMIT=<sha>): install it in .venv-curator,
-# re-check and re-record the fixture, and update the sync record. Needs network.
+# re-check and re-record the fixture, update the sync record and the compose
+# build, and import curator's docs at that commit. Needs network.
 COMMIT ?= $(shell gh api repos/smk762/argus-curator/commits/dev --jq .sha)
 sync-curator:
 	uv venv -q --python 3.12 .venv-curator
 	VIRTUAL_ENV=.venv-curator uv pip install -q "argus-curator @ git+https://github.com/smk762/argus-curator@$(COMMIT)"
 	.venv-curator/bin/python scripts/check_fixture.py
 	.venv-curator/bin/python scripts/record_fixture.py --commit $(COMMIT)
+	node web/scripts/curator-docs.mjs --pull
 	python3 scripts/sync_check.py
+	node web/scripts/curator-docs.mjs --check
 
 # ---- Static demo (Cloudflare Pages): a recorded tape, served without the curator.
 

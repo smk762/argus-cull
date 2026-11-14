@@ -23,6 +23,11 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run lint
+      # The imported curator docs: every file recorded in sync/argus-curator.json, the pin at its commit,
+      # and the opsec gate (private IPs, home paths, emails, the private denylist). Hashes: the fixture job.
+      - run: npm run docs:check
+        env:
+          OPSEC_DENYLIST: ${{ secrets.OPSEC_DENYLIST }}
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

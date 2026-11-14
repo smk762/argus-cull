@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
+import { DOCS, MODEL_SETUP } from "@/lib/docsLinks";
 import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
 import { checkStage, checkStageNote } from "@/lib/progress";
 import { facetCounts, recordedScenes, type FilterAvailability } from "@/lib/select";
@@ -24,6 +25,7 @@ import {
 import { clearedFilter, clusterLabel, isDefaultFilter, toggleValue } from "@/lib/urlState";
 
 import { NotInDemo } from "./DemoBadge";
+import { DocLink } from "./DocLink";
 import { Info, Tooltip } from "./Tooltip";
 
 const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
@@ -64,14 +66,29 @@ function CheckList<T extends string>({
   );
 }
 
-function Group({ title, hint, info, children }: { title: string; hint: string | null; info?: string; children?: ReactNode }) {
+function Group({ title, hint, info, docs, setup, children }: { title: string; hint: string | null; info?: string; docs?: string; setup?: string; children?: ReactNode }) {
   return (
     <fieldset disabled={hint !== null} className="space-y-2 border-t border-base-700 pt-3">
       <legend className="flex items-center gap-1.5 font-display text-small font-semibold">
         {title}
         {info ? <Info text={info} /> : null}
+        {docs ? <DocLink href={docs} label={`${title} filters`} /> : null}
       </legend>
-      {hint ? <p className="text-caption text-text-muted">{hint}</p> : children}
+      {hint ? (
+        <p className="text-caption text-text-muted">
+          {hint}
+          {setup ? (
+            <>
+              {" "}
+              <DocLink href={setup} label={`Install the ${title} model`}>
+                Model setup
+              </DocLink>
+            </>
+          ) : null}
+        </p>
+      ) : (
+        children
+      )}
     </fieldset>
   );
 }
@@ -184,6 +201,8 @@ export function Filters({
   const liveNote = (...checks: string[]): string | null => (live ? checkStageNote(checkStage(checks, live.phases, live.pending)) : null);
   const groups = detectors ? detectorGroups(detectors) : [];
   const missing = (id: (typeof groups)[number]["id"]) => groups.find((group) => group.id === id);
+  // The "not loaded" hint names a convert command; its setup section is in the curator docs.
+  const setupFor = (id: keyof typeof MODEL_SETUP) => (detectors && !missing(id)?.ready ? MODEL_SETUP[id] : undefined);
   const blocked = (ready: boolean | undefined, ran: boolean, id: (typeof groups)[number]["id"], checks: string[]): string | null => {
     if (!detectors) return "Waiting for detector status.";
     if (!ready) return missing(id)?.hint ?? "This model is not loaded.";
@@ -261,7 +280,7 @@ export function Filters({
         onChange={(keepSimilar) => onChange({ keepSimilar })}
       />
 
-      <Group title="People" hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
+      <Group title="People" docs={DOCS.people} setup={setupFor("insightface")} hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
         <Caption text="Face cluster" />
         <CheckList
           options={clusters}
@@ -281,7 +300,7 @@ export function Filters({
         />
       </Group>
 
-      <Group title="Appearance" info={APPEARANCE} hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
+      <Group title="Appearance" info={APPEARANCE} docs={DOCS.appearance} setup={setupFor("mivolo")} hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
         <Caption text="Gender" />
         <CheckList
           options={GENDERS}
@@ -332,7 +351,7 @@ export function Filters({
         />
       </Group>
 
-      <Group title="Places365" hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
+      <Group title="Places365" docs={DOCS.scenes} setup={setupFor("places365")} hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
         <Caption text="Scene" info="Places365 labels this scan recorded at or above the scene confidence, with the number of images for each." />
         <CheckList
           options={scenes}
@@ -354,7 +373,7 @@ export function Filters({
         <RangeField label="Scene confidence" info="A scene or environment counts only at or above this confidence. The counts above follow it." value={filter.minSceneConf} min={0} max={1} step={0.05} onChange={(minSceneConf) => onChange({ minSceneConf })} />
       </Group>
 
-      <Group title="Fashionpedia" hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
+      <Group title="Fashionpedia" docs={DOCS.wardrobe} setup={setupFor("garments")} hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
         <Caption text="Garment present" info="Garments this scan recorded at or above the garment confidence, with the number of images for each." />
         <CheckList
           options={GARMENTS}
@@ -393,6 +412,7 @@ export function Filters({
       {detectors && (contentRatingAvailable(detectors) || summary?.nsfw_config?.enabled === true) ? (
         <Group
           title="NudeNet"
+          docs={DOCS.nudenet}
           info="Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too."
           hint={
             live
@@ -450,6 +470,7 @@ export function Filters({
       {detectors && (policyAvailable(detectors) || summary?.guard_config?.enabled === true) ? (
         <Group
           title="SingGuard"
+          docs={DOCS.singguard}
           info="A verdict, not a score. Dropping every unsafe image ignores the rule list. With only rules selected, an unsafe image whose rules are all unlisted stays, and one that names no rule is dropped."
           hint={
             live
