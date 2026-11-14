@@ -1,7 +1,7 @@
 {
   "curator": {
-    "version": "0.14.2.dev24+g7d687400d",
-    "commit": "7d687400dbcb8fecd808771645324faace118f44"
+    "version": "0.15.1.dev6+g06a7eae84",
+    "commit": "06a7eae8499b752dd843c846d725a85b47b8799a"
   },
   "scan": {
     "total": 10,
@@ -68,7 +68,7 @@
       {
         "rel_path": "rejects/blurry.png",
         "passed": false,
-        "reject_reason": "blurry (sharpness=3.3 < 100.0)",
+        "reject_reason": "blurry (sharpness=2.5 < 100.0)",
         "phash": "9595689d72b54aa3",
         "is_duplicate": false,
         "group_size": 1
@@ -77,7 +77,7 @@
         "rel_path": "scenes/room.png",
         "passed": true,
         "reject_reason": null,
-        "phash": "e161e1611e1f1e1f",
+        "phash": "e061e1611e1f1f1f",
         "is_duplicate": false,
         "group_size": 1
       },
