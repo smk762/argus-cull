@@ -8,6 +8,7 @@ import { parseSseFrames } from "./sse";
 import { DEFAULT_BLUR, type BlurPolicy } from "./chunks";
 import { staticDemo } from "./demo";
 import * as demo from "./staticApi";
+import { frameSource, VEIL_CELLS, type FrameSource, type Veil, type VeilStrength } from "./veil";
 
 export class ApiError extends Error {}
 
@@ -39,6 +40,21 @@ export function thumbUrl(scanId: string, relPath: string): string {
 export function imageUrl(scanId: string, relPath: string): string {
   if (staticDemo()) return demo.imageUrl(relPath);
   return `${curatorUrl()}/image?${new URLSearchParams({ path: relPath, scan_id: scanId })}`;
+}
+
+/** A veiled frame's mosaic file: the static tape's, or null live, where the page draws it from the thumbnail. */
+export function veilUrl(relPath: string, strength: VeilStrength): string | null {
+  return staticDemo() ? demo.veilUrl(relPath, strength) : null;
+}
+
+/** Cells across the long side per veil strength: the tape's in the demo, else the page's. */
+export function veilCells(): Record<VeilStrength, number> {
+  return (staticDemo() ? demo.veilCells() : null) ?? VEIL_CELLS;
+}
+
+/** What a frame shows in a tile or the detail view; see `frameSource`. A veiled frame never names the thumbnail or full view. */
+export function frameFor(scanId: string, relPath: string, veil: Pick<Veil, "strength"> | null, view: "tile" | "detail"): FrameSource {
+  return frameSource(veil, { veil: (strength) => veilUrl(relPath, strength), thumb: thumbUrl(scanId, relPath), image: imageUrl(scanId, relPath) }, view, veilCells());
 }
 
 export const getHealth = (): Promise<Health> => (staticDemo() ? demo.getHealth() : getJson("/health"));

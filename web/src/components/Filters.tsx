@@ -47,8 +47,9 @@ function CheckList<T extends string>({
   const count = (option: T): number | undefined => (counts instanceof Map ? counts.get(option) : (counts as Partial<Record<T, number>> | undefined)?.[option]);
   const shown = hideEmpty ? options.filter((option) => (count(option) ?? 0) > 0 || selected.includes(option)) : options;
   if (shown.length === 0) return <p className="text-caption text-text-muted">Nothing recorded in this scan.</p>;
+  // Capped and scrolling while its checkboxes can take focus; a disabled group (the static demo) lists in full, so no region is out of keyboard reach.
   return (
-    <ul className="max-h-36 space-y-1 overflow-auto pr-1">
+    <ul className="max-h-36 space-y-1 overflow-auto pr-1 in-[fieldset:disabled]:max-h-none in-[fieldset:disabled]:overflow-visible">
       {shown.map((option) => (
         <li key={option}>
           <label className="flex items-center gap-2 text-small">

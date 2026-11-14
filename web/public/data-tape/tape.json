@@ -504,5 +504,9 @@
   "rejects/C_kitchen_lowres.jpg": "e00238061cf57443",
   "rejects/D_beach_banner.jpg": "86c5bc936a100daf",
   "rejects/D_cafe_watermark.jpg": "54ee8911d761e7ef"
+ },
+ "veils": {
+  "medium": 28,
+  "coarse": 16
  }
 }

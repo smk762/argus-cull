@@ -6,7 +6,7 @@ import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetec
 import { LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
 import { loadTape } from "@/lib/staticApi";
 import type { Tape } from "@/lib/tape";
-import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
@@ -34,6 +34,7 @@ import {
 import { mergeProgress } from "@/lib/progress";
 import { withoutScan } from "@/lib/purge";
 import { withFaceName, withFilter } from "@/lib/urlState";
+import { veilFor, type Veil } from "@/lib/veil";
 import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch } from "@/lib/urlStore";
 
 import { DemoBadge, NotInDemo } from "./DemoBadge";
@@ -805,12 +806,14 @@ export function CullApp() {
     if (scanList?.active && scanList.active.scan_id === summary?.scan_id) return scanList.active.pending_checks;
     return [];
   }, [scanning, pendingChecks, scanList?.active, summary?.scan_id]);
-  const sensitive = useMemo(() => {
-    const flagged = new Set<string>();
+  /** Why each veiled frame is veiled, for the People cards; the grid and detail view work it out per frame. */
+  const veils = useMemo(() => {
+    const veiled = new Map<string, Veil>();
     for (const image of summary?.results ?? []) {
-      if (shouldBlur(image, pending, displayBlur, labels.get(image.rel_path)?.override ?? null)) flagged.add(image.rel_path);
+      const veil = veilFor(image, pending, displayBlur, labels.get(image.rel_path)?.override ?? null);
+      if (veil) veiled.set(image.rel_path, veil);
     }
-    return flagged;
+    return veiled;
   }, [summary, pending, displayBlur, labels]);
   const peopleEnabled = gates.faces || (summary?.face_clusters.length ?? 0) > 0;
 
@@ -1092,7 +1095,7 @@ export function CullApp() {
             scanId={summary.scan_id}
             active={view.cluster}
             names={view.faceNames}
-            sensitive={sensitive}
+            veils={veils}
             // The demo's keep set is the default filters', so a cluster narrows the gallery only.
             onOpen={(cluster) => replaceView(STATIC ? { ...view, view: "people", cluster } : withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
             onClear={() => replaceView(STATIC ? { ...view, cluster: null } : withFilter({ ...view, cluster: null }, { faceClusters: [] }))}

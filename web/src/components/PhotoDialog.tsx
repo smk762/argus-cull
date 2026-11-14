@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
-import { imageUrl, thumbUrl } from "@/lib/api";
+import { frameFor } from "@/lib/api";
 import { ageMissing, awaitingChecks, bodyAges, DEFAULT_BLUR, isMinorExposed, measuredAges, revealHeld, shouldBlur, shownAge, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
@@ -10,12 +10,20 @@ import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/l
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
 import { contentRating, nudeNetLabel } from "@/lib/moderation";
 import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle } from "@/lib/policies";
+import { veilFor, watermarkBoxes } from "@/lib/veil";
 import { formatYears } from "@/lib/years";
 import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 import { NotInDemo } from "./DemoBadge";
 import { closeModal, Modal } from "./Modal";
 import { Shield } from "./Shield";
+import { cellsAcross, VeilFrame } from "./VeilFrame";
+
+/** The detail view's box for a veiled frame: the frame's own shape, as wide as fits under 70dvh. */
+function frameBox(width: number, height: number): CSSProperties {
+  if (!(width > 0 && height > 0)) return { aspectRatio: "1 / 1", width: "min(100%, 70dvh)" };
+  return { aspectRatio: `${width} / ${height}`, width: `min(100%, calc(70dvh * ${(width / height).toFixed(4)}))` };
+}
 
 const SCORE_PARTS: [string, string][] = [
   ["sharpness", "Sharpness"],
@@ -624,6 +632,9 @@ function PhotoPanel({
   const override = label?.override ?? null;
   const obscured = shouldBlur(image, pending, blur, override);
   const blurred = blocked || (obscured && !shown);
+  const veil = blurred ? veilFor(image, pending, blur, override) : null;
+  const source = frameFor(scanId, image.rel_path, veil, "detail");
+  const boxes = veil ? watermarkBoxes(image) : [];
 
   async function remove() {
     if (!confirmDelete) {
@@ -675,34 +686,37 @@ function PhotoPanel({
           </button>
         </div>
       </div>
-      <div className="relative overflow-hidden rounded-lg bg-base-900">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={blocked ? thumbUrl(scanId, image.rel_path) : imageUrl(scanId, image.rel_path)}
-          alt={blurred ? "" : image.rel_path}
-          className={`max-h-[70dvh] w-full object-contain ${blurred ? "scale-105 blur-3xl" : ""}`}
-        />
-        {blurred && !blocked && !holdReveal ? (
-          <button
-            type="button"
-            className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small"
-            onClick={() => setShown(true)}
-          >
-            Unblur
-          </button>
-        ) : null}
-        {holdReveal && !blocked ? (
-          <p className="absolute inset-0 m-auto h-fit w-fit max-w-[90%] rounded-md bg-base-800 px-4 py-2 text-center text-small">
-            {/* A rejected frame is held because no check will clear it, not because one is still running. */}
-            {image.passed === false
-              ? `Rejected${image.reject_reason ? `: ${image.reject_reason}` : ""}. It stays blurred: the curator ran no age or NudeNet check on it.`
-              : "Scanning…"}
-          </p>
-        ) : null}
-        {blocked ? (
-          <p className="absolute inset-x-4 bottom-4 rounded-md bg-base-800 px-3 py-2 text-caption text-text-secondary">
-            MiVOLO reads a face as under 18 and NudeNet reported an exposed score of at least 0.2. This photo stays blurred and will not be kept.
-          </p>
+      <div className="overflow-hidden rounded-lg bg-base-900">
+        {/* Veiled: the mosaic only. The full view is fetched once the frame shows, or the viewer unblurs one that may be. */}
+        {source.kind === "image" ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={source.url} alt={image.rel_path} className="max-h-[70dvh] w-full object-contain" />
+        ) : (
+          <VeilFrame
+            source={source}
+            fit="fill"
+            across={cellsAcross(source.cells, image.width, image.height, "fill")}
+            className="mx-auto"
+            style={frameBox(image.width, image.height)}
+            boxes={boxes}
+            boxLabel={boxes.length > 0 ? `${boxes.length === 1 ? "Where the watermark detector fired" : `Where the watermark detector fired, ${boxes.length} boxes`}` : undefined}
+          />
+        )}
+        {veil ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-base-700 bg-base-800 px-3 py-2">
+            <div className="min-w-0 flex-1 basis-60">
+              <p className="font-semibold text-text-primary">{veil.headline}</p>
+              <p className="text-caption leading-relaxed text-text-secondary">
+                {veil.detail}
+                {boxes.length > 0 ? ` The outlined ${boxes.length === 1 ? "box is" : "boxes are"} where the watermark detector fired.` : ""}
+              </p>
+            </div>
+            {veil.unblur ? (
+              <button type="button" className="rounded-md border border-base-600 px-4 py-1.5 text-small" onClick={() => setShown(true)}>
+                Unblur
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <div className="mt-4 space-y-4 text-small">

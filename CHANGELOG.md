@@ -12,9 +12,12 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 ### Fixed
 
 - A rejected frame's detail view said "Scanning…" over its blur. It now says it was rejected, with the reason, and why it stays blurred.
+- The keep-set lists in a disabled group (the static demo) were scroll regions no keyboard could reach; they now list in full.
 
 ### Changed
 
+- A veiled frame is a frosted-glass mosaic instead of a heavy blur: 28 cells across the long side while it is held (rejected before the safety checks, or still scanning), 16 once a check flagged it (policy, NudeNet, under 18). The static demo serves the mosaic as a tiny file from the tape (`veils/`, `record_tape.py veils` re-derives it), and the live page draws it from the thumbnail, so a veiled frame never loads its full view, or in the demo its thumbnail.
+- The detail view says why in two lines (*Held: not safety-checked*, *Veiled: policy*, *Veiled: NudeNet*) with each reject reason in plain words, and outlines the detected watermark on a crop reject. Veiled tiles carry a chip: *Held*, *Veiled: policy* or *Veiled: NudeNet*.
 - The page uses the shared tokens and the system font stack instead of Inter and DM Sans from Google Fonts.
 
 ## [0.4.0] - 2026-11-13

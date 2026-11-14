@@ -7,6 +7,7 @@ import type { Caption, CohortConfig } from "./cohorts";
 import { parseCohortConfig } from "./cohorts";
 import { emptyLabel, type ImageLabel, type LabelFile } from "./labels";
 import type { BlurPolicy } from "./chunks";
+import type { VeilStrength } from "./veil";
 import type { Detectors, GuardPolicies, Health, ImageResult, Progress, ScanChunk, ScanList, ScanSummary, SelectRequest, SelectResult } from "./types";
 
 export const TAPE_FORMAT = "argus-cull-tape";
@@ -51,8 +52,10 @@ export interface Tape {
   display: BlurPolicy;
   scans: ScanList;
   select: { request: SelectRequest; result: SelectResult };
-  /** rel_path -> file id (thumbs/<id>.webp, images/<id>.webp, detail/<id>.json). */
+  /** rel_path -> file id (thumbs/<id>.webp, images/<id>.webp, detail/<id>.json, veils/<id>-<strength>.webp). */
   files: Record<string, string>;
+  /** Cells across the long side of each veil strength. A tape recorded before veils leaves it out; the page then draws them. */
+  veils?: Record<VeilStrength, number> | null;
 }
 
 /** Fields scan.json leaves out of each result; detail/<id>.json carries them. */
@@ -89,6 +92,13 @@ export function parseTape(raw: unknown): Tape {
   object(select.request, "select.request");
   const result = object(select.result, "select.result");
   if (!Array.isArray(result.rows)) fail("select.result.rows must be a list");
+  if (tape.veils != null) {
+    const veils = object(tape.veils, "veils");
+    for (const strength of ["medium", "coarse"]) {
+      const cells = veils[strength];
+      if (typeof cells !== "number" || !Number.isInteger(cells) || cells < 4 || cells > 64) fail(`veils.${strength} must be a cell count from 4 to 64`);
+    }
+  }
   const files = object(tape.files, "files");
   for (const [rel, id] of Object.entries(files)) {
     // Ids become file names in URLs.
@@ -143,6 +153,13 @@ export function recordedSelection(tape: Tape, scanId: string, request: SelectReq
 export function tapeFileUrl(base: string, tape: Pick<Tape, "files"> | null, kind: "thumbs" | "images", relPath: string): string {
   const id = tape?.files[relPath];
   return id ? `${base}/${kind}/${id}.webp` : "";
+}
+
+/** The tape's veil for a frame, or null when the tape has none (the page then draws one from the thumbnail). */
+export function tapeVeilUrl(base: string, tape: Pick<Tape, "files" | "veils"> | null, relPath: string, strength: VeilStrength): string | null {
+  const id = tape?.files[relPath];
+  if (!id || !tape?.veils?.[strength]) return null;
+  return `${base}/veils/${id}-${strength}.webp`;
 }
 
 /** A result with its detail-only fields put back. */

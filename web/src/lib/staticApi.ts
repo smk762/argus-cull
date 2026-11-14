@@ -20,11 +20,13 @@ import {
   replaySteps,
   resetBrowserLabels,
   tapeFileUrl,
+  tapeVeilUrl,
   withDetail,
   type ImageDetail,
   type KeyValueStore,
   type Tape,
 } from "./tape";
+import type { VeilStrength } from "./veil";
 import type { Detectors, GuardPolicies, Health, ImageResult, Progress, ScanChunk, ScanList, ScanSummary, SelectRequest, SelectResult } from "./types";
 
 interface Loaded {
@@ -75,6 +77,9 @@ export function loadedTape(): Tape | null {
 
 export const thumbUrl = (relPath: string): string => tapeFileUrl(tapeBase(), loaded?.tape ?? null, "thumbs", relPath);
 export const imageUrl = (relPath: string): string => tapeFileUrl(tapeBase(), loaded?.tape ?? null, "images", relPath);
+export const veilUrl = (relPath: string, strength: VeilStrength): string | null => tapeVeilUrl(tapeBase(), loaded?.tape ?? null, relPath, strength);
+/** The tape's veil cell counts, when it has veils. */
+export const veilCells = (): Record<VeilStrength, number> | null => loaded?.tape.veils ?? null;
 
 export const getHealth = async (): Promise<Health> => (await loadTape()).tape.health;
 export const getDetectors = async (): Promise<Detectors> => (await loadTape()).tape.detectors;

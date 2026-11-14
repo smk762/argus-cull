@@ -1,15 +1,17 @@
 "use client";
 
-import { thumbUrl } from "@/lib/api";
-import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { frameFor } from "@/lib/api";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
 import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
+import { reasonTitle, veilFor } from "@/lib/veil";
 import { formatYears } from "@/lib/years";
 
 import { NotInDemo } from "./DemoBadge";
 import { Shield } from "./Shield";
 import { Info } from "./Tooltip";
+import { cellsAcross, VeilFrame } from "./VeilFrame";
 
 /** Tiles that load at once: about the first two rows. The rest of a page loads lazily. */
 const EAGER_TILES = 8;
@@ -296,7 +298,8 @@ export function PhotoGrid({
           const reason = reasons?.get(image.rel_path);
           const kept = reason === "";
           const override = labels?.get(image.rel_path)?.override ?? null;
-          const blurred = shouldBlur(image, pending, blur, override);
+          const veil = veilFor(image, pending, blur, override);
+          const source = frameFor(scanId, image.rel_path, veil, "tile");
           const checking = awaitingChecks(image, pending);
           const age = apparentAge(image, pending, facesRan);
           const deletable = isMinorExposed(image);
@@ -320,16 +323,20 @@ export function PhotoGrid({
                 onClick={() => onOpen(image.rel_path)}
               >
                 <span className="relative block">
-                  {/* Thumbnails are already resized by the curator. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={thumbUrl(scanId, image.rel_path)}
-                    alt=""
-                    loading={index < EAGER_TILES ? undefined : "lazy"}
-                    decoding="async"
-                    className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
-                  />
-                  {/* A blur speaks for itself; only a frame still waiting on checks gets a word. */}
+                  {/* A veiled tile never loads its thumbnail: it shows the mosaic (lib/veil.ts). */}
+                  {source.kind === "image" ? (
+                    // Thumbnails are already resized by the curator.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={source.url} alt="" loading={index < EAGER_TILES ? undefined : "lazy"} decoding="async" className="aspect-square w-full object-cover" />
+                  ) : (
+                    <VeilFrame source={source} fit="cover" across={cellsAcross(source.cells, image.width, image.height, "cover")} className="aspect-square w-full" />
+                  )}
+                  {veil?.chip && !checking ? (
+                    <span className={`dh-badge absolute top-2 right-2 ${veil.kind === "nudenet" || veil.kind === "policy" ? "veil-chip--veiled" : ""}`} title={veil.headline}>
+                      {veil.chip}
+                    </span>
+                  ) : null}
+                  {/* A frame still waiting on checks says so; the others carry a chip naming why they are veiled. */}
                   {checking ? (
                     <span className="absolute inset-0 flex items-center justify-center">
                       <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">Scanning…</span>
@@ -360,7 +367,7 @@ export function PhotoGrid({
                       {age.text}
                     </span>
                     {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
-                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reason}>
+                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reasonTitle(reason ?? "")}>
                       {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : reason}
                     </span>
                   </span>

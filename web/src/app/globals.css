@@ -152,3 +152,53 @@ dialog::backdrop {
 .dh-strip ~ .cull-shell {
   --cull-h: calc(100dvh - var(--dh-strip-h));
 }
+
+/*
+ * The veil (components/VeilFrame.tsx, lib/veil.ts): a frame held or flagged
+ * shows as a mosaic, a few dozen averaged cells scaled up square-edged, with a
+ * slight softening and a frosted sheen, like obscured glass. --veil-across is
+ * the number of cells across the box, so the softening is a fixed share of a
+ * cell at any size. The scale hides the soft edge the blur leaves.
+ */
+.veil {
+  position: relative;
+  overflow: hidden;
+  container-type: inline-size;
+  background: var(--dh-surface);
+}
+.veil-mosaic {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  filter: blur(calc(100cqw / var(--veil-across, 24) * 0.1)) saturate(0.85);
+  transform: scale(1.04);
+}
+.veil-frost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(160deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.04) 55%, rgb(255 255 255 / 0.1)),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.035) 0 2px, transparent 2px 6px);
+}
+/* A detector's box on a veiled frame: outline only, so it shows where the detector fired and nothing more. */
+.veil-box {
+  fill: none;
+  stroke: var(--dh-warn);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+.veil-box-halo {
+  fill: none;
+  stroke: rgb(0 0 0 / 0.55);
+  stroke-width: 4px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Grid chips on a veiled tile, on the shared badge (dh-badge.css): Held is neutral, Veiled is the warn tint. */
+.veil-chip--veiled {
+  background: var(--dh-warn-tint);
+  color: var(--dh-warn-ink);
+  border-color: transparent;
+}

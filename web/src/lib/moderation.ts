@@ -103,7 +103,11 @@ export function guardRuleCounts(results: readonly ImageResult[], rules: readonly
 
 /** The name a rule letter has under the policy *summary* was judged by. */
 export function guardRuleLabel(id: string, summary: ScanSummary | null): string {
-  const policy = summary?.guard_config?.policy;
+  return ruleLabelUnder(id, summary?.guard_config?.policy ?? null);
+}
+
+/** The name a rule letter has under the named policy. */
+export function ruleLabelUnder(id: string, policy: string | null): string {
   if (id === "A" && policy === "adult") return ADULT_RULE_A;
   if (policy === "adult-cinematic" && id in ADULT_CINEMATIC_RULES) return ADULT_CINEMATIC_RULES[id];
   return GUARD_RULES.find((rule) => rule.id === id)?.label ?? id;
