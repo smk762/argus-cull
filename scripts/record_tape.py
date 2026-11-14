@@ -25,7 +25,7 @@ the page's API routes:
                        sidebar's About this tape beside the --about summary
     thumbs/<id>.webp   480 px thumbnails;  images/<id>.webp  1600 px views
     veils/<id>-<s>.webp the veil: the frame averaged down to a few dozen pixels on
-                       its long side (medium, coarse), which the page scales up as
+                       its long side (one strength, medium), which the page scales up as
                        a mosaic, so a veiled frame never loads its thumbnail or view
 
     # Re-derive the veils of an existing tape from its images/, with no rescan
@@ -64,10 +64,10 @@ FORMAT = "argus-cull-tape"
 VERSION = 1
 THUMB_PX = 480
 IMAGE_PX = 1600
-# Veil mosaics: cells across the long side. Medium for a frame held before or while its safety checks run
-# (rejected, still scanning); coarse for one a check flagged (policy, NudeNet, under-18). web/src/lib/veil.ts
-# holds the same numbers for the live page, and web/src/lib/tape.test.ts holds the two to each other.
-VEIL_CELLS = {"medium": 28, "coarse": 16}
+# Veil mosaics: cells across the long side. One strength for every veiled frame, held or flagged, so one
+# veil file per frame. web/src/lib/veil.ts holds the same number for the live page, and
+# web/src/lib/veil.test.ts holds the two to each other.
+VEIL_CELLS = {"medium": 28}
 # The curator's select body for the page's default filters: selectBody(DEFAULT_FILTER, …) in web/src/lib/select.ts.
 # web/src/lib/tape.test.ts holds the two to each other.
 DEFAULT_SELECT: dict[str, Any] = {
@@ -290,7 +290,7 @@ def rederive_veils(args: argparse.Namespace) -> None:
         print(f"  {rel}", file=sys.stderr)
     tape["veils"] = VEIL_CELLS
     tape_path.write_text(json.dumps(tape, indent=1) + "\n")
-    print(f"veils: {len(tape['files'])} images x {len(VEIL_CELLS)} strengths {VEIL_CELLS} -> {out / 'veils'}")
+    print(f"veils: {len(tape['files'])} images, one veil each {VEIL_CELLS} -> {out / 'veils'}")
 
 
 def check_leaks(out: Path) -> None:

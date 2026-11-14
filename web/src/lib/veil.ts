@@ -8,19 +8,19 @@
  * never loads its thumbnail or full view; the live page builds the same mosaic
  * in a canvas from the curator's thumbnail and never puts that thumbnail on screen.
  *
- * Two strengths: `medium` for a frame held before or while its safety checks
- * run (rejected, still scanning), so the viewer can see what was set aside;
- * `coarse` for a frame a check flagged (policy, NudeNet, an under-18 reading).
+ * One strength for every veiled frame, held or flagged: `medium`, 28 cells
+ * across the long side. The name stays in the tape's file names
+ * (veils/<id>-medium.webp) so a tape's veils say what they were cut at.
  */
-import { isMinorExposed, revealHeld, shouldBlur, youngestAge, DEFAULT_BLUR, MINOR_AGE_YEARS, MINOR_EXPOSED_SCORE, type BlurPolicy } from "./chunks";
+import { isMinorExposed, revealHeld, shouldBlur, DEFAULT_BLUR, type BlurPolicy } from "./chunks";
 import { policyVerdicts } from "./policies";
 import { EXPOSED_LABELS, type ImageResult } from "./types";
 import { nudeNetLabel, ruleLabelUnder } from "./moderation";
 
-export type VeilStrength = "medium" | "coarse";
+export type VeilStrength = "medium";
 
 /** Cells across the long side. scripts/record_tape.py VEIL_CELLS bakes the same numbers into the tape. */
-export const VEIL_CELLS: Record<VeilStrength, number> = { medium: 28, coarse: 16 };
+export const VEIL_CELLS: Record<VeilStrength, number> = { medium: 28 };
 
 /**
  * Why a frame is veiled. `held`: rejected before the safety checks, so nothing
@@ -39,6 +39,8 @@ export interface Veil {
   headline: string;
   /** The second line: what happened and what it means. */
   detail: string;
+  /** The reason in a few plain words, for the panel on a veiled tile: "Blurry: sharpness 3.9 < 100". */
+  short: string;
   /** The viewer may unblur it. Never for held, scanning or under-18 frames. */
   unblur: boolean;
 }
@@ -48,32 +50,32 @@ type Veiled = Parameters<typeof shouldBlur>[0] & Pick<ImageResult, "reject_reaso
 /** The veil on a frame, or null when it shows. Follows `shouldBlur` exactly: this only says why. */
 export function veilFor(image: Veiled, pending: readonly string[], blur: BlurPolicy = DEFAULT_BLUR, override: string | null = null): Veil | null {
   if (!shouldBlur(image, pending, blur, override)) return null;
-  // A held frame that already reads young or exposed gets the coarse veil: the medium one is for frames nothing has flagged.
-  const coarseHeld = (youngestAge(image) ?? Infinity) < MINOR_AGE_YEARS || (image.nsfw?.exposed_score ?? 0) >= MINOR_EXPOSED_SCORE;
   if (isMinorExposed(image)) {
     return {
       kind: "minor",
-      strength: "coarse",
+      strength: "medium",
       chip: "Held",
       headline: "Held: under 18 with exposure",
       detail: "MiVOLO reads a face as under 18 and NudeNet reported an exposed score of at least 0.2. It is never shown or kept.",
+      short: "Under 18 with exposure: never shown",
       unblur: false,
     };
   }
   if (image.passed === false) {
     const words = rejectWords(image.reject_reason ?? "");
-    return { kind: "held", strength: coarseHeld ? "coarse" : "medium", chip: "Held", headline: words.headline, detail: words.detail, unblur: false };
+    return { kind: "held", strength: "medium", chip: "Held", headline: words.headline, detail: words.detail, short: words.short, unblur: false };
   }
   if (revealHeld(image, pending)) {
     const nudeDone = image.nsfw != null;
     return {
       kind: "scanning",
-      strength: coarseHeld ? "coarse" : "medium",
+      strength: "medium",
       chip: null,
       headline: nudeDone ? "Held: waiting for the age check" : "Held: still scanning",
       detail: nudeDone
         ? "NudeNet read some exposure and the age check has not reported, so it could still be an under-18 frame. Unchecked frames are never shown."
         : "The nudity and age checks have not reported yet. Unchecked frames are never shown.",
+      short: nudeDone ? "Waiting for the age check" : "Still scanning",
       unblur: false,
     };
   }
@@ -81,29 +83,32 @@ export function veilFor(image: Veiled, pending: readonly string[], blur: BlurPol
   if (score != null && score >= blur.exposedScore) {
     return {
       kind: "nudenet",
-      strength: "coarse",
+      strength: "medium",
       chip: "Veiled: NudeNet",
       headline: "Veiled: NudeNet",
       detail: `NudeNet: ${topExposed(image.nsfw) ?? "exposed"} ${score.toFixed(2)}. Frames at ${blur.exposedScore.toFixed(2)} or more stay veiled until you unblur.`,
+      short: `NudeNet: ${topExposed(image.nsfw) ?? "exposed"} ${score.toFixed(2)}`,
       unblur: true,
     };
   }
   if (image.nudenet_failed && image.nsfw != null) {
     return {
       kind: "nudenet",
-      strength: "coarse",
+      strength: "medium",
       chip: "Veiled: NudeNet",
       headline: "Veiled: NudeNet failed",
       detail: "EraX alone scored this frame, and EraX has no buttocks class, so a low score clears nothing. It stays veiled until you unblur.",
+      short: "NudeNet failed; EraX alone can't clear it",
       unblur: true,
     };
   }
   return {
     kind: "policy",
-    strength: "coarse",
+    strength: "medium",
     chip: "Veiled: policy",
     headline: "Veiled: policy",
     detail: `${policyLine(image, override)}. Frames a policy flags stay veiled until you unblur.`,
+    short: policyShort(image, override),
     unblur: true,
   };
 }
@@ -119,20 +124,31 @@ function topExposed(nsfw: ImageResult["nsfw"]): string | null {
   return best ? nudeNetLabel(best) : null;
 }
 
-/** "adult flagged rule B (Real-World Crimes & Public Safety)", naming the first policy that flagged, official first. */
-export function policyLine(image: Pick<ImageResult, "guard" | "guard_variants">, override: string | null = null): string {
-  const verdicts = policyVerdicts(image);
-  const unsafe = verdicts.filter((verdict) => !verdict.result.safe && (!override || verdict.policy === override));
+/** The first policy that flagged (official first), how many more did, and its first rule as "B (Name)". */
+function firstFlag(image: Pick<ImageResult, "guard" | "guard_variants">, override: string | null) {
+  const unsafe = policyVerdicts(image).filter((verdict) => !verdict.result.safe && (!override || verdict.policy === override));
   const first = unsafe[0];
-  if (!first) return "A policy flagged it";
+  if (!first) return null;
   const rule = first.result.rules[0];
-  const others = unsafe.length - 1;
-  const who = others > 0 ? `${first.policy} and ${others} more polic${others === 1 ? "y" : "ies"}` : `the ${first.policy} policy`;
-  if (!rule) return `${capital(who)} flagged it`;
+  if (!rule) return { policy: first.policy, others: unsafe.length - 1, rule: null };
   const letter = rule.trim().slice(0, 1).toUpperCase();
   const named = ruleLabelUnder(letter, first.policy);
   const name = (named.startsWith(`${letter}.`) ? named.slice(2) : rule.replace(/^[A-Z]\.?\s*/, "")).trim();
-  return `${capital(who)} flagged rule ${letter}${name ? ` (${name})` : ""}`;
+  return { policy: first.policy, others: unsafe.length - 1, rule: `${letter}${name ? ` (${name})` : ""}` };
+}
+
+/** "adult flagged rule B (Real-World Crimes & Public Safety)", naming the first policy that flagged, official first. */
+export function policyLine(image: Pick<ImageResult, "guard" | "guard_variants">, override: string | null = null): string {
+  const flag = firstFlag(image, override);
+  if (!flag) return "A policy flagged it";
+  const who = flag.others > 0 ? `${flag.policy} and ${flag.others} more polic${flag.others === 1 ? "y" : "ies"}` : `the ${flag.policy} policy`;
+  return flag.rule ? `${capital(who)} flagged rule ${flag.rule}` : `${capital(who)} flagged it`;
+}
+
+/** "Policy: rule B (Real-World Crimes & Public Safety)", for a veiled tile. */
+export function policyShort(image: Pick<ImageResult, "guard" | "guard_variants">, override: string | null = null): string {
+  const flag = firstFlag(image, override);
+  return flag?.rule ? `Policy: rule ${flag.rule}` : "Policy flagged it";
 }
 
 function capital(text: string): string {
@@ -152,30 +168,30 @@ export function rejectWords(reason: string): { headline: string; detail: string;
     const kind = crop[1];
     const what =
       kind === "overlay"
-        ? "a watermark the edge crop couldn't remove"
+        ? "watermark the edge crop couldn't remove"
         : kind === "unchecked"
-        ? "a watermark check that couldn't run"
+        ? "watermark check that couldn't run"
         : kind === "unreadable"
-        ? "a crop box file that couldn't be read"
+        ? "crop box file that couldn't be read"
         : kind === "invalid"
-        ? "a crop box that doesn't fit the frame"
-        : "a crop that couldn't be applied";
-    return { headline: held, detail: `Rejected for ${what} (crop:${kind}), ${never}`, short: `${capital(what)} (crop:${kind})` };
+        ? "crop box that doesn't fit the frame"
+        : "crop that couldn't be applied";
+    return { headline: held, detail: `Rejected for a ${what} (crop:${kind}), ${never}`, short: `${capital(what)} (crop:${kind})` };
   }
   const blurry = /^blurry \(sharpness=([\d.]+) < ([\d.]+)\)/.exec(raw);
   if (blurry) {
     const what = `blur: sharpness ${blurry[1]}, below the ${blurry[2]} floor`;
-    return { headline: held, detail: `Rejected for ${what}, ${never}`, short: `Too blurry (sharpness ${blurry[1]} < ${blurry[2]})` };
+    return { headline: held, detail: `Rejected for ${what}, ${never}`, short: `Blurry: sharpness ${blurry[1]} < ${blurry[2]}` };
   }
   const resolution = /^resolution too low \((\d+)px short side\)/.exec(raw);
   if (resolution) {
     const what = `low resolution: ${resolution[1]} px on the short side`;
-    return { headline: held, detail: `Rejected for ${what}, ${never}`, short: `Too small (${resolution[1]} px short side)` };
+    return { headline: held, detail: `Rejected for ${what}, ${never}`, short: `Low resolution: ${resolution[1]} px short side` };
   }
   const aspect = /^aspect ratio ([\d.]+) > ([\d.]+)/.exec(raw);
   if (aspect) {
     const what = `its shape: an aspect ratio of ${aspect[1]}, over the ${aspect[2]} limit`;
-    return { headline: held, detail: `Rejected for ${what}, ${never}`, short: `Too wide or tall (aspect ${aspect[1]} > ${aspect[2]})` };
+    return { headline: held, detail: `Rejected for ${what}, ${never}`, short: `Aspect ratio ${aspect[1]} > ${aspect[2]}` };
   }
   const prefilter = /^prefilter:([\w-]+)/.exec(raw);
   if (prefilter) {

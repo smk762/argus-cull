@@ -30,12 +30,15 @@ describe("rejectWords", () => {
     expect(rejectWords("similar-to:personA/A_cafe.jpg").short).toBe("Near-duplicate of A_cafe.jpg");
     expect(rejectWords("prefilter:no-face").headline).toBe("Held: dropped before the slow checks");
     expect(rejectWords("prefilter:nsfw").detail).toMatch(/exposed reading of 0.2 or more \(prefilter:nsfw\)/);
+    expect(rejectWords("blurry (sharpness=3.9 < 100.0)").short).toBe("Blurry: sharpness 3.9 < 100.0");
+    expect(rejectWords("resolution too low (160px short side)").short).toBe("Low resolution: 160 px short side");
+    expect(rejectWords("crop:overlay (1 watermark(s))").short).toBe("Watermark the edge crop couldn't remove (crop:overlay)");
     expect(rejectWords("below-score").short).toBe("Quality under the minimum");
     expect(rejectWords("something new").detail).toMatch(/\(something new\)/);
   });
 
   it("gives a tooltip with the plain words first, without repeating an unknown reason", () => {
-    expect(reasonTitle("aspect ratio 5.00 > 3.0")).toBe("Too wide or tall (aspect 5.00 > 3.0). Curator: aspect ratio 5.00 > 3.0");
+    expect(reasonTitle("aspect ratio 5.00 > 3.0")).toBe("Aspect ratio 5.00 > 3.0. Curator: aspect ratio 5.00 > 3.0");
     expect(reasonTitle("odd")).toBe("odd");
   });
 });
@@ -47,13 +50,15 @@ describe("veilFor on the recorded scan", () => {
     expect(veil.detail).toMatch(/crop:overlay/);
   });
 
-  it("veils the NudeNet and policy flags at the coarse strength, with unblur", () => {
+  it("veils the NudeNet and policy flags at the same strength, with unblur and a short reason", () => {
     const nude = veilFor(frame("E_locker_room.jpg"), [], DEFAULT_BLUR)!;
-    expect(nude).toMatchObject({ kind: "nudenet", strength: "coarse", chip: "Veiled: NudeNet", unblur: true });
+    expect(nude).toMatchObject({ kind: "nudenet", strength: "medium", chip: "Veiled: NudeNet", unblur: true });
     expect(nude.detail).toMatch(/^NudeNet: [a-z ]+ exposed 0\.39\./);
+    expect(nude.short).toMatch(/^NudeNet: [a-z ]+ exposed 0\.39$/);
     const weapon = veilFor(frame("D_action_film.jpg"), [], DEFAULT_BLUR)!;
-    expect(weapon).toMatchObject({ kind: "policy", strength: "coarse", chip: "Veiled: policy", unblur: true });
+    expect(weapon).toMatchObject({ kind: "policy", strength: "medium", chip: "Veiled: policy", unblur: true });
     expect(weapon.detail).toMatch(/flagged rule B \(Real-World Crimes & Public Safety\)\. Frames a policy flags stay veiled until you unblur\.$/);
+    expect(weapon.short).toBe("Policy: rule B (Real-World Crimes & Public Safety)");
   });
 
   it("is null exactly when shouldBlur is false, for every frame at every replay step", () => {
@@ -67,12 +72,12 @@ describe("veilFor on the recorded scan", () => {
     }
   });
 
-  it("holds an unscored frame while NudeNet runs, medium, and an under-18 exposed one coarse", () => {
+  it("holds an unscored frame while NudeNet runs, and an under-18 exposed one, at the one strength", () => {
     const unscored = { ...frame("A_cafe.jpg"), nsfw: null };
     expect(veilFor(unscored, ["nsfw"], DEFAULT_BLUR)).toMatchObject({ kind: "scanning", strength: "medium", chip: null, unblur: false, headline: "Held: still scanning" });
     const base = frame("E_locker_room.jpg");
     const minor = { ...base, faces: base.faces!.map((face) => ({ ...face, attributes: { ...face.attributes!, age_years: 16 } })) };
-    expect(veilFor(minor, [], { ...DEFAULT_BLUR, unblurNsfw: true })).toMatchObject({ kind: "minor", strength: "coarse", unblur: false });
+    expect(veilFor(minor, [], { ...DEFAULT_BLUR, unblurNsfw: true })).toMatchObject({ kind: "minor", strength: "medium", unblur: false });
   });
 
   it("names the policy and rule that flagged", () => {
@@ -100,17 +105,16 @@ describe("watermarkBoxes", () => {
 describe("frameSource: a veiled frame never requests its thumbnail or full view", () => {
   const urls = { veil: (strength: string) => `/v/${strength}.webp`, thumb: "/thumb.webp", image: "/image.webp" };
 
-  it("uses the tape's veil when there is one, at the veil's strength", () => {
+  it("uses the tape's veil when there is one", () => {
     for (const view of ["tile", "detail"] as const) {
       expect(frameSource({ strength: "medium" }, urls, view)).toEqual({ kind: "veil", url: "/v/medium.webp", cells: VEIL_CELLS.medium });
-      expect(frameSource({ strength: "coarse" }, urls, view)).toEqual({ kind: "veil", url: "/v/coarse.webp", cells: VEIL_CELLS.coarse });
     }
   });
 
   it("live, draws the mosaic from the thumbnail and never names the full view", () => {
     const live = { ...urls, veil: () => null };
     for (const view of ["tile", "detail"] as const) {
-      const source = frameSource({ strength: "coarse" }, live, view);
+      const source = frameSource({ strength: "medium" }, live, view);
       expect(source.kind).toBe("mosaic");
       expect(JSON.stringify(source)).not.toContain("/image.webp");
     }
@@ -126,7 +130,7 @@ describe("frameSource: a veiled frame never requests its thumbnail or full view"
       const veil = veilFor(image, [], DEFAULT_BLUR);
       if (!veil) continue;
       const tapeUrls = {
-        veil: (strength: "medium" | "coarse") => tapeVeilUrl("", tape, image.rel_path, strength),
+        veil: (strength: "medium") => tapeVeilUrl("", tape, image.rel_path, strength),
         thumb: tapeFileUrl("", tape, "thumbs", image.rel_path),
         image: tapeFileUrl("", tape, "images", image.rel_path),
       };
@@ -134,7 +138,7 @@ describe("frameSource: a veiled frame never requests its thumbnail or full view"
         const source = frameSource(veil, tapeUrls, view, tape.veils!);
         expect(source.kind, image.rel_path).toBe("veil");
         if (source.kind !== "veil") continue;
-        expect(source.url).toMatch(/^\/veils\/[a-f0-9]+-(medium|coarse)\.webp$/);
+        expect(source.url).toMatch(/^\/veils\/[a-f0-9]+-medium\.webp$/);
         expect(existsSync(new URL(source.url.slice(1), TAPE)), source.url).toBe(true);
       }
     }
@@ -144,9 +148,10 @@ describe("frameSource: a veiled frame never requests its thumbnail or full view"
 describe("veil cell counts", () => {
   it("match between the page, the recorder and the committed tape", () => {
     const script = readFileSync(new URL("../../../scripts/record_tape.py", import.meta.url), "utf8");
-    const match = /VEIL_CELLS = \{"medium": (\d+), "coarse": (\d+)\}/.exec(script);
-    expect(match && { medium: Number(match[1]), coarse: Number(match[2]) }).toEqual(VEIL_CELLS);
-    expect(tape.veils).toEqual(VEIL_CELLS);
+    const match = /VEIL_CELLS = \{"medium": (\d+)\}/.exec(script);
+    expect(match && { medium: Number(match[1]) }).toEqual(VEIL_CELLS);
+    // The one strength the page asks for; an older tape also carries a coarse set, which it ignores.
+    expect(tape.veils?.medium).toBe(VEIL_CELLS.medium);
   });
 
   it("an older tape with no veils gives no veil URL", () => {

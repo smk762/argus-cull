@@ -94,7 +94,7 @@ export function parseTape(raw: unknown): Tape {
   if (!Array.isArray(result.rows)) fail("select.result.rows must be a list");
   if (tape.veils != null) {
     const veils = object(tape.veils, "veils");
-    for (const strength of ["medium", "coarse"]) {
+    for (const strength of ["medium"]) {
       const cells = veils[strength];
       if (typeof cells !== "number" || !Number.isInteger(cells) || cells < 4 || cells > 64) fail(`veils.${strength} must be a cell count from 4 to 64`);
     }

@@ -31,11 +31,10 @@ else {
     for (const part of [`thumbs/${id}.webp`, `images/${id}.webp`, `detail/${id}.json`]) {
       if (!existsSync(join(out, tapeDir, part))) problems.push(`tape file missing: ${part}`);
     }
-    // A veiled frame shows only its veil, so a tape that lists veils needs every one.
-    for (const strength of Object.keys(tape.veils ?? {})) {
-      if (!existsSync(join(out, tapeDir, `veils/${id}-${strength}.webp`))) problems.push(`tape file missing: veils/${id}-${strength}.webp`);
-    }
+    // A veiled frame shows only its veil, at the one strength the page asks for (medium), so a tape with veils needs every frame's.
+    if (tape.veils && !existsSync(join(out, tapeDir, `veils/${id}-medium.webp`))) problems.push(`tape file missing: veils/${id}-medium.webp`);
   }
+  if (tape.veils && typeof tape.veils.medium !== "number") problems.push("tape.veils has no medium strength, the only one the page uses");
   const doc = tape.provenance?.document;
   if (doc && !existsSync(join(out, tapeDir, doc))) problems.push(`tape file missing: ${doc}`);
 }

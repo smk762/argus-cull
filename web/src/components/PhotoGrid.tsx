@@ -5,7 +5,7 @@ import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shownAge, use
 import type { ImageLabel } from "@/lib/labels";
 import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
-import { reasonTitle, veilFor } from "@/lib/veil";
+import { reasonTitle, rejectWords, veilFor } from "@/lib/veil";
 import { formatYears } from "@/lib/years";
 
 import { NotInDemo } from "./DemoBadge";
@@ -305,6 +305,17 @@ export function PhotoGrid({
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
           const shields = policyShields(image, policies, override, pending.includes("guard"));
+          const shieldRow =
+            shields.length > 0 ? (
+              <span className="flex shrink-0 items-center gap-0.5 rounded-md bg-base-900/80 px-1 py-0.5">
+                {shields.map((shield) => (
+                  <Shield key={shield.policy} state={shield.state} title={shield.title} className="h-4 w-4" />
+                ))}
+              </span>
+            ) : null;
+          const reasonPanel = veil != null && !checking;
+          // A held frame's reason is its reject reason, which the panel on the frame already says.
+          const reasonOnFrame = reasonPanel && (veil.kind === "held" || veil.kind === "minor");
           return (
             <li key={image.rel_path} className="relative">
               <label className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-base-800/90 px-1.5 py-1 text-caption text-text-secondary">
@@ -343,11 +354,12 @@ export function PhotoGrid({
                     </span>
                   ) : null}
                   {/* One shield per policy the scan ran; hover one for the policy and the rules it fired. */}
-                  {shields.length > 0 ? (
-                    <span className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5 rounded-md bg-base-900/80 px-1 py-0.5">
-                      {shields.map((shield) => (
-                        <Shield key={shield.policy} state={shield.state} title={shield.title} className="h-4 w-4" />
-                      ))}
+                  {shieldRow != null && !reasonPanel ? <span className="absolute right-1.5 bottom-1.5">{shieldRow}</span> : null}
+                  {/* A veiled tile says why on the frosted frame itself, in full: the row under it has no room. */}
+                  {reasonPanel ? (
+                    <span className="veil-reason">
+                      <span className="veil-reason-text">{veil!.short}</span>
+                      {shieldRow}
                     </span>
                   ) : null}
                 </span>
@@ -366,10 +378,16 @@ export function PhotoGrid({
                     <span className={`truncate ${age.text === "no face" ? "text-text-muted" : ""}`} title={age.title}>
                       {age.text}
                     </span>
-                    {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
-                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reasonTitle(reason ?? "")}>
-                      {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : reason}
-                    </span>
+                    {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on.
+                        A reason wraps to two lines in plain words; the tooltip adds the curator's own. */}
+                    {reasonOnFrame ? null : (
+                      <span
+                        className={`col-span-4 line-clamp-2 break-words ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`}
+                        title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reasonTitle(reason ?? "")}
+                      >
+                        {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : rejectWords(reason ?? "").short}
+                      </span>
+                    )}
                   </span>
                 </span>
               </button>

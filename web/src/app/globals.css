@@ -196,6 +196,37 @@ dialog::backdrop {
   vector-effect: non-scaling-stroke;
 }
 
+/*
+ * Why a tile is veiled, on the frosted frame: a dark scrim along the bottom,
+ * white text wrapped to three lines, the shields above it. Fixed colours in both themes: white on
+ * 78% black is over 9:1 even with a white mosaic behind it.
+ */
+.veil-reason {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  background: rgb(0 0 0 / 0.78);
+  color: #fff;
+  font-size: var(--text-caption, 12px);
+  line-height: 1.35;
+}
+/* The text takes the full width; the policy shields, when there are any, sit on their own line above it. */
+.veil-reason-text {
+  order: 1;
+  align-self: stretch;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
 /* Grid chips on a veiled tile, on the shared badge (dh-badge.css): Held is neutral, Veiled is the warn tint. */
 .veil-chip--veiled {
   background: var(--dh-warn-tint);
