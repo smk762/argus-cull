@@ -1,7 +1,7 @@
 [
   {
     "label": "Set",
-    "text": "Synthetic: 51 photoreal frames generated for this demo. No real photos."
+    "text": "Synthetic: 53 photoreal frames generated for this demo. No real photos."
   },
   {
     "label": "People",
@@ -9,7 +9,7 @@
   },
   {
     "label": "Content",
-    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal, a smuggler with cash, a blindfolded hostage), with no blood or injury, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, two silk boudoir frames, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal with bricks of white powder and cash, a smuggler beside a wall of powder bricks, a blindfolded hostage), with no blood, injury or drug use, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
   },
   {
     "label": "Faces",

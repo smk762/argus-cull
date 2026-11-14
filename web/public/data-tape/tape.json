@@ -1,10 +1,10 @@
 {
  "format": "argus-cull-tape",
  "version": 1,
- "generated_at": "2026-11-14T19:35:28Z",
+ "generated_at": "2026-11-14T21:50:13Z",
  "provenance": {
   "kind": "recorded",
-  "source": "curator",
+  "source": "saved-scan",
   "curator": {
    "version": "0.15.1",
    "commit": "8ed779db7cc7d0e8bafa505be32bc6a201d4e70c"
@@ -13,7 +13,7 @@
   "about": [
    {
     "label": "Set",
-    "text": "Synthetic: 51 photoreal frames generated for this demo. No real photos."
+    "text": "Synthetic: 53 photoreal frames generated for this demo. No real photos."
    },
    {
     "label": "People",
@@ -21,7 +21,7 @@
    },
    {
     "label": "Content",
-    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal, a smuggler with cash, a blindfolded hostage), with no blood or injury, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, two silk boudoir frames, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal with bricks of white powder and cash, a smuggler beside a wall of powder bricks, a blindfolded hostage), with no blood, injury or drug use, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
    },
    {
     "label": "Faces",
@@ -113,8 +113,8 @@
   }
  },
  "stats": {
-  "total": 51,
-  "passed": 48,
+  "total": 53,
+  "passed": 50,
   "rejected": 3,
   "duplicates": 1,
   "reject_reasons": {
@@ -122,15 +122,15 @@
    "blurry (sharpness=3.9 < 100.0)": 1,
    "resolution too low (160px short side)": 1
   },
-  "kept": 46,
-  "faces": 48,
-  "nudenet_checked": 48,
+  "kept": 48,
+  "faces": 50,
+  "nudenet_checked": 50,
   "flagged_by_policy": {
    "adult": 10,
-   "adult-cautious": 9,
-   "adult-cinematic": 1,
+   "adult-cautious": 10,
+   "adult-cinematic": 2,
    "adult-granular": 10,
-   "default": 8
+   "default": 10
   }
  },
  "health": {
@@ -224,10 +224,10 @@
   "active": null,
   "scans": [
    {
-    "scan_id": "7cb097a158484c7096febdf49ab5cf43",
+    "scan_id": "fffd61fa63604c2b94943d105595151c",
     "folder": "/data/images/final",
-    "total": 51,
-    "updated_at": "2026-11-14T19:35:28Z"
+    "total": 53,
+    "updated_at": "2026-11-14T21:50:13Z"
    }
   ]
  },
@@ -256,13 +256,18 @@
    "guard_rules": null
   },
   "result": {
-   "scan_id": "7cb097a158484c7096febdf49ab5cf43",
-   "total": 51,
-   "kept": 46,
+   "scan_id": "fffd61fa63604c2b94943d105595151c",
+   "total": 53,
+   "kept": 48,
    "rows": [
     {
      "rel_path": "personA/A_beach_bikini.jpg",
      "abs_path": "/data/images/final/personA/A_beach_bikini.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "personA/A_boudoir_slip.jpg",
+     "abs_path": "/data/images/final/personA/A_boudoir_slip.jpg",
      "keep_reason": ""
     },
     {
@@ -451,6 +456,11 @@
      "keep_reason": ""
     },
     {
+     "rel_path": "personE/E_boudoir_robe.jpg",
+     "abs_path": "/data/images/final/personE/E_boudoir_robe.jpg",
+     "keep_reason": ""
+    },
+    {
      "rel_path": "personE/E_cafe.jpg",
      "abs_path": "/data/images/final/personE/E_cafe.jpg",
      "keep_reason": ""
@@ -520,6 +530,7 @@
  },
  "files": {
   "personA/A_beach_bikini.jpg": "e8ac3c8db0836a98",
+  "personA/A_boudoir_slip.jpg": "3117d53956b3fdad",
   "personA/A_cafe.jpg": "9f8bdef32e02b8e3",
   "personA/A_gym_sportsbra.jpg": "248e79ab02281f4e",
   "personA/A_heist_film.jpg": "79713d88b818a79d",
@@ -557,6 +568,7 @@
   "personD/D_street.jpg": "ae7ca415f83709d9",
   "personD/D_surf_shirtless.jpg": "4ae6fdfdccdc56c9",
   "personE/E_beach_bikini.jpg": "4eda7444bcf433a9",
+  "personE/E_boudoir_robe.jpg": "006da8a4c5ca9f82",
   "personE/E_cafe.jpg": "d367fbadc7e52f45",
   "personE/E_getaway_film.jpg": "bea8f17971bc8db8",
   "personE/E_heist_film.jpg": "774051ebfd182f05",

@@ -1,24 +1,24 @@
 # Argus Cull demo set: provenance
 
-The 51 images in this demo are **synthetic**, generated on 2026-11-14 for this demo. The five people in them are
+The 53 images in this demo are **synthetic**, generated on 2026-11-14 and 2026-11-15 for this demo. The five people in them are
 **fictional**: each was described in words, not taken from photos, and none depicts or imitates a real person. They
 are written as adults aged 27 to 30, and MiVOLO reads every face as an adult of 25 or older (lowest 25.5, on one
-swimwear frame). Content runs from bland to swimsuit-catalogue level: bikinis, one opaque satin lingerie set, sports
+swimwear frame). Content runs from bland to swimsuit-catalogue level: bikinis, one opaque satin lingerie set, two opaque silk boudoir frames (a slip and a robe), sports
 bras and crop tops, shirtless men at the beach and gym, an open denim jacket, and red satin evening dresses (one
 form-fitting, one with cut-outs, one with a deeper neckline). There is no nudity: no nipple or areola is visible in any
 frame, nothing is see-through, and nothing is posed beyond swimsuit- or lingerie-catalogue norms.
 
 Eleven frames are crime-film stills, made so the demo shows guard verdicts that are not about nudity: prop handguns
 raised or held down and pointed away from the camera (an action hero, a 1940s detective, a spy on a rooftop, a cop in a
-parking garage, 1970s heist and getaway scenes), a drug deal with wrapped packages and cash, a smuggler beside a car
-trunk of cash, and a blindfolded hostage with roped wrists in a warehouse. None has blood, injury, a victim of violence,
+parking garage, 1970s heist and getaway scenes), a drug deal at a table of cellophane-wrapped bricks and heaps of white powder with cash, a smuggler holding cash beside a car
+trunk and a wall of cellophane-wrapped bricks, and a blindfolded hostage with roped wrists in a warehouse. None has blood, injury, a victim of violence,
 real-world events, sexual framing, or a weapon aimed at the viewer, and none is set in a school, library, gym hall,
-playground or locker room or combined with swimwear or lingerie. SingGuard judges all eleven under rule B (Real-World
-Crimes & Public Safety) under at least one of `adult`, `default`, `adult-granular` and `adult-cautious`, and Safe
-under `adult-cinematic`, which treats crime and violence in film as Safe (on the recorded run it read the drug deal as
-rule G, Criminal Instructions, instead). `default` is SingGuard's own general policy,
-the safe-for-work baseline; the four `adult*` policies are curator's. Every other frame is Safe under all five
-policies, except C's lingerie set, which `default` reads as sexual content (rule A).
+playground or locker room or combined with swimwear or lingerie. SingGuard judges all eleven under rule B (Real-World Crimes & Public Safety) under at least one of `adult`,
+`default`, `adult-granular` and `adult-cautious`, and Safe under `adult-cinematic`, which treats crime and violence
+in film as Safe; on the recorded run `adult-cinematic` read the drug deal and the smuggler as rule G (Criminal
+Instructions) instead. `default` is SingGuard's own general policy, the safe-for-work baseline; the four `adult*`
+policies are curator's. Every other frame is Safe under all five policies, except C's lingerie set and E's boudoir
+robe, which `default` reads as sexual content (rule A).
 
 The scores, ages and verdicts on the page are what argus-curator 0.15.1 recorded when it scanned this set. Nothing
 was edited by hand. One scan setting differs from curator's default: the **face clustering distance is 0.8**
@@ -88,6 +88,7 @@ The MiVOLO column is the curator's own reading in the recorded scan.
 | File | Intended category | MiVOLO age (curator scan) | Scene prompt |
 |---|---|---|---|
 | `personA/A_beach_bikini.jpg` | swim / fitness | 34.3 | wearing a coral bikini, standing on a tropical beach, one hand in her hair, confident smile, thigh-up shot, swimsuit magazine photoshoot, golden hour |
+| `personA/A_boudoir_slip.jpg` | boudoir | 30.6 | boudoir photo, a 28 year old Black woman with shoulder-length natural curly black hair, sitting on the edge of a bed, wearing an opaque champagne silk slip dress, one thin strap slipped off her shoulder, soft warm lamp light, cosy bedroom, thigh-up shot, three-quarter view, looking at the camera, professional photograph, natural skin texture, realistic |
 | `personA/A_cafe.jpg` | bland | 28.1 | wearing a mustard knit top, three-quarter view, sitting at a table in a cosy cafe holding a coffee cup, upper body portrait |
 | `personA/A_gym_sportsbra.jpg` | swim / fitness | 33.7 | wearing a black sports bra and high-waisted leggings, toned abs, standing in a gym with weights behind her, waist-up portrait, fitness photo |
 | `personA/A_heist_film.jpg` | crime (film still) | 25.9 | cinematic 1970s heist film still, woman in a dark green leather jacket beside a vintage car at night, holding a black pistol raised and pointed up at the sky, a 28 year old Black woman with shoulder-length natural curly black hair, waist-up, three-quarter view |
@@ -98,7 +99,7 @@ The MiVOLO column is the curator's own reading in the recorded scan.
 | `personA/A_teacher_classroom.jpg` | cohort scene | 33.1 | adult teacher standing at the front of a classroom beside a green chalkboard, rows of empty wooden student desks and chairs in the foreground, wide shot, wearing a blue blouse and grey cardigan, looking at the camera |
 | `personB/B_coach_gymnasium.jpg` | cohort scene | 34.3 | adult sports coach wearing a plain navy polo shirt, whistle on a cord, holding a clipboard, standing in a large empty school gym hall with wooden wall bars, climbing ropes hanging from the ceiling and gym mats, wide shot, looking at the camera (retouched: shirt logo, crest and sign glyphs inpainted out) |
 | `personB/B_detective_film.jpg` | crime (film still) | 32.2 | cinematic cop thriller film still, detective in a plain dark suit standing in a dim parking garage at night, holding a black pistol pointed down at the ground beside his leg, a 29 year old East Asian man with short black undercut hair and light stubble, waist-up, looking at the camera |
-| `personB/B_drugdeal_film.jpg` | crime (film still) | 28.9 | seated at a table in a dim back room across from an unseen buyer, wrapped packages of white powder and stacks of cash on the table, tense, waist-up, three-quarter view, cinematic film still, crime thriller, film lighting |
+| `personB/B_drugdeal_film.jpg` | crime (film still), replaces the earlier take | 27.3 | crime film still, drug deal in a dim back room, a man seated at a table covered with kilo bricks of white powder in clear cellophane, one brick cut open spilling white powder on the table, a digital scale, small baggies of white powder, stacks of cash, a 29 year old East Asian man with short black undercut hair and light stubble, tense, waist-up, three-quarter view, film lighting |
 | `personB/B_gym_shirtless.jpg` | swim / fitness | 31.5 | shirtless, toned muscular chest and abs, wearing black gym shorts, standing in a gym holding a dumbbell, waist-up portrait, fitness photo |
 | `personB/B_kitchen.jpg` | bland | 31.0 | wearing a grey t-shirt and dark apron, three-quarter view, chopping vegetables in a home kitchen, upper body |
 | `personB/B_office.jpg` | bland | 32.7 | wearing a light blue button-down shirt, looking at the camera, head and shoulders portrait, in a modern office |
@@ -121,10 +122,11 @@ The MiVOLO column is the curator's own reading in the recorded scan.
 | `personD/D_gym_shirtless.jpg` | swim / fitness | 36.5 | shirtless, muscular chest and arms, wearing grey gym shorts, standing in a gym beside a pull-up bar, waist-up portrait, fitness photo |
 | `personD/D_hostage_film.jpg` | crime (film still) | 32.3 | cinematic thriller film still, hostage blindfolded with a black cloth over his eyes, wrists tied together with thick rope, seated on a wooden chair in an empty warehouse, a 30 year old Hispanic man with short dark hair and a trimmed dark beard, fully clothed in a grey hoodie, medium shot |
 | `personD/D_playground_bench.jpg` | cohort scene | 36.2 | wearing a grey hoodie and jeans, sitting alone on a bench beside an empty playground with swings and a slide, park, daylight, wide shot |
-| `personD/D_smuggler_film.jpg` | crime (film still) | 32.2 | crime film still at night, smuggler beside an open car trunk full of bricks of white powder wrapped in plastic and bundles of cash, a 30 year old Hispanic man with short dark hair and a trimmed dark beard, dark jacket, waist-up |
+| `personD/D_smuggler_film.jpg` | crime (film still), replaces the earlier take | 31.6 | cartel film still at night, drug smuggler holding a kilo brick of white cocaine in clear plastic wrap beside an open car trunk full of identical white bricks and bundles of cash, a 30 year old Hispanic man with short dark hair and a trimmed dark beard, dark jacket, waist-up, three-quarter view |
 | `personD/D_street.jpg` | bland | 37.5 | wearing a black leather jacket over a white t-shirt, looking at the camera, upper body portrait, on a city street, daylight |
 | `personD/D_surf_shirtless.jpg` | swim / fitness | 34.4 | shirtless, black wetsuit peeled down to his waist, holding a surfboard under his arm on a beach, waist-up portrait, morning light |
 | `personE/E_beach_bikini.jpg` | swim / fitness | 34.3 | wearing a plain navy blue bikini, standing on a white sand beach, smiling at the camera, thigh-up shot, swimsuit magazine photoshoot, sunny day |
+| `personE/E_boudoir_robe.jpg` | boudoir | 31.8 | boudoir photo, a 28 year old white woman with shoulder-length blonde hair, reclining on a velvet chaise longue, wearing an opaque ivory silk robe slipping off one shoulder over an opaque satin camisole, soft warm lamp light, elegant bedroom, thigh-up shot, legs together, looking at the camera, professional photograph, natural skin texture, realistic |
 | `personE/E_cafe.jpg` | bland | 29.0 | wearing a green sweater, reading a book at a cafe table, three-quarter view, upper body |
 | `personE/E_getaway_film.jpg` | crime (film still) | 30.6 | cinematic 1970s heist film still, woman in a brown leather jacket beside a vintage car at night, holding a black pistol raised and pointed up at the sky, a 28 year old white woman with shoulder-length blonde hair, waist-up, three-quarter view |
 | `personE/E_heist_film.jpg` | crime (film still) | 27.1 | cinematic 1970s heist film still, woman in a brown leather jacket beside a vintage car at night, holding a black pistol raised and pointed up at the sky, a 28 year old white woman with shoulder-length blonde hair, waist-up, three-quarter view |
@@ -146,21 +148,72 @@ The intended category is what each frame was made to show, not what the curator 
   every run: the guard is a language model, so a borderline still can read Safe under one policy and B under another.
   Takes that read as anything but rule B (a pistol raised near the head read as self-harm, rule C; a frightened
   hostage read as under 25 or sexual) were dropped.
-- **Lingerie and swimwear** are Safe under all four `adult*` policies: they treat a single adult posing in lingerie
-  or swimwear for the camera as Safe. SingGuard's general `default` policy passes the swimwear but reads C's lingerie
-  set as sexual content (rule A), so that frame shows as Split: the safe-for-work baseline and the adult policies
+- **Lingerie, boudoir and swimwear** are Safe under all four `adult*` policies: they treat a single adult posing in
+  lingerie or swimwear for the camera as Safe. SingGuard's general `default` policy passes the swimwear but reads C's
+  lingerie set and E's boudoir robe as sexual content (rule A), so those frames show as Split. It read A's boudoir slip
+  as rule A on two of four scans and Safe on the recorded one: the safe-for-work baseline and the adult policies
   disagree, which is what the policy comparison is for. NudeNet reads them as covered breast, belly and armpits, which is right.
 - **Group shot.** `rejects/BE_group_cafe.jpg` is a fine frame, but the scan's identity profile multiplies the score of
   a frame with more than one face by 0.4, so it cannot reach the 0.6 keep threshold and is left out as under the
   quality minimum. Its two faces still join B's and E's clusters.
-- **Face clusters.** At distance 0.8 each person has one main cluster, and no cluster mixes two people. Three crime stills
-  sit apart: B's parking-garage detective and D's blindfolded hostage each form their own cluster (the blindfold hides
-  the eyes), and E's heist and getaway stills form a small cluster of their own.
+- **Face clusters.** At distance 0.8 each person has one main cluster, and no cluster mixes two people. Five dark crime stills
+  sit apart in three small clusters: B's parking-garage detective and drug deal together, D's blindfolded hostage alone
+  (the blindfold hides the eyes), and E's heist and getaway stills together.
 - **Watermark check.** Only the deliberate watermark frame has a detection; it is cropped (its bottom strip), not
   rejected. Earlier takes of B's park frame, C's café frame and A's street frame had a zip, a mouth and a jacket pocket
   seam read as watermarks and were replaced.
 - **Rejects.** The blur reject fails the sharpness gate, the low-resolution and banner frames fail their gates, and the
   near duplicate is marked as a duplicate of `personA/A_cafe.jpg` and left out of the keep set.
+
+## Frames added on 2026-11-15
+
+The drug deal and the smuggler replace earlier, vaguer takes under the same names, and the two boudoir frames are new. Their rows are in the Images table above.
+
+Generated on 2026-11-15 with the same recipe as the rest of the set: SDXL text render with **CyberRealistic XL Desire
+v2.0**, then an **InstantID** identity pass from the person's synthetic reference portrait. Settings: diffusers,
+DPM++ 2M SDE Karras, 30 steps, CFG 5.0; IdentityNet ControlNet 0.85, IP-Adapter 0.9. The frames were saved as JPEG
+(quality 90) from fresh pixel buffers, with no EXIF, XMP or generator metadata. Nothing was retouched.
+
+The set is now 53 frames. Two crime stills were replaced under their old names, and two boudoir frames were added.
+
+As with the later crime stills, the scene comes first and a short identity phrase follows, so the props fit within
+CLIP's 77-token limit. The render did not draw everything named in the prompt:
+
+- **Drug-deal frame:** cellophane-wrapped bricks, heaps of loose white powder and cash on the table; no scale or baggies. He sits with his head in his hands.
+- **Smuggler frame:** a wall of cellophane-wrapped white bricks in and beside the trunk, and a strapped bundle of cash
+  in his hand. There is no cut-open brick.
+
+Negative prompts:
+
+- Crime stills: "second person, (other people, crowd,) face mask, (gag,) nude, (nipples, cleavage,) child, teen,
+  blood, gore, wound, (injury,) syringe, needle, snorting, (hand on face,) smoking, gun, license plate, text, logo,
+  letters, numbers, watermark, label, (sign,) cartoon, illustration, 3d render, deformed, bad hands, low quality".
+  Terms in brackets were used in one of the two prompts only.
+- Boudoir frames: "nude, topless, nipples, areola, see-through, sheer fabric, mesh, transparent lace, wet, child,
+  teen, petite, baby face, spread legs, from below, crotch, second person, text, logo, letters, numbers, watermark,
+  cartoon, anime, illustration, 3d render, deformed, bad hands, low quality".
+
+### Checks
+
+Every candidate was checked by eye. Candidates were dropped for any of these reasons:
+
+- a second person in the frame;
+- powder at the face, which reads as drug use;
+- pseudo-text on labels or licence plates;
+- semi-sheer lace;
+- a raised-thigh or rear-view pose;
+- any nudity.
+
+Every kept frame was then scanned with the demo's detector stack under all five guard policies (`default`, `adult`,
+`adult-granular`, `adult-cautious`, `adult-cinematic`). None has a watermark detection or an exposed sensitive
+NudeNet label. NudeNet reads the boudoir frames as covered breast and armpits, which is right.
+
+- **Crime stills:** both new stills read rule B under `adult`, `adult-granular`, `adult-cautious` and `default`.
+- **Boudoir frames:** both are Safe under every `adult*` policy, as the policies treat a single adult posing in
+  lingerie for the camera as Safe. SingGuard's general `default` policy flags them under rule A (sexual content) on
+  most runs, as it does the satin lingerie frame.
+
+At face distance 0.8, the smuggler and both boudoir frames join their person's main face cluster; the drug deal joins B's small dark-still cluster with the detective.
 
 ## Licences
 
