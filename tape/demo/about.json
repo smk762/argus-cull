@@ -1,7 +1,30 @@
 [
-  { "label": "Set", "text": "Synthetic: 29 photoreal frames generated for this demo. No real photos." },
-  { "label": "People", "text": "Four fictional adults, written as 35 to 47 years old. None depicts or imitates a real person." },
-  { "label": "Content", "text": "Bland to mildly suggestive (one-piece swimsuits, gym wear, a slip dress); no nudity. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks." },
-  { "label": "Checkpoint", "text": "CyberRealistic XL Desire v2.0 (SDXL), CreativeML Open RAIL-M." },
-  { "label": "Identity", "text": "InstantID (Apache-2.0). Its face encoder, InsightFace antelopev2, has non-commercial research weights; used only for this non-commercial demo." }
+  {
+    "label": "Set",
+    "text": "Synthetic: 53 photoreal frames generated for this demo. No real photos."
+  },
+  {
+    "label": "People",
+    "text": "Five fictional adults, written as 27 to 30; MiVOLO reads every face as 25 or older. None depicts or imitates a real person."
+  },
+  {
+    "label": "Content",
+    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, two silk boudoir frames, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal with bricks of white powder and cash, a smuggler beside a wall of powder bricks, a blindfolded hostage), with no blood, injury or drug use, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+  },
+  {
+    "label": "Faces",
+    "text": "Face clustering distance 0.8, tuned for this synthetic set: each person has one main cluster and no two people merge. A few dark, half-lit crime-film stills form small clusters of their own. Curator's default is 0.5."
+  },
+  {
+    "label": "Checkpoint",
+    "text": "CyberRealistic XL Desire v2.0 (SDXL), CreativeML Open RAIL-M."
+  },
+  {
+    "label": "Identity",
+    "text": "InstantID (Apache-2.0). Its face encoder, InsightFace antelopev2, has non-commercial research weights; used only for this non-commercial demo."
+  },
+  {
+    "label": "Edits",
+    "text": "One retouch: logos and sign glyphs inpainted out of the gym-hall frame. The reject frames are derived from renders; nothing else was edited."
+  }
 ]

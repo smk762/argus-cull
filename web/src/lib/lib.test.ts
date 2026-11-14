@@ -113,6 +113,15 @@ describe("url state", () => {
     expect(once.filter.guardRules).toEqual(["A"]);
   });
 
+  it("keeps the Display view (All, Kept, Left out) in the URL as show", () => {
+    expect(serializeView(DEFAULT_VIEW)).toBe("");
+    expect(serializeView({ ...DEFAULT_VIEW, show: "kept" })).toBe("?show=kept");
+    expect(parseView(new URLSearchParams("show=left-out")).show).toBe("left-out");
+    expect(parseView(new URLSearchParams("show=kept")).show).toBe("kept");
+    expect(parseView(new URLSearchParams("show=nonsense")).show).toBe("all");
+    expect(parseView(new URLSearchParams("")).show).toBe("all");
+  });
+
   it("keeps cluster names in the URL", () => {
     const view = { ...DEFAULT_VIEW, faceNames: { face_1: "Ada", face_3: "Ada", face_2: "  " } };
     expect(serializeView(view)).toBe("?name=face_1%3AAda&name=face_3%3AAda");

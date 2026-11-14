@@ -24,6 +24,12 @@ the page's API routes:
     PROVENANCE.md      where the images came from (--provenance-doc), linked from the
                        sidebar's About this tape beside the --about summary
     thumbs/<id>.webp   480 px thumbnails;  images/<id>.webp  1600 px views
+    veils/<id>-<s>.webp the veil: the frame averaged down to a few dozen pixels on
+                       its long side (one strength, medium), which the page scales up as
+                       a mosaic, so a veiled frame never loads its thumbnail or view
+
+    # Re-derive the veils of an existing tape from its images/, with no rescan
+    python scripts/record_tape.py veils [--out DIR]
 
 Paths are rewritten under /data/images (the container's source mount), so no
 host path, user name or host name lands in the tape; the script fails if one
@@ -58,6 +64,10 @@ FORMAT = "argus-cull-tape"
 VERSION = 1
 THUMB_PX = 480
 IMAGE_PX = 1600
+# Veil mosaics: cells across the long side. One strength for every veiled frame, held or flagged, so one
+# veil file per frame. web/src/lib/veil.ts holds the same number for the live page, and
+# web/src/lib/veil.test.ts holds the two to each other.
+VEIL_CELLS = {"medium": 28}
 # The curator's select body for the page's default filters: selectBody(DEFAULT_FILTER, …) in web/src/lib/select.ts.
 # web/src/lib/tape.test.ts holds the two to each other.
 DEFAULT_SELECT: dict[str, Any] = {
@@ -208,9 +218,13 @@ def run_stats(summary: dict, select: dict | None) -> dict:
     flagged: Counter[str] = Counter()
     for image in results:
         guard = image.get("guard")
+        official = (guard or {}).get("policy") or (summary.get("guard_config") or {}).get("policy") or "official"
         if guard and guard.get("safe") is False:
-            flagged[guard.get("policy") or (summary.get("guard_config") or {}).get("policy") or "official"] += 1
+            flagged[official] += 1
         for name, verdict in (image.get("guard_variants") or {}).items():
+            # Curator repeats the official verdict among the variants; count it once.
+            if name == official:
+                continue
             if verdict and verdict.get("safe") is False:
                 flagged[name] += 1
     return {
@@ -244,6 +258,43 @@ def encode(data: bytes, longest: int, quality: int) -> bytes:
         # No EXIF or XMP is carried over: a photo's metadata can name its camera, place and owner.
         image.save(out, "WEBP", quality=quality, method=6)
         return out.getvalue()
+
+
+def veil(data: bytes, cells: int) -> bytes:
+    """The frame averaged into *cells* across its long side: a mosaic with no detail left to recover."""
+    from PIL import Image, ImageOps
+
+    with Image.open(io.BytesIO(data)) as image:
+        image = ImageOps.exif_transpose(image).convert("RGB")
+        w, h = image.size
+        scale = cells / max(w, h)
+        size = (max(1, round(w * scale)), max(1, round(h * scale)))
+        # BOX averages every source pixel into its cell, so no single pixel (an edge, an eye) survives.
+        small = image.resize(size, Image.Resampling.BOX)
+        out = io.BytesIO()
+        small.save(out, "WEBP", lossless=True, method=6)
+        return out.getvalue()
+
+
+def write_veils(out: Path, ident: str, data: bytes) -> None:
+    (out / "veils").mkdir(exist_ok=True)
+    for strength, cells in VEIL_CELLS.items():
+        (out / "veils" / f"{ident}-{strength}.webp").write_bytes(veil(data, cells))
+
+
+def rederive_veils(args: argparse.Namespace) -> None:
+    """Veils for a tape recorded before they existed, from its own images/: no curator and no rescan."""
+    out = Path(args.out or os.environ.get("CULL_TAPE_DIR") or DEFAULT_OUT).resolve()
+    tape_path = out / "tape.json"
+    tape = json.loads(tape_path.read_text())
+    if (out / "veils").exists():
+        shutil.rmtree(out / "veils")
+    for rel, ident in tape["files"].items():
+        write_veils(out, ident, (out / "images" / f"{ident}.webp").read_bytes())
+        print(f"  {rel}", file=sys.stderr)
+    tape["veils"] = VEIL_CELLS
+    tape_path.write_text(json.dumps(tape, indent=1) + "\n")
+    print(f"veils: {len(tape['files'])} images, one veil each {VEIL_CELLS} -> {out / 'veils'}")
 
 
 def check_leaks(out: Path) -> None:
@@ -317,7 +368,7 @@ def record(args: argparse.Namespace) -> None:
 
     if out.exists():
         shutil.rmtree(out)
-    for sub in ("thumbs", "images", "detail"):
+    for sub in ("thumbs", "images", "detail", "veils"):
         (out / sub).mkdir(parents=True)
 
     files: dict[str, str] = {}
@@ -332,6 +383,7 @@ def record(args: argparse.Namespace) -> None:
         data = fetch(rel)
         (out / "thumbs" / f"{ident}.webp").write_bytes(encode(data, THUMB_PX, 72))
         (out / "images" / f"{ident}.webp").write_bytes(encode(data, IMAGE_PX, 80))
+        write_veils(out, ident, data)
         print(f"  {rel}", file=sys.stderr)
 
     blur = os.environ.get("ARGUS_CULL_BLUR_EXPOSED_SCORE", "").strip()
@@ -358,6 +410,8 @@ def record(args: argparse.Namespace) -> None:
         "scans": {"active": None, "scans": [{"scan_id": summary["scan_id"], "folder": folder, "total": summary.get("total", len(slim_results)), "updated_at": now}]},
         "select": {"request": DEFAULT_SELECT, "result": select},
         "files": files,
+        # Cells across the long side of veils/<id>-<strength>.webp.
+        "veils": VEIL_CELLS,
     }
     write = lambda name, body: (out / name).write_text(json.dumps(body, indent=1 if name == "tape.json" else None, separators=None if name == "tape.json" else (",", ":")) + "\n")  # noqa: E731
     write("tape.json", tape)
@@ -400,7 +454,13 @@ def main() -> None:
     saved.add_argument("--select", help="POST /scan/{id}/select with the default body, saved as JSON")
     saved.add_argument("--source-root", help="the curator's source root, when --health does not say")
     saved.add_argument("--curator-version")
-    record(parser.parse_args())
+    veils = sub.add_parser("veils", help="re-derive veils/ for an existing tape from its images/")
+    veils.add_argument("--out", help="tape folder (default $CULL_TAPE_DIR or web/public/data-tape)")
+    args = parser.parse_args()
+    if args.mode == "veils":
+        rederive_veils(args)
+    else:
+        record(args)
 
 
 if __name__ == "__main__":

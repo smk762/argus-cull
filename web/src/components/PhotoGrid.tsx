@@ -1,15 +1,16 @@
 "use client";
 
-import { thumbUrl } from "@/lib/api";
-import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shouldBlur, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { frameFor } from "@/lib/api";
+import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shownAge, usesSetAge, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import type { ImageLabel } from "@/lib/labels";
 import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
+import { tileVerdict, veilFor, type VerdictTone } from "@/lib/veil";
 import { formatYears } from "@/lib/years";
 
-import { NotInDemo } from "./DemoBadge";
 import { Shield } from "./Shield";
 import { Info } from "./Tooltip";
+import { cellsAcross, VeilFrame } from "./VeilFrame";
 
 /** Tiles that load at once: about the first two rows. The rest of a page loads lazily. */
 const EAGER_TILES = 8;
@@ -43,15 +44,12 @@ export function PhotoGrid({
   shieldView = "all",
   facesRan = false,
   keepView,
-  keptCount,
-  leftOutCount,
   unfilteredCount,
   onSort,
   onDirection,
   onAge,
   onFaceView,
   onShieldView,
-  onKeepView,
   onPage,
   onOpen,
   selected,
@@ -87,10 +85,8 @@ export function PhotoGrid({
   faceView?: FaceView;
   /** Face detection reported on this scan, so a frame with none says "no face" rather than "–". */
   facesRan?: boolean;
+  /** What the sidebar's Display → View shows by the keep set; the grid only words its empty state by it. */
   keepView: KeepView;
-  /** Null until the keep set has been calculated. */
-  keptCount: number | null;
-  leftOutCount: number | null;
   /** Images before the gallery age range. Zero means the view itself is empty. */
   unfilteredCount: number;
   onSort: (sort: GridSort) => void;
@@ -100,7 +96,6 @@ export function PhotoGrid({
   /** Hide tiles whose shield does not match. All keeps frames with no verdict. */
   shieldView?: ShieldView;
   onShieldView?: (view: ShieldView) => void;
-  onKeepView: (view: KeepView) => void;
   onPage: (page: number) => void;
   onOpen: (relPath: string) => void;
   selected: ReadonlySet<string>;
@@ -149,13 +144,8 @@ export function PhotoGrid({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="View">
           <span className="flex w-14 items-center gap-1 font-semibold text-text-primary">
             View
-            <Info text="What the grid shows and in what order. These narrow the grid only: the keep set, Download paths and Export do not change." />
+            <Info text="What the grid shows and in what order. These narrow the grid only: the keep set, Download paths and Export do not change. All, Kept and Left out are in the sidebar under Display." />
           </span>
-          <div className="flex items-center gap-1" role="group" aria-label="Show">
-            <ShowButton current={keepView} view="all" label="All" onKeepView={onKeepView} />
-            <ShowButton current={keepView} view="kept" label={keptCount == null ? "Kept" : `Kept (${keptCount})`} disabled={keptCount == null} onKeepView={onKeepView} />
-            <ShowButton current={keepView} view="left-out" label={leftOutCount == null ? "Left out" : `Left out (${leftOutCount})`} disabled={leftOutCount == null} onKeepView={onKeepView} />
-          </div>
           <label className="flex items-center gap-1.5">
             Sort
             <select className={SELECT} value={sort} onChange={(event) => onSort(event.target.value as GridSort)}>
@@ -271,6 +261,7 @@ export function PhotoGrid({
                 type="button"
                 className="rounded-md border border-warning px-2 py-1 text-small text-warning disabled:opacity-40"
                 disabled={deleteOff != null || deletableSelected === 0 || deleting}
+                title={deleteOff ?? undefined}
                 onClick={onDeleteSelected}
               >
                 {deleting ? "Deleting…" : deleteConfirm ? `Confirm delete (${deletableSelected})` : `Delete selected (${deletableSelected})`}
@@ -286,7 +277,6 @@ export function PhotoGrid({
           ) : null}
         </div>
       </div>
-      {deleteOff != null && (deleteAny || flagged.length > 0) ? <NotInDemo reason={deleteOff} /> : null}
       {!deleteAny && selectedHere > deletableSelected ? <p className="text-caption text-text-muted">This curator deletes only under-18 exposed images.</p> : null}
       {deleteError ? <p className="text-caption text-warning">{deleteError}</p> : null}
       {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, ageFrom, ageTo, faceView, shieldView)}</p> : null}
@@ -294,14 +284,26 @@ export function PhotoGrid({
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]">
         {slice.map((image, index) => {
           const reason = reasons?.get(image.rel_path);
-          const kept = reason === "";
           const override = labels?.get(image.rel_path)?.override ?? null;
-          const blurred = shouldBlur(image, pending, blur, override);
+          const veil = veilFor(image, pending, blur, override);
+          const source = frameFor(scanId, image.rel_path, veil, "tile");
           const checking = awaitingChecks(image, pending);
           const age = apparentAge(image, pending, facesRan);
           const deletable = isMinorExposed(image);
           const isSelected = selected.has(image.rel_path);
           const shields = policyShields(image, policies, override, pending.includes("guard"));
+          const shieldRow =
+            shields.length > 0 ? (
+              <span className="flex shrink-0 items-center gap-0.5 rounded-md bg-base-900/80 px-1 py-0.5">
+                {shields.map((shield) => (
+                  <Shield key={shield.policy} state={shield.state} title={shield.title} className="h-4 w-4" />
+                ))}
+              </span>
+            ) : null;
+          const reasonPanel = veil != null && !checking;
+          // Held and under-18 frames are rejects (danger); policy and NudeNet veils are flags the viewer may lift (warn).
+          const panelTone = veil?.kind === "held" || veil?.kind === "minor" ? "veil-reason--held" : "veil-reason--veiled";
+          const verdict = checking ? null : tileVerdict(image, reason, veil);
           return (
             <li key={image.rel_path} className="relative">
               <label className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-base-800/90 px-1.5 py-1 text-caption text-text-secondary">
@@ -320,27 +322,33 @@ export function PhotoGrid({
                 onClick={() => onOpen(image.rel_path)}
               >
                 <span className="relative block">
-                  {/* Thumbnails are already resized by the curator. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={thumbUrl(scanId, image.rel_path)}
-                    alt=""
-                    loading={index < EAGER_TILES ? undefined : "lazy"}
-                    decoding="async"
-                    className={`aspect-square w-full object-cover ${blurred ? "scale-110 blur-2xl" : ""}`}
-                  />
-                  {/* A blur speaks for itself; only a frame still waiting on checks gets a word. */}
+                  {/* A veiled tile never loads its thumbnail: it shows the mosaic (lib/veil.ts). */}
+                  {source.kind === "image" ? (
+                    // Thumbnails are already resized by the curator.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={source.url} alt="" loading={index < EAGER_TILES ? undefined : "lazy"} decoding="async" className="aspect-square w-full object-cover" />
+                  ) : (
+                    <VeilFrame source={source} fit="cover" across={cellsAcross(source.cells, image.width, image.height, "cover")} className="aspect-square w-full" />
+                  )}
+                  {/* The selection outcome: Keep, Held, Veiled · Keep, or Left out (a veiled one says why on the panel). Top right, clear of the checkbox. */}
+                  {verdict ? (
+                    <span className={`dh-badge absolute top-2 right-2 ${CHIP[verdict.tone]}`} title={verdict.title}>
+                      {verdict.chip}
+                    </span>
+                  ) : null}
+                  {/* A frame still waiting on checks says so; the others carry a chip naming why they are veiled. */}
                   {checking ? (
                     <span className="absolute inset-0 flex items-center justify-center">
                       <span className="rounded-md bg-base-900/75 px-2 py-1 text-caption text-text-secondary">Scanning…</span>
                     </span>
                   ) : null}
                   {/* One shield per policy the scan ran; hover one for the policy and the rules it fired. */}
-                  {shields.length > 0 ? (
-                    <span className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5 rounded-md bg-base-900/80 px-1 py-0.5">
-                      {shields.map((shield) => (
-                        <Shield key={shield.policy} state={shield.state} title={shield.title} className="h-4 w-4" />
-                      ))}
+                  {shieldRow != null && !reasonPanel ? <span className="absolute right-1.5 bottom-1.5">{shieldRow}</span> : null}
+                  {/* A veiled tile says why on the frosted frame itself, in full: the row under it has no room. */}
+                  {reasonPanel ? (
+                    <span className={`veil-reason ${panelTone}`}>
+                      <span className="veil-reason-text">{veil!.short}</span>
+                      {shieldRow}
                     </span>
                   ) : null}
                 </span>
@@ -348,22 +356,24 @@ export function PhotoGrid({
                   <span className="block truncate text-text-secondary" title={image.rel_path}>
                     {baseName(image.rel_path)}
                   </span>
-                  <span className="mt-1 grid grid-cols-[auto_1fr_auto_1fr] gap-x-1.5 gap-y-0.5 tabular-nums">
-                    <span className="text-text-muted">quality</span>
-                    <span>{image.score.toFixed(2)}</span>
-                    <span className="text-text-muted" title="NudeNet exposed score">
-                      nude
+                  {/* Three short columns, label over value, so the age fits a phone's two-across tile. */}
+                  <span className="mt-1 grid grid-cols-3 gap-x-2 tabular-nums">
+                    <span className="flex min-w-0 flex-col">
+                      <span className="text-text-muted">quality</span>
+                      <span>{image.score.toFixed(2)}</span>
                     </span>
-                    <span title="NudeNet exposed score">{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
-                    <span className="text-text-muted">age</span>
-                    <span className={`truncate ${age.text === "no face" ? "text-text-muted" : ""}`} title={age.title}>
-                      {age.text}
+                    <span className="flex min-w-0 flex-col" title="NudeNet exposed score">
+                      <span className="text-text-muted">nude</span>
+                      <span>{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
                     </span>
-                    {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on. */}
-                    <span className={`col-span-2 truncate ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`} title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reason}>
-                      {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : reason}
+                    <span className="flex min-w-0 flex-col" title={age.title}>
+                      <span className="text-text-muted">age</span>
+                      <span className={`break-words ${age.text === "no face" ? "text-text-muted" : ""}`}>{age.text}</span>
                     </span>
                   </span>
+                  {/* A left-out frame's reason in plain words; the chip's tooltip adds the curator's own. */}
+                  {verdict?.line ? <span className="mt-1 block line-clamp-2 break-words text-text-secondary">{verdict.line}</span> : null}
+                  {verdict == null && !checking && veil == null && reasons == null && !scanning ? <span className="mt-1 block text-text-muted">Selecting…</span> : null}
                 </span>
               </button>
             </li>
@@ -385,36 +395,12 @@ export function PhotoGrid({
   );
 }
 
+/** Verdict chip colours (globals.css), all on the shared dh-badge. */
+const CHIP: Record<VerdictTone, string> = { keep: "verdict-chip--keep", held: "verdict-chip--held", veiled: "verdict-chip--veiled", "left-out": "" };
 const SELECT = "rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary";
 const BUTTON = "rounded-md border border-base-600 px-2 py-1 text-small text-text-primary";
 const VERDICT_HELP =
   "Unsafe: the official policy (or the label's override) flagged, whatever the variants said. Safe: it passed. Split: the policies disagreed, so Split overlaps both.";
-
-function ShowButton({
-  current,
-  view,
-  label,
-  disabled,
-  onKeepView,
-}: {
-  current: KeepView;
-  view: KeepView;
-  label: string;
-  disabled?: boolean;
-  onKeepView: (view: KeepView) => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`rounded-md border px-2 py-1 text-small ${current === view ? "border-accent-primary text-text-primary" : "border-base-600 text-text-primary"} disabled:opacity-40`}
-      aria-pressed={current === view}
-      disabled={disabled}
-      onClick={() => onKeepView(view)}
-    >
-      {label}
-    </button>
-  );
-}
 
 function emptyView(keepView: KeepView, ageFrom: number | null, ageTo: number | null, faceView: FaceView = "all", shieldView: ShieldView = "all"): string {
   const which = keepView === "kept" ? "kept image" : keepView === "left-out" ? "left-out image" : "image";

@@ -8,6 +8,7 @@
 import type { BlurPolicy } from "./chunks";
 import type { Caption, CohortConfig } from "./cohorts";
 import { NotInDemo, tapeBase } from "./demo";
+import { demoSelection } from "./demoSelect";
 import type { ImageLabel, LabelFile } from "./labels";
 import {
   browserLabels,
@@ -20,11 +21,13 @@ import {
   replaySteps,
   resetBrowserLabels,
   tapeFileUrl,
+  tapeVeilUrl,
   withDetail,
   type ImageDetail,
   type KeyValueStore,
   type Tape,
 } from "./tape";
+import type { VeilStrength } from "./veil";
 import type { Detectors, GuardPolicies, Health, ImageResult, Progress, ScanChunk, ScanList, ScanSummary, SelectRequest, SelectResult } from "./types";
 
 interface Loaded {
@@ -75,6 +78,9 @@ export function loadedTape(): Tape | null {
 
 export const thumbUrl = (relPath: string): string => tapeFileUrl(tapeBase(), loaded?.tape ?? null, "thumbs", relPath);
 export const imageUrl = (relPath: string): string => tapeFileUrl(tapeBase(), loaded?.tape ?? null, "images", relPath);
+export const veilUrl = (relPath: string, strength: VeilStrength): string | null => tapeVeilUrl(tapeBase(), loaded?.tape ?? null, relPath, strength);
+/** The tape's veil cell counts, when it has veils. */
+export const veilCells = (): Record<VeilStrength, number> | null => loaded?.tape.veils ?? null;
 
 export const getHealth = async (): Promise<Health> => (await loadTape()).tape.health;
 export const getDetectors = async (): Promise<Detectors> => (await loadTape()).tape.detectors;
@@ -98,10 +104,12 @@ export async function getDetail(image: ImageResult): Promise<ImageResult> {
 }
 
 export async function selectScan(scanId: string, request: SelectRequest): Promise<SelectResult> {
-  const { tape } = await loadTape();
+  const { tape, scan } = await loadTape();
   const found = recordedSelection(tape, scanId, request);
-  if (!found) throw new NotInDemo("A keep set for other filters");
-  return found;
+  if (found) return found;
+  // Other filters: the keep set is worked out here from the recorded scores, the way the curator decides it.
+  if (scanId !== tape.select.result.scan_id || scanId !== scan.scan_id) throw new NotInDemo("A keep set for another scan");
+  return demoSelection(scan, request, tape.select.result);
 }
 
 export async function getCohorts(): Promise<CohortConfig & { source: string | null; error: string | null }> {

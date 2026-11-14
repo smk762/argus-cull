@@ -2,7 +2,7 @@
 //
 //   - no API routes were exported (out/api) and no page fetches /api/ or the curator's port
 //   - every page carries the hash-based CSP <meta>, and _headers is there for the host
-//   - the tape is in the export, with a file for every image it lists
+//   - the tape is in the export, with a file for every image it lists (and its veils)
 //
 //   node scripts/check-static.mjs [outDir]   (run by `npm run build:pages`)
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -36,7 +36,10 @@ else {
     for (const part of [`thumbs/${id}.webp`, `images/${id}.webp`, `detail/${id}.json`]) {
       if (!existsSync(join(out, tapeDir, part))) problems.push(`tape file missing: ${part}`);
     }
+    // A veiled frame shows only its veil, at the one strength the page asks for (medium), so a tape with veils needs every frame's.
+    if (tape.veils && !existsSync(join(out, tapeDir, `veils/${id}-medium.webp`))) problems.push(`tape file missing: veils/${id}-medium.webp`);
   }
+  if (tape.veils && typeof tape.veils.medium !== "number") problems.push("tape.veils has no medium strength, the only one the page uses");
   const doc = tape.provenance?.document;
   if (doc && !existsSync(join(out, tapeDir, doc))) problems.push(`tape file missing: ${doc}`);
 }

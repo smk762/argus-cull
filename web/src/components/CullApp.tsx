@@ -6,7 +6,7 @@ import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetec
 import { LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
 import { loadTape } from "@/lib/staticApi";
 import type { Tape } from "@/lib/tape";
-import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
 import { labelsJsonl, type ImageLabel } from "@/lib/labels";
@@ -19,7 +19,6 @@ import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTempl
 import { availability, guardBody, selectBody } from "@/lib/select";
 import { evaluateSubset } from "@/lib/subset";
 import {
-  DEFAULT_FILTER,
   PAGE_SIZE,
   type Detectors,
   type ExportMode,
@@ -35,9 +34,10 @@ import {
 import { mergeProgress } from "@/lib/progress";
 import { withoutScan } from "@/lib/purge";
 import { withFaceName, withFilter } from "@/lib/urlState";
+import { veilFor, type Veil } from "@/lib/veil";
 import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch } from "@/lib/urlStore";
 
-import { DemoBadge, NotInDemo } from "./DemoBadge";
+import { DemoBadge } from "./DemoBadge";
 import { DemoProvenance } from "./DemoProvenance";
 import { DocLink } from "./DocLink";
 import { ExportDialog } from "./ExportDialog";
@@ -76,11 +76,7 @@ const DEMO_INTRO = "A content-safety screen for training images, on argus-curato
 export function CullApp() {
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const search = useSyncExternalStore(subscribeUrl, currentSearch, serverSearch);
-  // The demo holds the keep set for the default filters only, so a link's keep-set filters are not read.
-  const view = useMemo(() => {
-    const parsed = viewFromSearch(search);
-    return STATIC ? { ...parsed, filter: DEFAULT_FILTER } : parsed;
-  }, [search]);
+  const view = useMemo(() => viewFromSearch(search), [search]);
   const [tape, setTape] = useState<Tape | null>(null);
   const [tapeError, setTapeError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -398,7 +394,7 @@ export function CullApp() {
   const [ageTo, setAgeTo] = useState<number | null>(null);
   const [faceView, setFaceView] = useState<FaceView>("all");
   const [shieldView, setShieldView] = useState<ShieldView>("all");
-  const [keepView, setKeepView] = useState<KeepView>("all");
+  const keepView: KeepView = view.show;
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -807,12 +803,14 @@ export function CullApp() {
     if (scanList?.active && scanList.active.scan_id === summary?.scan_id) return scanList.active.pending_checks;
     return [];
   }, [scanning, pendingChecks, scanList?.active, summary?.scan_id]);
-  const sensitive = useMemo(() => {
-    const flagged = new Set<string>();
+  /** Why each veiled frame is veiled, for the People cards; the grid and detail view work it out per frame. */
+  const veils = useMemo(() => {
+    const veiled = new Map<string, Veil>();
     for (const image of summary?.results ?? []) {
-      if (shouldBlur(image, pending, displayBlur, labels.get(image.rel_path)?.override ?? null)) flagged.add(image.rel_path);
+      const veil = veilFor(image, pending, displayBlur, labels.get(image.rel_path)?.override ?? null);
+      if (veil) veiled.set(image.rel_path, veil);
     }
-    return flagged;
+    return veiled;
   }, [summary, pending, displayBlur, labels]);
   const peopleEnabled = gates.faces || (summary?.face_clusters.length ?? 0) > 0;
 
@@ -874,6 +872,13 @@ export function CullApp() {
           <div>
             <h1 className="font-display text-heading">Argus Cull</h1>
             <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+            {STATIC ? (
+              // The demo's provenance, replay and scans sit at the foot of the sidebar; this jumps there.
+              <a href="#about-demo" className="mt-1.5 inline-flex items-center gap-1.5 text-caption text-text-secondary underline-offset-2 hover:text-text-primary hover:underline">
+                <DemoBadge state={tape?.provenance.kind === "sample" ? "sample" : "recorded"} />
+                synthetic demo · about
+              </a>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <DocLink href={DOCS.home} label="argus-curator docs" className="text-small">
@@ -882,10 +887,8 @@ export function CullApp() {
             <ThemeToggle />
           </div>
         </div>
-        {STATIC ? <p className="text-small text-text-secondary">{DEMO_INTRO}</p> : null}
-        {STATIC ? (
-          <DemoProvenance tape={tape} error={tapeError} />
-        ) : (
+        {STATIC ? null : (
+          <>
         <p className="text-caption" role="status">
           {healthError ? <span className="text-error">{healthError}. Scan stays off until the curator answers.</span> : null}
           {health?.status === "ok" ? (
@@ -895,21 +898,6 @@ export function CullApp() {
           ) : null}
           {health && !health.source_root ? <span className="text-warning"> No source root is configured.</span> : null}
         </p>
-        )}
-        {STATIC ? (
-          <div className="space-y-2">
-            <button
-              type="button"
-              className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
-              disabled={!tape || !detectors || scanning}
-              onClick={() => void replay()}
-            >
-              {scanning ? "Replaying…" : "Replay recorded scan"}
-            </button>
-            <p className="text-caption text-text-muted">Streams the recorded results in batches, the way a live scan arrives: frames stay blurred until their scores land.</p>
-            <NotInDemo reason={OFF.scan} />
-          </div>
-        ) : (
         <button
           type="button"
           className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
@@ -919,33 +907,24 @@ export function CullApp() {
         >
           {scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "New scan"}
         </button>
-        )}
+        {/* The live app only: the demo is one recorded scan, so it has no list of scans. */}
         <ScansTable
           scans={scanList}
           root={root}
           current={view.scan}
-          canPurge={scanControl && !STATIC}
+          canPurge={scanControl}
           purging={purging}
           rerunning={rerunning}
           onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
-          onRerun={STATIC ? undefined : (scanId) => void openRerun(scanId)}
+          onRerun={(scanId) => void openRerun(scanId)}
           onPurge={() => void onPurge()}
-          canForget={Boolean(health?.scan_delete) && !STATIC}
+          canForget={Boolean(health?.scan_delete)}
           forgetting={forgetting}
           onForget={(scanId) => void onForget(scanId)}
         />
+          </>
+        )}
         <SetAgeOutcome summary={summary} />
-        {STATIC ? (
-          <div className="space-y-1 text-caption text-text-muted">
-            <p className="flex flex-wrap items-center gap-2">
-              <DemoBadge state="browser" title="Labels and tag edits are kept in this browser's localStorage; nothing is sent anywhere" />
-              Labels and tag edits stay in this browser (localStorage).
-            </p>
-            <button type="button" className="rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40" disabled={!summary} onClick={() => void resetLabels()}>
-              Reset to the recorded labels
-            </button>
-          </div>
-        ) : null}
         <Filters
           filter={view.filter}
           detectors={detectors}
@@ -955,13 +934,11 @@ export function CullApp() {
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
-          // The same switch as Show → Kept on the grid: on hides every image the keep set leaves out.
-          hideRejected={keepView === "kept"}
-          hideRejectedReady={reasons != null}
-          onHideRejected={(next) => {
-            setKeepView(next ? "kept" : "all");
-            if (view.page !== 1) replaceView({ ...view, page: 1 });
-          }}
+          // All, Kept or Left out: what the grid shows by the keep set, in the URL as `show`.
+          keepView={keepView}
+          keptCount={keepCounts?.kept ?? null}
+          leftOutCount={keepCounts?.leftOut ?? null}
+          onKeepView={(next) => replaceView({ ...view, show: next, page: 1 })}
           policies={allPolicies}
           policyFlags={policyFlags}
           policiesOff={offPolicies}
@@ -969,8 +946,25 @@ export function CullApp() {
             if (rawSummary) setPolicyOff({ scanId: rawSummary.scan_id, off });
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
-          keepSetLocked={STATIC ? OFF.keepSet : null}
         />
+        {STATIC ? (
+          // The demo's preamble, at the foot so the filters lead: where the tape came from and the replay.
+          <section id="about-demo" aria-label="About this demo" tabIndex={-1} className="space-y-4 border-t border-base-700 pt-4">
+            <p className="text-small text-text-secondary">{DEMO_INTRO}</p>
+            <DemoProvenance tape={tape} error={tapeError} onResetLabels={summary ? () => void resetLabels() : null} />
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
+                disabled={!tape || !detectors || scanning}
+                onClick={() => void replay()}
+              >
+                {scanning ? "Replaying…" : "Replay recorded scan"}
+              </button>
+              <p className="text-caption text-text-muted">Streams the recorded results in batches, the way a live scan arrives: frames stay blurred until their scores land.</p>
+            </div>
+          </section>
+        ) : null}
       </aside>
       <main id="main" tabIndex={-1} className="space-y-4 overflow-y-auto p-4 lg:max-h-(--cull-h)">
         <header className="space-y-3">
@@ -985,6 +979,17 @@ export function CullApp() {
                 : summary
                   ? `${summary.total} images`
                   : "No scan yet"}
+            {STATIC ? (
+              // The replay lives at the foot of the sidebar too; this keeps it in reach beside the grid.
+              <button
+                type="button"
+                className="ml-2 rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
+                disabled={!tape || !detectors || scanning}
+                onClick={() => void replay()}
+              >
+                {scanning ? "Replaying…" : "Replay scan"}
+              </button>
+            ) : null}
           </p>
           {summary && summary.total > 0 ? (
             (() => {
@@ -1042,12 +1047,15 @@ export function CullApp() {
             <DocLink href={DOCS.runStats} label="The run stats format" className="self-center">
               Run stats format
             </DocLink>
-            <Tooltip text={STATIC ? `Not in this demo. ${OFF.export}` : selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
+            <Tooltip text={STATIC ? OFF.export : selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
               <button
                 type="button"
-                className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40"
-                disabled={!selection || STATIC}
+                className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
+                // The demo keeps Export focusable, so its tooltip says why on focus as well as hover.
+                disabled={!selection && !STATIC}
+                aria-disabled={STATIC || undefined}
                 onClick={() => {
+                  if (STATIC) return;
                   setExportResult(null);
                   setExportError(null);
                   setExportProgress(null);
@@ -1059,15 +1067,6 @@ export function CullApp() {
             </Tooltip>
           </div>
           </div>
-          {STATIC ? (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <p className="flex flex-wrap items-center gap-2 text-caption text-text-muted">
-                <DemoBadge state="browser" />
-                Download paths, Run stats and the labels JSONL are written in your browser from the tape.
-              </p>
-              <NotInDemo reason={OFF.export} />
-            </div>
-          ) : null}
           {liveProgress ? (
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
@@ -1103,10 +1102,9 @@ export function CullApp() {
             scanId={summary.scan_id}
             active={view.cluster}
             names={view.faceNames}
-            sensitive={sensitive}
-            // The demo's keep set is the default filters', so a cluster narrows the gallery only.
-            onOpen={(cluster) => replaceView(STATIC ? { ...view, view: "people", cluster } : withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
-            onClear={() => replaceView(STATIC ? { ...view, cluster: null } : withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
+            veils={veils}
+            onOpen={(cluster) => replaceView(withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
+            onClear={() => replaceView(withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
             onName={(cluster, name) => replaceView(withFaceName(view, cluster, name))}
           />
         ) : null}
@@ -1136,12 +1134,6 @@ export function CullApp() {
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
             keepView={keepView}
-            keptCount={keepCounts?.kept ?? null}
-            leftOutCount={keepCounts?.leftOut ?? null}
-            onKeepView={(next) => {
-              setKeepView(next);
-              if (view.page !== 1) replaceView({ ...view, page: 1 });
-            }}
             onPage={(nextPage) => replaceView({ ...view, page: nextPage })}
             onOpen={openPhoto}
             selected={selected}
@@ -1185,12 +1177,6 @@ export function CullApp() {
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
             keepView={keepView}
-            keptCount={keepCounts?.kept ?? null}
-            leftOutCount={keepCounts?.leftOut ?? null}
-            onKeepView={(next) => {
-              setKeepView(next);
-              if (view.page !== 1) replaceView({ ...view, page: 1 });
-            }}
             onPage={(nextPage) => replaceView({ ...view, page: nextPage })}
             onOpen={openPhoto}
             selected={selected}

@@ -1,16 +1,19 @@
 "use client";
 
 import { attributeLine } from "@/lib/attributes";
-import { thumbUrl } from "@/lib/api";
+import { frameFor } from "@/lib/api";
 import type { FaceCluster } from "@/lib/types";
+import type { Veil } from "@/lib/veil";
 import { clusterLabel } from "@/lib/urlState";
+
+import { VeilFrame } from "./VeilFrame";
 
 export function People({
   clusters,
   scanId,
   active,
   names,
-  sensitive,
+  veils,
   onOpen,
   onClear,
   onName,
@@ -19,7 +22,8 @@ export function People({
   scanId: string;
   active: string | null;
   names: Record<string, string>;
-  sensitive: ReadonlySet<string>;
+  /** Veiled frames by rel_path: a card whose representative is veiled shows its mosaic. */
+  veils: ReadonlyMap<string, Veil>;
   onOpen: (clusterId: string) => void;
   onClear: () => void;
   onName: (clusterId: string, name: string) => void;
@@ -48,14 +52,7 @@ export function People({
           return (
             <li key={cluster.cluster_id} className={`overflow-hidden rounded-lg border bg-base-800 ${selected ? "border-accent-primary" : "border-base-700"}`}>
               <button type="button" className="w-full text-left" onClick={() => onOpen(cluster.cluster_id)}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbUrl(scanId, cluster.representative_rel_path)}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className={`aspect-square w-full object-cover ${sensitive.has(cluster.representative_rel_path) ? "scale-110 blur-2xl" : ""}`}
-                />
+                <ClusterFace scanId={scanId} relPath={cluster.representative_rel_path} veil={veils.get(cluster.representative_rel_path) ?? null} />
                 <span className="block space-y-1 p-2 pb-0">
                   <span className="block font-medium">{shown}</span>
                   <span className="block text-caption text-text-secondary">
@@ -82,4 +79,11 @@ export function People({
       </ul>
     </section>
   );
+}
+
+function ClusterFace({ scanId, relPath, veil }: { scanId: string; relPath: string; veil: Veil | null }) {
+  const source = frameFor(scanId, relPath, veil, "tile");
+  if (source.kind !== "image") return <VeilFrame source={source} fit="cover" across={source.cells * 0.7} className="aspect-square w-full" />;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={source.url} alt="" loading="lazy" decoding="async" className="aspect-square w-full object-cover" />;
 }
