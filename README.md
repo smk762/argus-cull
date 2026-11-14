@@ -17,6 +17,8 @@ The grid, the path list, and export all use the filter the curator already appli
 
 ## Quick start
 
+What this UI needs live, what its mock or recording stands in for, and the no-GPU command are in [What to run for which UI](https://studio.dragonhound.dev/docs/setup/which-services/#cull). Each external service it depends on has a setup page under the suite's [Setup and services](https://studio.dragonhound.dev/docs/setup/).
+
 ```bash
 cp .env.example .env
 docker compose up --build
