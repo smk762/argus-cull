@@ -22,11 +22,11 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The UI is http://localhost:3000 and the curator is http://localhost:8101. The curator image wants an NVIDIA GPU (see below for the CPU image). SingGuard is off until `ARGUS_CURATOR_SINGGUARD_URL` is set in `.env`. Curator version history for the features this page uses is in [CHANGELOG.md](CHANGELOG.md).
+The UI is http://localhost:3000 and the curator is http://localhost:8101. The first `up` builds the curator from its `dev` branch, so it takes a while. The curator image wants an NVIDIA GPU (see below for the CPU image). SingGuard is off until `ARGUS_CURATOR_SINGGUARD_URL` is set in `.env`. Curator version history for the features this page uses is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Run
 
-The compose file runs the published `ghcr.io/smk762/argus-curator:latest-gpu` image, given the GPU (`gpus: all`; the host needs the NVIDIA container runtime and a CUDA 13 driver, or use `:latest` and drop `gpus`), with a NudeNet 640m server beside it and an optional EraX-NSFW sidecar for frames NudeNet does not score. SingGuard is agent-composer on another host, the same guard darkroom uses. Start it as in [Quick start](#quick-start).
+The compose file builds argus-curator's `dev` branch at the commit [`sync/argus-curator.json`](sync/argus-curator.json) records, not the last release, so the curator, its docs and the recorded demo data are one commit (see [Develop](#develop)). It runs given the GPU (`gpus: all`; the host needs the NVIDIA container runtime and a CUDA 13 driver), with a NudeNet 640m server beside it and an optional EraX-NSFW sidecar for frames NudeNet does not score. SingGuard is agent-composer on another host, the same guard darkroom uses. Start it as in [Quick start](#quick-start).
 
 The UI is http://localhost:3000 and the curator is http://localhost:8101. Both ports are published on this host, so another device opens `http://<this-host>:3000` and does not need a clone. With the default `NEXT_PUBLIC_CURATOR_URL` the browser calls the curator on that same host, port 8101; a value naming another machine is used as written. Name that page origin in `CURATOR_CORS_ORIGINS` (a set value replaces the localhost allow-list, so keep `http://localhost:3000` and `http://127.0.0.1:3000` in the list). `NEXT_PUBLIC_CURATOR_URL` is baked into the web image. The default source mount is `./fixture`. Export lands in `./out`. NudeNet 640m is on unless `ARGUS_CURATOR_NUDENET_URL` is set empty. EraX is on unless `ARGUS_CURATOR_ERAX_URL` is set empty: when NudeNet returns no exposed score, curator maps EraX's hits onto the same labels. The curator container waits for either of the two to answer `/health` (the `nsfw-ready` service) before starting, so a scan started right after `docker compose up` does not record failed checks while they load; if neither is up after about five minutes, Compose warns and starts it anyway.
 
@@ -36,7 +36,7 @@ SingGuard is agent-composer's `/api/guard/check` (`ARGUS_CURATOR_SINGGUARD_URL`,
 
 To run the old in-process `singguard` service on this GPU instead: `docker compose --profile local-singguard up` and `ARGUS_CURATOR_SINGGUARD_URL=http://singguard:9150`. That copy cannot do text-only checks. Do not run it beside composer. `SINGGUARD_FORCE_THINKING` on that profile judges every request in one mode whatever was asked, for experiments. `SINGGUARD_MAX_NEW_TOKENS` (2048) is its generation budget for the reasoning modes; a check cut off before its `<answer>` fails with HTTP 500 and the service logs the tail of the text, so raise it if that log appears.
 
-To build the sibling `../argus-curator` checkout instead of the published image:
+To build the sibling `../argus-curator` checkout instead of the recorded commit (its `/health` reports `CURATOR_LOCAL_VERSION`, `0.0.0+local` by default):
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.local-curator.yaml up --build
@@ -44,9 +44,9 @@ docker compose -f docker-compose.yaml -f docker-compose.local-curator.yaml up --
 
 `NEXT_PUBLIC_CURATOR_URL` is baked in at image build time and defaults to `http://localhost:8101`, which is the published port the browser can reach.
 
-The curator runs the CUDA image (`latest-gpu`, `gpus: all`), so the host needs the NVIDIA container runtime and a CUDA 13 driver. On a host without one, use `ghcr.io/smk762/argus-curator:latest` and drop `gpus`. After a curator release, `docker compose pull argus-curator` picks up the new image; Compose does not do that on `up` alone. The curator takes turns on the GPU with argus-lens through a lock file in `ARGUS_GPU_LOCK_DIR` (`/tmp/argus-gpu` on the host); lens must mount the same directory. Set `ARGUS_GPU_COORDINATOR=none` to turn that off.
+The curator is the CUDA build (`gpus: all`), so the host needs the NVIDIA container runtime and a CUDA 13 driver. On a host without one, set `CURATOR_GPU=0` in `.env` and put `gpus: !reset []` under `argus-curator` in `compose.override.yaml`. The image is tagged `argus-curator:dev-<sha>`, so when the recorded commit moves, the next `docker compose up` builds the new one. The published `ghcr.io/smk762/argus-curator:latest-gpu` is the last release, behind `dev`. The curator takes turns on the GPU with argus-lens through a lock file in `ARGUS_GPU_LOCK_DIR` (`/tmp/argus-gpu` on the host); lens must mount the same directory. Set `ARGUS_GPU_COORDINATOR=none` to turn that off.
 
-Put machine-local changes like those in `compose.override.yaml`, which compose merges automatically and git ignores. Check it after an update: an override that pins its own `image:` keeps the old curator, or names one that cannot be pulled.
+Put machine-local changes like those in `compose.override.yaml`, which compose merges automatically and git ignores. Check it after an update: an override that pins its own `image:` or `build:` keeps the old curator.
 
 ### Sidecar and web tuning
 
@@ -175,4 +175,4 @@ npm run lint && npm run typecheck && npm test && npm run build
 npm run build:pages   # the static demo export, see Hosted demo
 ```
 
-`make check` runs those web checks and `scripts/sync_check.py`. That script checks offline that the recorded fixture scan (`sync/fixture-scan.json`) and any imported curator docs match `sync/argus-curator.json`, the argus-curator `dev` commit and version cull follows. CI installs curator at that commit, checks the fixture, and compares a fresh scan with the record. A daily job (`.github/workflows/sync-drift.yml`) opens a PR with a new record when curator's `dev` moves on, or an issue if the fixture no longer passes. To move by hand, run `make sync-curator`, optionally with `COMMIT=<sha>`.
+`make check` runs those web checks and `scripts/sync_check.py`. That script checks offline that the recorded fixture scan (`sync/fixture-scan.json`) and any imported curator docs match `sync/argus-curator.json`, the argus-curator `dev` commit and version cull follows, and that `docker-compose.yaml` builds that same commit and version. CI installs curator at that commit, checks the fixture, and compares a fresh scan with the record. A daily job (`.github/workflows/sync-drift.yml`) opens a PR with a new record (and the compose build moved with it) when curator's `dev` moves on, or an issue if the fixture no longer passes. To move by hand, run `make sync-curator`, optionally with `COMMIT=<sha>`.

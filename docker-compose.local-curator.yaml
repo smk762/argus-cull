@@ -1,5 +1,6 @@
-# Build the sibling argus-curator checkout instead of the published image.
-# Use this while working on curator changes that are not on GHCR yet.
+# Build the sibling argus-curator checkout instead of the dev commit
+# docker-compose.yaml pins. Use this while working on curator changes that are
+# not on curator's dev yet.
 services:
   argus-curator:
     image: argus-curator:local
@@ -7,5 +8,7 @@ services:
       context: ${CURATOR_CONTEXT:-../argus-curator}
       dockerfile: Dockerfile
       args:
-        # The CUDA image, as the published one; CURATOR_GPU=0 builds the CPU image.
+        # Not the pinned commit's version: say what /health reports for this build.
+        VERSION: ${CURATOR_LOCAL_VERSION:-0.0.0+local}
+        # The CUDA image, as the default; CURATOR_GPU=0 builds the CPU image.
         GPU: ${CURATOR_GPU:-1}
