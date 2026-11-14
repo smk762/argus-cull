@@ -1,16 +1,15 @@
 // The Dragonhound Labs family bar, rendered natively from the vendored source (vendor/dh/dh-strip.mjs,
-// dh-shared 1.2.1): links, labels and mark come from there, so a re-sync updates it with no hand copy.
+// dh-shared 1.2.2): links, labels and mark come from there, so a re-sync updates it with no hand copy.
 // Styles are vendor/dh/dh-strip.css (imported by globals.css). No JS. src/lib/shared.test.ts checks the
 // rendered markup against the module's own stripHtml(). Only the static demo build carries it.
 //
-// The strip's link list does not name Cull yet (it lists Lightbox, Studio and Realms), so the <nav>
-// says data-dh-site="cull" and no link is marked current. Once dh-shared adds a cull link, the same
-// code marks it with no change here.
+// Since dh-shared 1.2.2 the shared list includes Cull, so its link is marked current (aria-current
+// here, and dh-strip.css from data-dh-site on the <nav>).
 import { strip } from "../../vendor/dh/dh-strip.mjs";
 
 export const STRIP_SITE = "cull";
 
-/** The strip, with this site's link (when the shared list has one) marked current. Same-tab links: *.dragonhound.dev is one family. */
+/** The strip, with this site's link marked current. Same-tab links: *.dragonhound.dev is one family. */
 export function DemoStrip({ current = STRIP_SITE }: { current?: string }) {
   const { home } = strip;
   return (

@@ -1,7 +1,7 @@
-/*! dh-strip v1.2.1 | TypeScript declarations for dh-strip.mjs (vendored alongside it; a .mjs import resolves .d.mts). */
+/*! dh-strip v1.2.2 | TypeScript declarations for dh-strip.mjs (vendored alongside it; a .mjs import resolves .d.mts). */
 
 /** A site id used in data-dh-site: the lab home or one of the demos. */
-export type DhSite = "dragonhound" | "lightbox" | "studio" | "realms";
+export type DhSite = "dragonhound" | "lightbox" | "studio" | "realms" | "cull";
 
 export interface DhStripLink {
   readonly site: DhSite;
@@ -18,7 +18,7 @@ export interface DhStrip {
   readonly links: readonly DhStripLink[];
   /** "Live demo": always shown. */
   readonly label: string;
-  /** " · recorded output": visually hidden below 560 px. */
+  /** " · recorded output": visually hidden below 640 px (560 px before 1.2.2). */
   readonly labelMore: string;
   /** The mark's path data for viewBox 0 0 100 100, fill-rule evenodd. */
   readonly markPath: string;
