@@ -7,6 +7,7 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 ### Added
 
 - The *Scanned by* line names SingGuard's thinking mode, read from the mode each verdict was judged in: fast and slow together read as `cascade (fast N, slow M)`. All fast may be a cascade scan whose screen flagged nothing, and the tooltip says so; once curator records the requested mode (argus-curator#152), that is used instead (#63).
+- README links this UI's row in the suite's [What to run for which UI](https://studio.dragonhound.dev/docs/setup/which-services/#cull) matrix.
 - `/docs`: argus-curator's README and docs pages, imported at the curator `dev` commit the sync record names, behind an opsec gate, with the version, commit, PyPI and GitHub links in the header. `make check` fails when a doc, the pin or the allowlist disagrees with the record, and `make sync-curator` and the drift job re-import them with the fixture (#63).
 - In-context docs links on the scan form's checks, the filter groups and a missing model's setup, the detail view's folds, *Run stats* and the Made-with line (#63).
 - A recorded, static demo build for Cloudflare Pages (`make pages`, `CULL_STATIC=1`): the page replays one scan from a data tape (`scripts/record_tape.py`) with no curator and no API routes, under a hash-based CSP. Scan, export, delete and keep-set filters are shown as *Not in this demo*; labels and tag edits stay in the browser.
