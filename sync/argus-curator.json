@@ -3,8 +3,8 @@
   "package": "argus-curator",
   "repo": "smk762/argus-curator",
   "branch": "dev",
-  "commit": "06a7eae8499b752dd843c846d725a85b47b8799a",
-  "version": "0.15.1.dev6+g06a7eae84",
+  "commit": "f9aae0bbfe20f9a25cc57dd608643dc168828b1b",
+  "version": "0.15.1.dev9+gf9aae0bbf",
   "docs": {
     "web/content/curator/docs/cli.md": "2c2cf6e292a8f5c57b38c17fe80f6637c18a54b04f141ab6fcebe2eaf61606f0",
     "web/content/curator/docs/crops.md": "b836606ee147f8595946d7c8d069ae2abce2d3321870634016167f2930196003",
