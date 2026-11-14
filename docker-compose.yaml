@@ -13,14 +13,23 @@ x-sidecar-health: &sidecar-health
 
 services:
   argus-curator:
-    # Published CUDA image. Releases tag :latest (CPU) and :latest-gpu.
-    # This stack uses the GPU build: face detection, MiVOLO, Places365 and
-    # Fashionpedia. The host needs the NVIDIA container runtime and a
-    # driver for CUDA 13; on a host without one, use :latest and drop `gpus`
-    # below. Pull after a curator release (`docker compose pull argus-curator`);
-    # Compose will not notice a moved latest tag on its own. No sibling
-    # checkout is needed; docker-compose.local-curator.yaml builds one instead.
-    image: ghcr.io/smk762/argus-curator:latest-gpu
+    # curator's dev branch at the commit sync/argus-curator.json records, not a
+    # release: cull's docs, demo data and curator all sit at that one commit.
+    # Built from GitHub, so no sibling checkout is needed. scripts/sync_check.py
+    # (make check) fails when the context sha or VERSION here differs from the
+    # record, and scripts/record_fixture.py moves them with it. VERSION is what
+    # /health reports (the image has no git history to derive it from); the tag
+    # names the commit, so a moved record builds a new image on `up`.
+    # The CUDA build: face detection, MiVOLO, Places365 and Fashionpedia. The
+    # host needs the NVIDIA container runtime and a driver for CUDA 13; on a host
+    # without one, set CURATOR_GPU=0 in .env and drop `gpus` below.
+    # docker-compose.local-curator.yaml builds a sibling checkout instead.
+    image: argus-curator:dev-7d687400d
+    build:
+      context: https://github.com/smk762/argus-curator.git#7d687400dbcb8fecd808771645324faace118f44
+      args:
+        VERSION: 0.14.2.dev24+g7d687400d
+        GPU: ${CURATOR_GPU:-1}
     gpus: all
     ports:
       - "${CURATOR_PORT:-8101}:8101"
