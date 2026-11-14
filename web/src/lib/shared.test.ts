@@ -27,14 +27,17 @@ describe("dh-strip", () => {
   });
 
   it("matches the vendored static strip", () => {
-    expect(rendered()).toBe(squash(read("vendor/dh/dh-strip.html")));
+    // The static file carries no aria-current (dh-theme.js adds it from data-dh-site); the JSX sets it itself.
+    expect(rendered().replace(' aria-current="page"', "")).toBe(squash(read("vendor/dh/dh-strip.html")));
   });
 
-  it("says this is cull on the nav, and marks a cull link once the shared list has one", () => {
+  it("says this is cull on the nav and marks the Cull link current", () => {
     const html = renderToStaticMarkup(createElement(DemoStrip));
     expect(html).toContain('<nav class="dh-strip" aria-label="Dragonhound Labs demos" data-dh-site="cull">');
-    const listed = strip.links.some((link) => (link.site as string) === "cull");
-    expect((html.match(/aria-current/g) ?? []).length).toBe(listed ? 1 : 0);
+    expect(strip.links.map((link) => link.site)).toContain("cull");
+    expect(html.match(/<a [^>]*aria-current="page"[^>]*>([^<]*)<\/a>/g)).toEqual([
+      '<a href="https://cull.dragonhound.dev/" data-dh-site="cull" aria-current="page">Cull</a>',
+    ]);
   });
 
   it("links the family in the same tab", () => {
