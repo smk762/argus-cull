@@ -7,7 +7,7 @@ import { DEFAULT_BLUR, shouldBlur } from "./chunks";
 import { parseScan, parseTape, replaySteps, tapeFileUrl, tapeVeilUrl } from "./tape";
 import { mergeChunk } from "./chunks";
 import type { ImageResult, ScanSummary } from "./types";
-import { frameSource, policyLine, reasonTitle, rejectWords, VEIL_CELLS, veilFor, watermarkBoxes } from "./veil";
+import { frameSource, policyLine, reasonTitle, rejectWords, tileVerdict, VEIL_CELLS, veilFor, watermarkBoxes } from "./veil";
 
 const TAPE = new URL("../../public/data-tape/", import.meta.url);
 const readTape = (name: string) => JSON.parse(readFileSync(new URL(name, TAPE), "utf8")) as unknown;
@@ -158,5 +158,52 @@ describe("veil cell counts", () => {
     const rel = scan.results[0].rel_path;
     expect(tapeVeilUrl("/t", { files: tape.files }, rel, "medium")).toBeNull();
     expect(tapeVeilUrl("/t", tape, rel, "medium")).toBe(`/t/veils/${tape.files[rel]}-medium.webp`);
+  });
+});
+
+describe("tileVerdict: the grid chip and its colour", () => {
+  const veiled = (name: string) => veilFor(frame(name), [], DEFAULT_BLUR);
+
+  it("says Keep (success) for a shown frame in the keep set", () => {
+    const shown = frame("A_cafe.jpg");
+    expect(tileVerdict(shown, "", veilFor(shown, [], DEFAULT_BLUR))).toEqual({ chip: "Keep", tone: "keep", title: "In the keep set", line: null });
+  });
+
+  it("says Left out (neutral) with the plain reason as a line, for a near-duplicate or low score", () => {
+    const shown = frame("A_cafe.jpg");
+    expect(tileVerdict(shown, "similar-to:personA/A_cafe.jpg", null)).toMatchObject({ chip: "Left out", tone: "left-out", line: "Near-duplicate of A_cafe.jpg" });
+    expect(tileVerdict(shown, "below-score", null)).toMatchObject({ chip: "Left out", tone: "left-out", line: "Quality under the minimum" });
+  });
+
+  it("says Held (danger) for a reject, with the reason on the frame rather than a line", () => {
+    const image = frame("B_park.jpg");
+    expect(tileVerdict(image, image.reject_reason, veiled("B_park.jpg"))).toEqual({ chip: "Held", tone: "held", title: "Held: not safety-checked", line: null });
+  });
+
+  it("says Held for a reject that is somehow shown, with the reason as a line", () => {
+    expect(tileVerdict({ passed: false }, "blurry (sharpness=3.9 < 100.0)", null)).toMatchObject({ chip: "Held", tone: "held", line: "Blurry: sharpness 3.9 < 100.0" });
+  });
+
+  it("says Veiled: NudeNet or Veiled: policy (warn), and notes the keep set in the tooltip", () => {
+    expect(tileVerdict(frame("E_locker_room.jpg"), "", veiled("E_locker_room.jpg"))).toMatchObject({ chip: "Veiled: NudeNet", tone: "veiled", line: null, title: "Veiled: NudeNet. In the keep set" });
+    expect(tileVerdict(frame("D_action_film.jpg"), "below-score", veiled("D_action_film.jpg"))).toMatchObject({
+      chip: "Veiled: policy",
+      tone: "veiled",
+      title: "Veiled: policy. Left out: Quality under the minimum",
+    });
+  });
+
+  it("shows no chip while the tile says Scanning…, or before a shown frame is selected", () => {
+    const unscored = { ...frame("A_cafe.jpg"), nsfw: null };
+    expect(tileVerdict(unscored, "", veilFor(unscored, ["nsfw"], DEFAULT_BLUR))).toBeNull();
+    expect(tileVerdict(frame("A_cafe.jpg"), undefined, null)).toBeNull();
+  });
+
+  it("gives every recorded frame a chip once the keep set exists", () => {
+    const reasons = new Map(tape.select.result.rows.map((row) => [row.rel_path, row.keep_reason]));
+    for (const image of scan.results) {
+      const verdict = tileVerdict(image, reasons.get(image.rel_path), veilFor(image, [], DEFAULT_BLUR));
+      expect(verdict, image.rel_path).not.toBeNull();
+    }
   });
 });

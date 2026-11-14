@@ -259,3 +259,42 @@ export function reasonTitle(reason: string): string {
   const short = rejectWords(reason).short;
   return short === reason.trim() ? reason : `${short}. Curator: ${reason}`;
 }
+
+/**
+ * The tile's verdict chip (top right) and the colour it carries. `keep`: in the
+ * keep set (success). `held`: rejected or never cleared (danger). `veiled`: a
+ * policy or NudeNet flag the viewer may unblur (warn). `left-out`: scored and
+ * shown, but not in the keep set, e.g. a near-duplicate (neutral).
+ */
+export type VerdictTone = "keep" | "held" | "veiled" | "left-out";
+
+export interface TileVerdict {
+  chip: string;
+  tone: VerdictTone;
+  /** The chip's tooltip: the headline, and for a veiled frame where the keep set left it. */
+  title: string;
+  /** The plain reason as a wrapped line under the frame. Null when the frame's own panel already says it. */
+  line: string | null;
+}
+
+/**
+ * What the grid chip says for a frame. Null while the tile says Scanning…, or
+ * before the keep set exists for a frame nothing has held or veiled.
+ * `reason` is the keep set's reason: "" kept, a string left out, undefined not selected yet.
+ */
+export function tileVerdict(image: Pick<ImageResult, "passed">, reason: string | null | undefined, veil: Veil | null): TileVerdict | null {
+  if (veil?.kind === "scanning") return null;
+  if (veil?.kind === "held" || veil?.kind === "minor") return { chip: "Held", tone: "held", title: veil.headline, line: null };
+  if (image.passed === false) {
+    const words = rejectWords(reason ?? "");
+    return { chip: "Held", tone: "held", title: words.headline, line: words.short };
+  }
+  if (veil) {
+    const where = reason == null ? "" : reason === "" ? ". In the keep set" : `. Left out: ${rejectWords(reason).short}`;
+    return { chip: veil.chip ?? veil.headline, tone: "veiled", title: `${veil.headline}${where}`, line: null };
+  }
+  if (reason == null) return null;
+  if (reason === "") return { chip: "Keep", tone: "keep", title: "In the keep set", line: null };
+  const words = rejectWords(reason);
+  return { chip: "Left out", tone: "left-out", title: reasonTitle(reason), line: words.short };
+}

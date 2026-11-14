@@ -5,7 +5,7 @@ import { ageMissing, awaitingChecks, DEFAULT_BLUR, isMinorExposed, shownAge, use
 import type { ImageLabel } from "@/lib/labels";
 import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
-import { reasonTitle, rejectWords, veilFor } from "@/lib/veil";
+import { tileVerdict, veilFor, type VerdictTone } from "@/lib/veil";
 import { formatYears } from "@/lib/years";
 
 import { NotInDemo } from "./DemoBadge";
@@ -296,7 +296,6 @@ export function PhotoGrid({
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]">
         {slice.map((image, index) => {
           const reason = reasons?.get(image.rel_path);
-          const kept = reason === "";
           const override = labels?.get(image.rel_path)?.override ?? null;
           const veil = veilFor(image, pending, blur, override);
           const source = frameFor(scanId, image.rel_path, veil, "tile");
@@ -314,8 +313,9 @@ export function PhotoGrid({
               </span>
             ) : null;
           const reasonPanel = veil != null && !checking;
-          // A held frame's reason is its reject reason, which the panel on the frame already says.
-          const reasonOnFrame = reasonPanel && (veil.kind === "held" || veil.kind === "minor");
+          // Held and under-18 frames are rejects (danger); policy and NudeNet veils are flags the viewer may lift (warn).
+          const panelTone = veil?.kind === "held" || veil?.kind === "minor" ? "veil-reason--held" : "veil-reason--veiled";
+          const verdict = checking ? null : tileVerdict(image, reason, veil);
           return (
             <li key={image.rel_path} className="relative">
               <label className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-base-800/90 px-1.5 py-1 text-caption text-text-secondary">
@@ -342,9 +342,10 @@ export function PhotoGrid({
                   ) : (
                     <VeilFrame source={source} fit="cover" across={cellsAcross(source.cells, image.width, image.height, "cover")} className="aspect-square w-full" />
                   )}
-                  {veil?.chip && !checking ? (
-                    <span className={`dh-badge absolute top-2 right-2 ${veil.kind === "nudenet" || veil.kind === "policy" ? "veil-chip--veiled" : ""}`} title={veil.headline}>
-                      {veil.chip}
+                  {/* The selection outcome: Keep, Held, Veiled: policy or NudeNet, or Left out. Top right, clear of the checkbox. */}
+                  {verdict ? (
+                    <span className={`dh-badge absolute top-2 right-2 ${CHIP[verdict.tone]}`} title={verdict.title}>
+                      {verdict.chip}
                     </span>
                   ) : null}
                   {/* A frame still waiting on checks says so; the others carry a chip naming why they are veiled. */}
@@ -357,7 +358,7 @@ export function PhotoGrid({
                   {shieldRow != null && !reasonPanel ? <span className="absolute right-1.5 bottom-1.5">{shieldRow}</span> : null}
                   {/* A veiled tile says why on the frosted frame itself, in full: the row under it has no room. */}
                   {reasonPanel ? (
-                    <span className="veil-reason">
+                    <span className={`veil-reason ${panelTone}`}>
                       <span className="veil-reason-text">{veil!.short}</span>
                       {shieldRow}
                     </span>
@@ -367,28 +368,24 @@ export function PhotoGrid({
                   <span className="block truncate text-text-secondary" title={image.rel_path}>
                     {baseName(image.rel_path)}
                   </span>
-                  <span className="mt-1 grid grid-cols-[auto_1fr_auto_1fr] gap-x-1.5 gap-y-0.5 tabular-nums">
-                    <span className="text-text-muted">quality</span>
-                    <span>{image.score.toFixed(2)}</span>
-                    <span className="text-text-muted" title="NudeNet exposed score">
-                      nude
+                  {/* Three short columns, label over value, so the age fits a phone's two-across tile. */}
+                  <span className="mt-1 grid grid-cols-3 gap-x-2 tabular-nums">
+                    <span className="flex min-w-0 flex-col">
+                      <span className="text-text-muted">quality</span>
+                      <span>{image.score.toFixed(2)}</span>
                     </span>
-                    <span title="NudeNet exposed score">{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
-                    <span className="text-text-muted">age</span>
-                    <span className={`truncate ${age.text === "no face" ? "text-text-muted" : ""}`} title={age.title}>
-                      {age.text}
+                    <span className="flex min-w-0 flex-col" title="NudeNet exposed score">
+                      <span className="text-text-muted">nude</span>
+                      <span>{image.nsfw ? image.nsfw.exposed_score.toFixed(2) : checking ? "…" : "–"}</span>
                     </span>
-                    {/* The keep set is computed after the scan; until then the cell says so and shows nothing to decide on.
-                        A reason wraps to two lines in plain words; the tooltip adds the curator's own. */}
-                    {reasonOnFrame ? null : (
-                      <span
-                        className={`col-span-4 line-clamp-2 break-words ${reasons == null ? "text-text-muted" : kept ? "text-success" : "text-warning"}`}
-                        title={reasons == null ? (scanning ? "Selected after the scan" : "Selecting") : kept ? "keep" : reasonTitle(reason ?? "")}
-                      >
-                        {reasons == null ? (scanning ? "" : "…") : kept ? "keep" : rejectWords(reason ?? "").short}
-                      </span>
-                    )}
+                    <span className="flex min-w-0 flex-col" title={age.title}>
+                      <span className="text-text-muted">age</span>
+                      <span className={`break-words ${age.text === "no face" ? "text-text-muted" : ""}`}>{age.text}</span>
+                    </span>
                   </span>
+                  {/* A left-out frame's reason in plain words; the chip's tooltip adds the curator's own. */}
+                  {verdict?.line ? <span className="mt-1 block line-clamp-2 break-words text-text-secondary">{verdict.line}</span> : null}
+                  {verdict == null && !checking && veil == null && reasons == null && !scanning ? <span className="mt-1 block text-text-muted">Selecting…</span> : null}
                 </span>
               </button>
             </li>
@@ -410,6 +407,8 @@ export function PhotoGrid({
   );
 }
 
+/** Verdict chip colours (globals.css), all on the shared dh-badge. */
+const CHIP: Record<VerdictTone, string> = { keep: "verdict-chip--keep", held: "verdict-chip--held", veiled: "verdict-chip--veiled", "left-out": "" };
 const SELECT = "rounded-md border border-base-600 bg-base-900 px-2 py-1 text-small text-text-primary";
 const BUTTON = "rounded-md border border-base-600 px-2 py-1 text-small text-text-primary";
 const VERDICT_HELP =
