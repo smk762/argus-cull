@@ -48,6 +48,12 @@ def main() -> None:
     draw.rectangle((70, 40, 280, 200), fill=(150, 190, 220))
     draw.rectangle((0, 520, SIZE, SIZE), fill=(96, 72, 48))
     draw.rectangle((500, 280, 680, 520), fill=(36, 90, 48))
+    # Window bars and floorboards: edges inside the frame, so it measures sharp
+    # now that curator reads sharpness over the interior, not the border.
+    draw.line((175, 40, 175, 200), fill=(28, 32, 48), width=8)
+    draw.line((70, 120, 280, 120), fill=(28, 32, 48), width=8)
+    for x in range(0, SIZE, 64):
+        draw.line((x, 520, x, SIZE), fill=(60, 44, 28), width=4)
     save(room, "scenes/room.png")
 
     sky = canvas((118, 176, 224))

@@ -6,7 +6,11 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ### Added
 
-- A recorded, static demo build for Cloudflare Pages (`make pages`, `CULL_STATIC=1`): the page replays one scan from a data tape (`scripts/record_tape.py`) with no curator and no API routes, under a hash-based CSP. Scan, export, delete and keep-set filters are shown as *Not in this demo*; labels and tag edits stay in the browser.
+- The *Scanned by* line names SingGuard's thinking mode, read from the mode each verdict was judged in: fast and slow together read as `cascade (fast N, slow M)`. All fast may be a cascade scan whose screen flagged nothing, and the tooltip says so; once curator records the requested mode (argus-curator#152), that is used instead (#63).
+- README links this UI's row in the suite's [What to run for which UI](https://docs.dragonhound.dev/setup/which-services/#cull) matrix.
+- `/docs`: argus-curator's README and docs pages, imported at the curator `dev` commit the sync record names, behind an opsec gate, with the version, commit, PyPI and GitHub links in the header. `make check` fails when a doc, the pin or the allowlist disagrees with the record, and `make sync-curator` and the drift job re-import them with the fixture (#63).
+- In-context docs links on the scan form's checks, the filter groups and a missing model's setup, the detail view's folds, *Run stats* and the Made-with line (#63).
+- A recorded, static demo build for Cloudflare Pages (`make pages`, `CULL_STATIC=1`): the page replays one scan from a data tape (`scripts/record_tape.py`) with no curator and no API routes, under a hash-based CSP. Scan, export and delete are off, with the reason on each control; the keep-set filters run in the browser against the recorded scan (`lib/demoSelect.ts`), and labels and tag edits stay in the browser. The sidebar sections fold, the All / Kept / Left out view sits under Display (`?show=`), and the demo's provenance sits at the sidebar's foot.
 - The Dragonhound shared layer (dh-shared 1.2.1, `web/vendor/dh`): tokens, a light theme beside the dark one with the family toggle, demo badges, the demo strip, and a CI drift check.
 
 ### Fixed
@@ -16,8 +20,10 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ### Changed
 
-- A veiled frame is a frosted-glass mosaic instead of a heavy blur: 28 cells across the long side while it is held (rejected before the safety checks, or still scanning), 16 once a check flagged it (policy, NudeNet, under 18). The static demo serves the mosaic as a tiny file from the tape (`veils/`, `record_tape.py veils` re-derives it), and the live page draws it from the thumbnail, so a veiled frame never loads its full view, or in the demo its thumbnail.
-- The detail view says why in two lines (*Held: not safety-checked*, *Veiled: policy*, *Veiled: NudeNet*) with each reject reason in plain words, and outlines the detected watermark on a crop reject. Veiled tiles carry a chip: *Held*, *Veiled: policy* or *Veiled: NudeNet*.
+- A veiled frame is a frosted-glass mosaic instead of a heavy blur: one strength for every veil, 28 cells across the long side, whether the frame is held (rejected before the safety checks, still scanning, or under 18 with exposure) or flagged (policy, NudeNet). The static demo serves the mosaic as a tiny file from the tape (`veils/`, `record_tape.py veils` re-derives it), and the live page draws it from the thumbnail, so a veiled frame never loads its full view, or in the demo its thumbnail.
+- The detail view says why in two lines (*Held: not safety-checked*, *Veiled: policy*, *Veiled: NudeNet*) with each reject reason in plain words, and outlines the detected watermark on a crop reject. Each tile carries a verdict chip once the keep set exists: *Keep*, *Held*, *Veiled · Keep* or *Left out*, with the reason a frame was left out under it.
+- *Most one edge may lose* defaults to 17%, not the curator's 15%, and the scan always sends `max_cut`: the frames 15% rejected as `crop:overlay` needed cuts of up to 16.8%.
+- Compose builds argus-curator's `dev` branch at the commit `sync/argus-curator.json` records, instead of the last release (`:latest-gpu`). `make check` fails when `docker-compose.yaml` builds another commit or version, and the drift job and `make sync-curator` move it with the record. `CURATOR_GPU=0` builds the CPU image (#63).
 - The page uses the shared tokens and the system font stack instead of Inter and DM Sans from Google Fonts.
 
 ## [0.4.0] - 2026-11-13

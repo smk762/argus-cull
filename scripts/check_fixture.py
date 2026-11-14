@@ -19,6 +19,13 @@ def main() -> None:
     if blurry.passed or "blurry" not in (blurry.reject_reason or ""):
         raise SystemExit(f"blurry frame was not rejected: {blurry.reject_reason}")
 
+    # Only the frames under rejects/ are drawn to fail; a curator change that
+    # rejects any other one (as its interior sharpness did to scenes/room.png)
+    # needs the fixture redrawn, not a quietly re-recorded scan.
+    wrong = [f"{r.rel_path} ({r.reject_reason})" for r in summary.results if not r.passed and not r.rel_path.startswith("rejects/")]
+    if wrong:
+        raise SystemExit("frames outside rejects/ were rejected: " + ", ".join(wrong))
+
     original = by_path["duplicates/original.png"]
     copy = by_path["duplicates/copy.png"]
     if not original.passed or not copy.passed:

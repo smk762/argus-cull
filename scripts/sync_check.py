@@ -5,7 +5,8 @@ Reads ``sync/argus-curator.json`` and fails when:
 - an imported doc file's sha256 differs from the one recorded (or it is missing),
 - ``sync/fixture-scan.json`` was recorded with a different curator version or commit,
 - the recorded version does not come from the recorded commit (setuptools-scm's
-  ``+g<sha>`` suffix, when the version has one).
+  ``+g<sha>`` suffix, when the version has one),
+- ``docker-compose.yaml`` builds a different curator commit or version.
 
 No network and no curator install: this is what ``make check`` runs. Whether
 curator's ``dev`` has moved on is the scheduled drift job's question, not this one.
@@ -18,6 +19,8 @@ import json
 import re
 import sys
 from pathlib import Path
+
+import compose_pin
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORD = ROOT / "sync" / "argus-curator.json"
@@ -50,6 +53,8 @@ def main() -> None:
             f"{FIXTURE_RECORD.relative_to(ROOT)} was recorded with curator {fixture['version']} at {fixture['commit'][:9]}, "
             f"the sync record says {version} at {commit[:9]}"
         )
+
+    problems += compose_pin.problems(commit, version)
 
     if problems:
         sys.exit("sync check failed:\n- " + "\n- ".join(problems))

@@ -6,6 +6,7 @@
 Needs argus-curator installed at that commit (CI installs it from git). The
 record names the curator version and commit that produced it, so
 ``scripts/sync_check.py`` can hold it to ``sync/argus-curator.json`` offline.
+Recording also moves the sync record and the curator ``docker-compose.yaml`` builds.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from pathlib import Path
 
 import argus_curator
 from argus_curator.scanner import scan_folder
+
+import compose_pin
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "fixture"
@@ -70,7 +73,9 @@ def main() -> None:
     sync = json.loads(SYNC.read_text())
     sync.update(commit=args.commit, version=argus_curator.__version__)
     SYNC.write_text(json.dumps(sync, indent=2) + "\n")
-    print(f"wrote {RECORD.relative_to(ROOT)} and {SYNC.relative_to(ROOT)}: curator {argus_curator.__version__} at {args.commit[:9]}")
+    # And so does the curator docker-compose.yaml builds.
+    compose_pin.write(args.commit, argus_curator.__version__)
+    print(f"wrote {RECORD.relative_to(ROOT)}, {SYNC.relative_to(ROOT)} and docker-compose.yaml: curator {argus_curator.__version__} at {args.commit[:9]}")
 
 
 if __name__ == "__main__":

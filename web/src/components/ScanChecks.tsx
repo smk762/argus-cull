@@ -1,8 +1,10 @@
 "use client";
 
 import { cropMaxCutPercent, DEFAULT_CROP_MAX_CUT, MAX_CROP_MAX_CUT, MIN_CROP_MAX_CUT, PREFILTERS, type Detectors, type Health, type Prefilter, type ScanSummary } from "@/lib/types";
+import { DOCS } from "@/lib/docsLinks";
 import { formatYears } from "@/lib/years";
 
+import { DocLink } from "./DocLink";
 import { Info } from "./Tooltip";
 
 const DROP_LABELS: Record<Prefilter, { label: string; info: string }> = {
@@ -85,6 +87,7 @@ export function ScanChecks({
           <h3 className="flex items-center gap-1.5 font-display text-small font-semibold">
             Drop before the slow checks
             <Info text="A dropped image skips scenes, garments and SingGuard. It stays in the scan as a reject named prefilter:<kind>, so it is never kept or exported, Hide rejected hides it, and Run stats count it apart." />
+            <DocLink href={DOCS.prefilter} label="Prefilter" />
           </h3>
           {PREFILTERS.filter((kind) => offered[kind]).map((kind) => (
             <div key={kind} className="flex items-center gap-1.5 text-small">
@@ -108,6 +111,7 @@ export function ScanChecks({
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={withGarments} disabled={disabled} onChange={(event) => onWithGarments(event.target.checked)} />
             Garments (Fashionpedia)
+            <DocLink href={DOCS.garments} label="Garments" />
           </label>
           <p className="text-caption text-text-muted">{withGarments ? "This scan reads garments, so the wardrobe filters work for it. This is the slowest local check." : "Off by default: the slowest local check, and nothing else waits on it. Turn it on when the wardrobe filters are needed."}</p>
         </>
@@ -117,6 +121,7 @@ export function ScanChecks({
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={setAge} disabled={disabled} onChange={(event) => onSetAge(event.target.checked)} />
             Set: one person
+            <DocLink href={DOCS.setAge} label="Set age" />
           </label>
           <p className="text-caption text-text-muted">
             {setAge
@@ -130,6 +135,7 @@ export function ScanChecks({
           <label className="flex items-center gap-2 text-small">
             <input type="checkbox" checked={readBodies} disabled={disabled} onChange={(event) => onReadBodies(event.target.checked)} />
             Read bodies too (under evaluation)
+            <DocLink href={DOCS.bodies} label="Reading bodies" />
           </label>
           <p className="text-caption text-text-muted">
             {readBodies
@@ -144,6 +150,7 @@ export function ScanChecks({
             <input type="checkbox" checked={cropWatermarks} disabled={disabled} onChange={(event) => onCropWatermarks(event.target.checked)} />
             Crop watermarks
             <Info text={`Each frame goes to the watermark detector first. A watermark at the edge is cut away, taking only what it needs, up to ${cropMaxCut}% of a side per edge, and every check (faces, NudeNet, SingGuard) sees the cropped frame; export writes it cropped (copy only). A watermark no edge cut removes rejects the frame as crop:overlay; one the detector could not check is crop:unchecked. Source files are never changed.`} />
+            <DocLink href={DOCS.crops} label="Watermark crops" />
           </label>
           <p className="text-caption text-text-muted">
             {cropWatermarks

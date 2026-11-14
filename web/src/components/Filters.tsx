@@ -3,6 +3,7 @@
 import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
+import { DOCS, MODEL_SETUP } from "@/lib/docsLinks";
 import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
 import type { KeepView } from "@/lib/chunks";
 import { checkStage, checkStageNote } from "@/lib/progress";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/types";
 import { clearedFilter, clusterLabel, isDefaultFilter, toggleValue } from "@/lib/urlState";
 
+import { DocLink } from "./DocLink";
 import { Info, Tooltip } from "./Tooltip";
 
 const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
@@ -72,17 +74,32 @@ function CheckList<T extends string>({
  * many of its filters are on, and the open state remembered (lib/sidebarSections.ts).
  * A section whose check this scan did not run says why instead of its controls.
  */
-function Section({ id, title, info, active = 0, hint = null, children }: { id: string; title: string; info?: string; active?: number; hint?: string | null; children?: ReactNode }) {
+function Section({ id, title, info, docs, setup, active = 0, hint = null, children }: { id: string; title: string; info?: string; docs?: string; setup?: string; active?: number; hint?: string | null; children?: ReactNode }) {
   const open = useSyncExternalStore(sidebarSections.subscribe, () => sidebarSections.snapshot()[id] ?? false, () => CLOSED_SECTIONS[id] ?? false);
   return (
     <details className="cull-section border-t border-base-700 pt-2" open={open} onToggle={(event) => sidebarSections.set(id, event.currentTarget.open)} data-section={id}>
       <summary className="cull-section-summary flex cursor-pointer items-center gap-1.5 rounded-md py-1 font-display text-small font-semibold hover:text-accent-primary">
         <span>{title}</span>
         {active > 0 ? <span className="font-normal text-text-secondary">· {active} on</span> : null}
+        {docs ? <DocLink href={docs} label={`${title} filters`} className="ml-auto" /> : null}
       </summary>
       <div className="space-y-2 pt-1 pb-2">
         {info ? <p className="text-caption text-text-muted">{info}</p> : null}
-        {hint ? <p className="text-caption text-text-muted">{hint}</p> : children}
+        {hint ? (
+          <p className="text-caption text-text-muted">
+            {hint}
+            {setup ? (
+              <>
+                {" "}
+                <DocLink href={setup} label={`Install the ${title} model`}>
+                  Model setup
+                </DocLink>
+              </>
+            ) : null}
+          </p>
+        ) : (
+          children
+        )}
       </div>
     </details>
   );
@@ -236,6 +253,8 @@ export function Filters({
   const liveNote = (...checks: string[]): string | null => (live ? checkStageNote(checkStage(checks, live.phases, live.pending)) : null);
   const groups = detectors ? detectorGroups(detectors) : [];
   const missing = (id: (typeof groups)[number]["id"]) => groups.find((group) => group.id === id);
+  // The "not loaded" hint names a convert command; its setup section is in the curator docs.
+  const setupFor = (id: keyof typeof MODEL_SETUP) => (detectors && !missing(id)?.ready ? MODEL_SETUP[id] : undefined);
   const blocked = (ready: boolean | undefined, ran: boolean, id: (typeof groups)[number]["id"], checks: string[]): string | null => {
     if (!detectors) return "Waiting for detector status.";
     if (!ready) return missing(id)?.hint ?? "This model is not loaded.";
@@ -317,7 +336,7 @@ export function Filters({
         />
       </Section>
 
-      <Section id="people" title="People" active={on.people} hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
+      <Section id="people" title="People" docs={DOCS.people} setup={setupFor("insightface")} active={on.people} hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
         <Caption text="Face cluster" />
         <CheckList
           options={clusters}
@@ -337,7 +356,7 @@ export function Filters({
         />
       </Section>
 
-      <Section id="appearance" title="Appearance" info={APPEARANCE} active={on.appearance} hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
+      <Section id="appearance" title="Appearance" info={APPEARANCE} docs={DOCS.appearance} setup={setupFor("mivolo")} active={on.appearance} hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
         <Caption text="Gender" />
         <CheckList
           options={GENDERS}
@@ -388,7 +407,7 @@ export function Filters({
         />
       </Section>
 
-      <Section id="places365" title="Places365" active={on.places} hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
+      <Section id="places365" title="Places365" docs={DOCS.scenes} setup={setupFor("places365")} active={on.places} hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
         <Caption text="Scene" info="Places365 labels this scan recorded at or above the scene confidence, with the number of images for each." />
         <CheckList
           options={scenes}
@@ -410,7 +429,7 @@ export function Filters({
         <RangeField label="Scene confidence" info="A scene or environment counts only at or above this confidence. The counts above follow it." value={filter.minSceneConf} min={0} max={1} step={0.05} onChange={(minSceneConf) => onChange({ minSceneConf })} />
       </Section>
 
-      <Section id="fashionpedia" title="Fashionpedia" active={on.garments} hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
+      <Section id="fashionpedia" title="Fashionpedia" docs={DOCS.wardrobe} setup={setupFor("garments")} active={on.garments} hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
         <Caption text="Garment present" info="Garments this scan recorded at or above the garment confidence, with the number of images for each." />
         <CheckList
           options={GARMENTS}
@@ -450,6 +469,7 @@ export function Filters({
         <Section
           id="nudenet"
           title="NudeNet"
+          docs={DOCS.nudenet}
           info="Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too."
           active={on.nudenet}
           hint={
@@ -508,6 +528,7 @@ export function Filters({
         <Section
           id="singguard"
           title="SingGuard policies"
+          docs={DOCS.singguard}
           info="A verdict, not a score. Dropping every unsafe image ignores the rule list. With only rules selected, an unsafe image whose rules are all unlisted stays, and one that names no rule is dropped."
           active={on.guard}
           hint={
