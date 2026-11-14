@@ -9,6 +9,10 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 - A recorded, static demo build for Cloudflare Pages (`make pages`, `CULL_STATIC=1`): the page replays one scan from a data tape (`scripts/record_tape.py`) with no curator and no API routes, under a hash-based CSP. Scan, export, delete and keep-set filters are shown as *Not in this demo*; labels and tag edits stay in the browser.
 - The Dragonhound shared layer (dh-shared 1.2.1, `web/vendor/dh`): tokens, a light theme beside the dark one with the family toggle, demo badges, the demo strip, and a CI drift check.
 
+### Fixed
+
+- A rejected frame's detail view said "Scanning…" over its blur. It now says it was rejected, with the reason, and why it stays blurred.
+
 ### Changed
 
 - The page uses the shared tokens and the system font stack instead of Inter and DM Sans from Google Fonts.

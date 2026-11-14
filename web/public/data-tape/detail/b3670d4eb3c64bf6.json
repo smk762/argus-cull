@@ -1,0 +1,1 @@
+{"score_breakdown":{"sharpness":0.2463,"resolution":0.2437,"artifact":0.1128,"target_bonus":0.11,"face_penalty":1.0},"nsfw":{"detections":[{"label":"FACE_FEMALE","score":0.8778,"bbox":[500.0,179.0,194.0,182.0]},{"label":"FEMALE_BREAST_COVERED","score":0.6328,"bbox":[633.0,515.0,145.0,160.0]},{"label":"FEMALE_BREAST_COVERED","score":0.5507,"bbox":[436.0,508.0,213.0,160.0]}]}}

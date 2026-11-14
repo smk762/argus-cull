@@ -1,1 +1,1 @@
-{"score_breakdown":{"sharpness":0.2368,"resolution":0.2437,"artifact":0.1204,"target_bonus":0.11,"face_penalty":1.0},"nsfw":{"detections":[{"label":"FACE_MALE","score":0.5444,"bbox":[173.0,195.0,251.0,267.0]}]}}
+{"score_breakdown":{"sharpness":0.1321,"resolution":0.2437,"artifact":0.1144,"target_bonus":0.11,"face_penalty":1.0},"nsfw":{"detections":[{"label":"FACE_MALE","score":0.7157,"bbox":[403.0,261.0,245.0,271.0]}]}}

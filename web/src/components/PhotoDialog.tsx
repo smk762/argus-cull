@@ -692,7 +692,12 @@ function PhotoPanel({
           </button>
         ) : null}
         {holdReveal && !blocked ? (
-          <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Scanning…</p>
+          <p className="absolute inset-0 m-auto h-fit w-fit max-w-[90%] rounded-md bg-base-800 px-4 py-2 text-center text-small">
+            {/* A rejected frame is held because no check will clear it, not because one is still running. */}
+            {image.passed === false
+              ? `Rejected${image.reject_reason ? `: ${image.reject_reason}` : ""}. It stays blurred: the curator ran no age or NudeNet check on it.`
+              : "Scanning…"}
+          </p>
         ) : null}
         {blocked ? (
           <p className="absolute inset-x-4 bottom-4 rounded-md bg-base-800 px-3 py-2 text-caption text-text-secondary">
