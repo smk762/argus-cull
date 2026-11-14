@@ -1,0 +1,45 @@
+/*! dh-strip v1.2.1 | Dragonhound Labs family bar. Requires dh-tokens.css. Works without JS.
+ * Current site: data-dh-site="<site>" on <html> or on the .dh-strip; the rules below show it without JS,
+ * and dh-theme.js adds aria-current="page" to that link. A hand-set aria-current still works. */
+.dh-strip {
+  box-sizing: border-box;
+  display: flex; align-items: center; gap: var(--dh-space-3);
+  height: var(--dh-strip-h); padding: 0 var(--dh-gutter);
+  background: var(--dh-surface); color: var(--dh-muted);
+  border-bottom: 1px solid var(--dh-border);
+  font: var(--dh-text-xs)/1 var(--dh-font);
+  white-space: nowrap;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; /* last resort on very narrow screens */
+}
+.dh-strip::-webkit-scrollbar { display: none; }
+.dh-strip a {
+  color: inherit; text-decoration: none; border-radius: var(--dh-radius-sm);
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 24px; padding: 0 var(--dh-space-1); /* 24 px target (WCAG 2.5.8) */
+  transition: color var(--dh-dur-fast) var(--dh-ease);
+}
+.dh-strip a:hover { color: var(--dh-text); }
+.dh-strip a:focus-visible { outline: var(--dh-focus-ring); outline-offset: -1px; color: var(--dh-text); }
+.dh-strip-home { color: var(--dh-text) !important; font-weight: var(--dh-weight-semibold); margin-left: calc(-1 * var(--dh-space-1)); }
+.dh-strip-mark { width: 18px; height: 18px; flex: none; fill: currentColor; }
+.dh-strip-links { display: flex; gap: var(--dh-space-1); margin: 0; padding: 0 0 0 var(--dh-space-3); list-style: none; border-left: 1px solid var(--dh-border); }
+.dh-strip-links a[aria-current],
+/* @generated from dh-strip.mjs (npm run shared:stamp) */
+:root[data-dh-site="lightbox"] .dh-strip:not([data-dh-site]) .dh-strip-links a[data-dh-site="lightbox"],
+.dh-strip[data-dh-site="lightbox"] .dh-strip-links a[data-dh-site="lightbox"],
+:root[data-dh-site="studio"] .dh-strip:not([data-dh-site]) .dh-strip-links a[data-dh-site="studio"],
+.dh-strip[data-dh-site="studio"] .dh-strip-links a[data-dh-site="studio"],
+:root[data-dh-site="realms"] .dh-strip:not([data-dh-site]) .dh-strip-links a[data-dh-site="realms"],
+.dh-strip[data-dh-site="realms"] .dh-strip-links a[data-dh-site="realms"]
+/* @end */ { color: var(--dh-text); font-weight: var(--dh-weight-semibold); box-shadow: inset 0 -2px 0 var(--dh-accent); border-radius: 0; }
+.dh-strip-label { margin: 0 0 0 auto; padding-left: var(--dh-space-3); color: var(--dh-muted); }
+/* Phones: the mark carries "Dragonhound Labs" (kept for screen readers), the label shortens. */
+@media (max-width: 559px) {
+  .dh-strip { gap: var(--dh-space-2); }
+  .dh-strip-name, .dh-strip-more {
+    position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+  .dh-strip-links { padding-left: var(--dh-space-2); }
+}
+@media print { .dh-strip { display: none; } }

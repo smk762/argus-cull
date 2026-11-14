@@ -1,0 +1,1 @@
+{"score_breakdown":{"sharpness":0.2737,"resolution":0.2437,"artifact":0.1221,"target_bonus":0.11,"face_penalty":1.0},"nsfw":{"detections":[{"label":"FACE_FEMALE","score":0.8105,"bbox":[217.0,238.0,330.0,361.0]}]}}

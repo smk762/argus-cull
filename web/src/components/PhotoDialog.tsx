@@ -13,6 +13,7 @@ import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle 
 import { formatYears } from "@/lib/years";
 import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
+import { NotInDemo } from "./DemoBadge";
 import { closeModal, Modal } from "./Modal";
 import { Shield } from "./Shield";
 
@@ -553,6 +554,7 @@ function PhotoPanel({
   scanning = false,
   blur = DEFAULT_BLUR,
   onDelete,
+  deleteOff = null,
   onPrevious,
   onNext,
   position,
@@ -576,6 +578,8 @@ function PhotoPanel({
   blur?: BlurPolicy;
   onClose: () => void;
   onDelete: () => Promise<void>;
+  /** The static demo: Delete shows, disabled, with this reason. */
+  deleteOff?: string | null;
   onPrevious: (() => void) | null;
   onNext: (() => void) | null;
   position: string | null;
@@ -638,11 +642,12 @@ function PhotoPanel({
 
   return (
     <>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <h2 id="photo-title" className="font-display text-subheading break-all">
+      {/* Phones: the name on its own line, the buttons wrapping under it. */}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
+        <h2 id="photo-title" className="min-w-0 basis-full font-display text-subheading break-all sm:basis-auto">
           {image.rel_path}
         </h2>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
           <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small disabled:opacity-40" disabled={!onPrevious} onClick={() => onPrevious?.()}>
             Previous
           </button>
@@ -654,7 +659,8 @@ function PhotoPanel({
             <button
               type="button"
               className="rounded-md border border-warning px-3 py-1 text-small text-warning disabled:opacity-40"
-              disabled={deleting}
+              disabled={deleting || deleteOff != null}
+              title={deleteOff ?? undefined}
               onClick={() => void remove()}
             >
               {deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete"}
@@ -701,6 +707,7 @@ function PhotoPanel({
             {deleteError ?? "Delete removes this file from the source folder. Review the ages and scores in this panel first."}
           </p>
         ) : null}
+        {blocked && deleteOff ? <NotInDemo reason={deleteOff} /> : null}
         <AppearanceTable image={image} />
         {/* The numbers the summary strip already gives are folded: the strip says how much, these say why. */}
         <Fold title="Quality" summary={qualityLine(image)} open={false}>

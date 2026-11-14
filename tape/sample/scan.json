@@ -1,0 +1,788 @@
+{
+  "scan_id": "sample0fixture01",
+  "folder": "/data/images/fixture",
+  "faces_config": {
+    "enabled": true,
+    "fairface": false,
+    "mivolo": true
+  },
+  "scenes_config": {
+    "enabled": true
+  },
+  "garments_config": {
+    "enabled": true,
+    "min_conf": 0.3
+  },
+  "nsfw_config": {
+    "enabled": true
+  },
+  "erax_config": {
+    "enabled": false
+  },
+  "guard_config": {
+    "enabled": true,
+    "policy": "adult",
+    "variants": [
+      "strict"
+    ]
+  },
+  "total": 10,
+  "passed": 9,
+  "rejected": 1,
+  "duplicates": 1,
+  "face_clusters": [
+    {
+      "cluster_id": "face_1",
+      "size": 3,
+      "representative_rel_path": "faces/front.png",
+      "representative_bbox": [
+        200,
+        120,
+        360,
+        520
+      ],
+      "attributes": {
+        "gender": "female",
+        "gender_conf": 0.88,
+        "gender_source": "mivolo",
+        "age": "20-29",
+        "age_conf": 0.91,
+        "age_years": 29.4,
+        "age_source": "mivolo"
+      }
+    }
+  ],
+  "results": [
+    {
+      "rel_path": "duplicates/original.png",
+      "abs_path": "/data/images/fixture/duplicates/original.png",
+      "score": 0.81,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": 0,
+      "group_size": 2,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "",
+      "sharpness": 363.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.486,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 0,
+      "faces": [],
+      "primary_face_cluster": null,
+      "primary_face_pose": null,
+      "primary_face_attributes": null,
+      "scene": {
+        "categories": [
+          {
+            "label": "art_studio",
+            "conf": 0.31
+          }
+        ],
+        "environment": "indoor",
+        "environment_conf": 0.9
+      },
+      "garments": [],
+      "nsfw": {
+        "detections": [],
+        "labels": {},
+        "exposed_score": 0.0
+      },
+      "content_rating": "safe",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": true,
+          "rules": [],
+          "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "duplicates/copy.png",
+      "abs_path": "/data/images/fixture/duplicates/copy.png",
+      "score": 0.8,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": 0,
+      "group_size": 2,
+      "is_representative": false,
+      "is_duplicate": true,
+      "duplicate_of": "duplicates/original.png",
+      "keep_reason": "similar-to:duplicates/original.png",
+      "sharpness": 360.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.48,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 0,
+      "faces": [],
+      "primary_face_cluster": null,
+      "primary_face_pose": null,
+      "primary_face_attributes": null,
+      "scene": {
+        "categories": [
+          {
+            "label": "art_studio",
+            "conf": 0.3
+          }
+        ],
+        "environment": "indoor",
+        "environment_conf": 0.9
+      },
+      "garments": [],
+      "nsfw": {
+        "detections": [],
+        "labels": {},
+        "exposed_score": 0.0
+      },
+      "content_rating": "safe",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": true,
+          "rules": [],
+          "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "faces/front.png",
+      "abs_path": "/data/images/fixture/faces/front.png",
+      "score": 0.86,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "",
+      "sharpness": 378.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.516,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 1,
+      "faces": [
+        {
+          "primary": true,
+          "attributes": {
+            "gender": "female",
+            "gender_conf": 0.88,
+            "gender_source": "mivolo",
+            "age": "20-29",
+            "age_conf": 0.91,
+            "age_years": 29.4,
+            "age_source": "mivolo"
+          }
+        }
+      ],
+      "primary_face_cluster": "face_1",
+      "primary_face_pose": "frontal",
+      "primary_face_attributes": {
+        "gender": "female",
+        "gender_conf": 0.88,
+        "gender_source": "mivolo",
+        "age": "20-29",
+        "age_conf": 0.91,
+        "age_years": 29.4,
+        "age_source": "mivolo"
+      },
+      "scene": {
+        "categories": [
+          {
+            "label": "studio_photography",
+            "conf": 0.42
+          }
+        ],
+        "environment": "indoor",
+        "environment_conf": 0.9
+      },
+      "garments": [],
+      "nsfw": {
+        "detections": [],
+        "labels": {},
+        "exposed_score": 0.0
+      },
+      "content_rating": "safe",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": true,
+          "rules": [],
+          "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "faces/three-quarter.png",
+      "abs_path": "/data/images/fixture/faces/three-quarter.png",
+      "score": 0.78,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "",
+      "sharpness": 354.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.468,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 1,
+      "faces": [
+        {
+          "primary": true,
+          "attributes": {
+            "gender": "female",
+            "gender_conf": 0.88,
+            "gender_source": "mivolo",
+            "age": "30-39",
+            "age_conf": 0.91,
+            "age_years": 31.2,
+            "age_source": "mivolo"
+          }
+        }
+      ],
+      "primary_face_cluster": "face_1",
+      "primary_face_pose": "three_quarter",
+      "primary_face_attributes": {
+        "gender": "female",
+        "gender_conf": 0.88,
+        "gender_source": "mivolo",
+        "age": "30-39",
+        "age_conf": 0.91,
+        "age_years": 31.2,
+        "age_source": "mivolo"
+      },
+      "scene": {
+        "categories": [
+          {
+            "label": "bedroom",
+            "conf": 0.38
+          }
+        ],
+        "environment": "indoor",
+        "environment_conf": 0.9
+      },
+      "garments": [],
+      "nsfw": {
+        "detections": [
+          {
+            "label": "BUTTOCKS_EXPOSED",
+            "score": 0.31,
+            "bbox": [
+              180,
+              220,
+              240,
+              260
+            ]
+          },
+          {
+            "label": "FACE_FEMALE",
+            "score": 0.7,
+            "bbox": [
+              180,
+              220,
+              240,
+              260
+            ]
+          }
+        ],
+        "labels": {
+          "BUTTOCKS_EXPOSED": 0.31,
+          "FACE_FEMALE": 0.7
+        },
+        "exposed_score": 0.31
+      },
+      "content_rating": "explicit",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": true,
+          "rules": [],
+          "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "faces/profile.png",
+      "abs_path": "/data/images/fixture/faces/profile.png",
+      "score": 0.74,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "",
+      "sharpness": 342.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.444,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 1,
+      "faces": [
+        {
+          "primary": true,
+          "attributes": {
+            "gender": "female",
+            "gender_conf": 0.88,
+            "gender_source": "mivolo",
+            "age": "20-29",
+            "age_conf": 0.91,
+            "age_years": 27.8,
+            "age_source": "mivolo"
+          }
+        }
+      ],
+      "primary_face_cluster": "face_1",
+      "primary_face_pose": "profile",
+      "primary_face_attributes": {
+        "gender": "female",
+        "gender_conf": 0.88,
+        "gender_source": "mivolo",
+        "age": "20-29",
+        "age_conf": 0.91,
+        "age_years": 27.8,
+        "age_source": "mivolo"
+      },
+      "scene": {
+        "categories": [
+          {
+            "label": "bedroom",
+            "conf": 0.33
+          }
+        ],
+        "environment": "indoor",
+        "environment_conf": 0.9
+      },
+      "garments": [],
+      "nsfw": {
+        "detections": [
+          {
+            "label": "FEMALE_BREAST_EXPOSED",
+            "score": 0.64,
+            "bbox": [
+              180,
+              220,
+              240,
+              260
+            ]
+          },
+          {
+            "label": "FACE_FEMALE",
+            "score": 0.66,
+            "bbox": [
+              180,
+              220,
+              240,
+              260
+            ]
+          }
+        ],
+        "labels": {
+          "FEMALE_BREAST_EXPOSED": 0.64,
+          "FACE_FEMALE": 0.66
+        },
+        "exposed_score": 0.64
+      },
+      "content_rating": "explicit",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "Consensual adult nudity passes under adult. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": false,
+          "rules": [
+            "A"
+          ],
+          "explanation": "Nudity is flagged under strict. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "garments/dress.png",
+      "abs_path": "/data/images/fixture/garments/dress.png",
+      "score": 0.69,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "",
+      "sharpness": 327.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.414,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 0,
+      "faces": [],
+      "primary_face_cluster": null,
+      "primary_face_pose": null,
+      "primary_face_attributes": null,
+      "scene": null,
+      "garments": [
+        {
+          "label": "dress",
+          "conf": 0.88,
+          "bbox": [
+            230,
+            200,
+            310,
+            460
+          ],
+          "touches_edge": false,
+          "color": "red"
+        }
+      ],
+      "nsfw": {
+        "detections": [
+          {
+            "label": "FEMALE_BREAST_COVERED",
+            "score": 0.41,
+            "bbox": [
+              180,
+              220,
+              240,
+              260
+            ]
+          }
+        ],
+        "labels": {
+          "FEMALE_BREAST_COVERED": 0.41
+        },
+        "exposed_score": 0.0
+      },
+      "content_rating": "suggestive",
+      "guard": {
+        "safe": false,
+        "rules": [
+          "A"
+        ],
+        "explanation": "The sample marks this frame unsafe to show a red shield. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": false,
+          "rules": [
+            "A"
+          ],
+          "explanation": "The sample marks this frame unsafe to show a red shield. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "garments/jacket.png",
+      "abs_path": "/data/images/fixture/garments/jacket.png",
+      "score": 0.72,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "",
+      "sharpness": 336.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.432,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 0,
+      "faces": [],
+      "primary_face_cluster": null,
+      "primary_face_pose": null,
+      "primary_face_attributes": null,
+      "scene": null,
+      "garments": [
+        {
+          "label": "jacket",
+          "conf": 0.79,
+          "bbox": [
+            210,
+            180,
+            350,
+            330
+          ],
+          "touches_edge": false,
+          "color": "blue"
+        }
+      ],
+      "nsfw": {
+        "detections": [],
+        "labels": {},
+        "exposed_score": 0.0
+      },
+      "content_rating": "safe",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": true,
+          "rules": [],
+          "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "rejects/blurry.png",
+      "abs_path": "/data/images/fixture/rejects/blurry.png",
+      "score": 0.21,
+      "passed": false,
+      "reject_reason": "blur",
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "rejected",
+      "sharpness": 183.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.02,
+        "resolution": 0.2,
+        "artifact": 0.0,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 0,
+      "faces": [],
+      "primary_face_cluster": null,
+      "primary_face_pose": null,
+      "primary_face_attributes": null,
+      "scene": null,
+      "garments": [],
+      "nsfw": null,
+      "content_rating": null,
+      "guard": null,
+      "guard_variants": {}
+    },
+    {
+      "rel_path": "scenes/room.png",
+      "abs_path": "/data/images/fixture/scenes/room.png",
+      "score": 0.66,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "",
+      "sharpness": 318.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.396,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 0,
+      "faces": [],
+      "primary_face_cluster": null,
+      "primary_face_pose": null,
+      "primary_face_attributes": null,
+      "scene": {
+        "categories": [
+          {
+            "label": "library/indoor",
+            "conf": 0.46
+          }
+        ],
+        "environment": "indoor",
+        "environment_conf": 0.9
+      },
+      "garments": [],
+      "nsfw": {
+        "detections": [],
+        "labels": {},
+        "exposed_score": 0.0
+      },
+      "content_rating": "safe",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": true,
+          "rules": [],
+          "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    },
+    {
+      "rel_path": "scenes/sky.png",
+      "abs_path": "/data/images/fixture/scenes/sky.png",
+      "score": 0.55,
+      "passed": true,
+      "reject_reason": null,
+      "similar_group": -1,
+      "group_size": 1,
+      "is_representative": true,
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "keep_reason": "below-score",
+      "sharpness": 285.0,
+      "artifact_score": 0.04,
+      "score_breakdown": {
+        "sharpness": 0.33,
+        "resolution": 0.2,
+        "artifact": 0.08,
+        "target_bonus": 0.0,
+        "face_penalty": 0.0
+      },
+      "width": 768,
+      "height": 768,
+      "face_count": 0,
+      "faces": [],
+      "primary_face_cluster": null,
+      "primary_face_pose": null,
+      "primary_face_attributes": null,
+      "scene": {
+        "categories": [
+          {
+            "label": "sky",
+            "conf": 0.71
+          }
+        ],
+        "environment": "outdoor",
+        "environment_conf": 0.9
+      },
+      "garments": [],
+      "nsfw": {
+        "detections": [],
+        "labels": {},
+        "exposed_score": 0.0
+      },
+      "content_rating": "safe",
+      "guard": {
+        "safe": true,
+        "rules": [],
+        "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+        "model": "sample (no model ran)",
+        "policy": "adult"
+      },
+      "guard_variants": {
+        "strict": {
+          "safe": true,
+          "rules": [],
+          "explanation": "No rule applies. Sample verdict, hand-written for the layout: the fixture is drawn shapes and no model judged it.",
+          "model": "sample (no model ran)",
+          "policy": "strict"
+        }
+      }
+    }
+  ]
+}

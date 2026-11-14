@@ -8,7 +8,8 @@
     "start": "next start -H 0.0.0.0 -p 3000",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:pages": "CULL_STATIC=1 next build && CULL_STATIC=1 node scripts/csp.mjs out && node scripts/check-static.mjs out"
   },
   "dependencies": {
     "next": "16.2.4",

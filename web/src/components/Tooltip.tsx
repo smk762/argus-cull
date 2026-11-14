@@ -106,7 +106,7 @@ export function Info({ text }: { text: string }) {
         role="img"
         tabIndex={0}
         aria-label={text}
-        className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-text-muted text-[9px] leading-none font-semibold text-text-muted hover:border-text-primary hover:text-text-primary focus-visible:outline focus-visible:outline-accent-primary"
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-text-muted text-[12px] leading-none font-semibold text-text-muted hover:border-text-primary hover:text-text-primary focus-visible:outline focus-visible:outline-accent-primary"
         onClick={(event) => event.preventDefault()}
       >
         i

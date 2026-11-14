@@ -1,0 +1,42 @@
+name: Deploy demo
+
+# Builds the hosted demo (make pages: the committed tape in web/public/data-tape,
+# no curator) and uploads web/out to the Cloudflare Pages project argus-cull.
+# Manual for now: run it once the demo set is recorded and the domain is set up.
+# Needs the repo secrets CLOUDFLARE_API_TOKEN (Pages: Edit) and CLOUDFLARE_ACCOUNT_ID.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Pages branch: main is production, anything else a preview"
+        default: preview
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm test # don't publish a build the tape tests reject
+        working-directory: web
+      - run: make pages
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy web/out --project-name=argus-cull --branch=${{ inputs.branch }}
