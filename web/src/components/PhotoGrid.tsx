@@ -7,6 +7,7 @@ import { pathsByShield, policyShields, SHIELD_PICK_LABELS, SHIELD_PICKS, type Sh
 import { PAGE_SIZE, type ImageResult } from "@/lib/types";
 import { formatYears } from "@/lib/years";
 
+import { NotInDemo } from "./DemoBadge";
 import { Shield } from "./Shield";
 import { Info } from "./Tooltip";
 
@@ -64,6 +65,7 @@ export function PhotoGrid({
   deleteError,
   labels = null,
   deleteAny = false,
+  deleteOff = null,
   policies = [],
   tag = null,
   tagOptions = [],
@@ -115,6 +117,8 @@ export function PhotoGrid({
   labels?: ReadonlyMap<string, ImageLabel> | null;
   /** The curator deletes any image in the scan (`delete_any` on /health), not only under-18 exposed ones. */
   deleteAny?: boolean;
+  /** The static demo: Delete shows, disabled, with this reason. */
+  deleteOff?: string | null;
   /** Policies the scan ran, official first: one shield each on every tile. */
   policies?: readonly string[];
   /** Cohort tag the gallery is narrowed to, and the tags present in this view. */
@@ -266,7 +270,7 @@ export function PhotoGrid({
               <button
                 type="button"
                 className="rounded-md border border-warning px-2 py-1 text-small text-warning disabled:opacity-40"
-                disabled={deletableSelected === 0 || deleting}
+                disabled={deleteOff != null || deletableSelected === 0 || deleting}
                 onClick={onDeleteSelected}
               >
                 {deleting ? "Deleting…" : deleteConfirm ? `Confirm delete (${deletableSelected})` : `Delete selected (${deletableSelected})`}
@@ -282,6 +286,7 @@ export function PhotoGrid({
           ) : null}
         </div>
       </div>
+      {deleteOff != null && (deleteAny || flagged.length > 0) ? <NotInDemo reason={deleteOff} /> : null}
       {!deleteAny && selectedHere > deletableSelected ? <p className="text-caption text-text-muted">This curator deletes only under-18 exposed images.</p> : null}
       {deleteError ? <p className="text-caption text-warning">{deleteError}</p> : null}
       {images.length === 0 ? <p className="text-text-secondary">{tag ? `No image in this view carries the ${tag} tag.` : emptyView(keepView, ageFrom, ageTo, faceView, shieldView)}</p> : null}
@@ -302,7 +307,7 @@ export function PhotoGrid({
               <label className="absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-base-800/90 px-1.5 py-1 text-caption text-text-secondary">
                 <input
                   type="checkbox"
-                  className={deletable ? "accent-warning" : "accent-accent-primary"}
+                  className={`h-5 w-5 ${deletable ? "accent-warning" : "accent-accent-primary"}`}
                   checked={isSelected}
                   aria-label={deletable ? "Select for delete" : "Select"}
                   onChange={() => onToggleSelected(image.rel_path)}

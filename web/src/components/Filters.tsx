@@ -23,6 +23,7 @@ import {
 } from "@/lib/types";
 import { clearedFilter, clusterLabel, isDefaultFilter, toggleValue } from "@/lib/urlState";
 
+import { NotInDemo } from "./DemoBadge";
 import { Info, Tooltip } from "./Tooltip";
 
 const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
@@ -152,6 +153,7 @@ export function Filters({
   policiesOff = [],
   onPoliciesOff,
   live,
+  keepSetLocked = null,
 }: {
   filter: FilterState;
   detectors: Detectors | null;
@@ -174,7 +176,10 @@ export function Filters({
   onPoliciesOff?: (off: string[]) => void;
   /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
   live: { phases: readonly Progress[]; pending: readonly string[] } | null;
+  /** The static demo: the keep set is the recorded one, so its filters show but are off, with this reason. */
+  keepSetLocked?: string | null;
 }) {
+  const locked = keepSetLocked != null;
   // A running scan's summary is partial and records no check as run yet, so say where the scan is instead.
   const liveNote = (...checks: string[]): string | null => (live ? checkStageNote(checkStage(checks, live.phases, live.pending)) : null);
   const groups = detectors ? detectorGroups(detectors) : [];
@@ -230,13 +235,16 @@ export function Filters({
           <button
             type="button"
             className="rounded-md border border-base-600 px-1.5 py-0.5 text-caption font-normal text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
-            disabled={isDefaultFilter(filter)}
+            disabled={locked || isDefaultFilter(filter)}
             onClick={() => onChange(clearedFilter())}
           >
             Clear all
           </button>
         </Tooltip>
       </h2>
+      {keepSetLocked ? <NotInDemo reason={keepSetLocked} /> : null}
+      {/* `contents` keeps the layout; `disabled` turns off every control inside. */}
+      <fieldset disabled={locked} className="contents">
       <RangeField
         label="Quality score"
         info="Curator quality score, from sharpness, resolution, and artifacts. NudeNet score is separate and does not move this slider."
@@ -438,6 +446,7 @@ export function Filters({
         </Group>
       ) : null}
 
+      </fieldset>
       {detectors && (policyAvailable(detectors) || summary?.guard_config?.enabled === true) ? (
         <Group
           title="SingGuard"
@@ -468,6 +477,7 @@ export function Filters({
               {policiesOff.length === policies.length ? <p className="text-caption text-warning">Every policy is off: no verdict blurs, and the SingGuard filters below do nothing.</p> : null}
             </>
           ) : null}
+          <fieldset disabled={locked} className="contents">
           <Toggle
             label="Drop every unsafe verdict"
             info="Drops any image a policy judged unsafe, whatever rule it named. Ticking it clears the rule list."
@@ -483,6 +493,7 @@ export function Filters({
             label={(id) => guardRuleLabel(id, summary)}
             onToggle={(rule) => onChange({ guardUnsafe: false, guardRules: toggleValue(filter.guardRules, rule) })}
           />
+          </fieldset>
         </Group>
       ) : null}
     </section>

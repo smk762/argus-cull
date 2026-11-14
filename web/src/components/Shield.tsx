@@ -2,10 +2,10 @@ import type { ShieldState } from "@/lib/policies";
 
 const FILL: Record<ShieldState, string> = {
   none: "text-text-muted",
-  safe: "text-success",
-  "safe-split": "text-success",
-  unsafe: "text-error",
-  "unsafe-split": "text-error",
+  safe: "text-success-fill",
+  "safe-split": "text-success-fill",
+  unsafe: "text-error-fill",
+  "unsafe-split": "text-error-fill",
 };
 
 const BODY = "M12 2 4 5.5V11c0 5.1 3.4 9.8 8 11 4.6-1.2 8-5.9 8-11V5.5L12 2Z";
@@ -23,9 +23,9 @@ export function Shield({ state, title, className = "h-4 w-4" }: { state: ShieldS
     <svg viewBox="0 0 24 24" role="img" aria-label={title} className={`${className} shrink-0 ${FILL[state]}`} fill="currentColor">
       <title>{title}</title>
       <path d={BODY} opacity={state === "none" ? 0.45 : 1} />
-      {split ? <path d={CORE} className="text-orange-400" fill="currentColor" /> : null}
-      {state === "safe" ? <path d="m9 12 2 2 4-4" fill="none" stroke="#0b1020" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /> : null}
-      {state === "unsafe" ? <path d="m9 9 6 6M15 9l-6 6" fill="none" stroke="#0b1020" strokeWidth="2" strokeLinecap="round" /> : null}
+      {split ? <path d={CORE} className="text-split-fill" fill="currentColor" /> : null}
+      {state === "safe" ? <path d="m9 12 2 2 4-4" fill="none" stroke="var(--dh-bg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /> : null}
+      {state === "unsafe" ? <path d="m9 9 6 6M15 9l-6 6" fill="none" stroke="var(--dh-bg)" strokeWidth="2" strokeLinecap="round" /> : null}
     </svg>
   );
 }

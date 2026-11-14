@@ -132,7 +132,7 @@ export function ExportDialog({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40"
+          className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40"
           disabled={busy || problem !== null || (mode === "move" && !allowMove)}
           onClick={() => onExport(dest.trim(), mode, writeXmp)}
         >

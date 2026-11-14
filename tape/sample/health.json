@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "service": "argus-curator",
+  "version": "sample",
+  "manifest_version": "1",
+  "source_root": "/data/images",
+  "export_root": "/data/out",
+  "allow_move": false,
+  "guard_policy_text": true
+}

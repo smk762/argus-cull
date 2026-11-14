@@ -2,6 +2,17 @@
 
 Each release has a `## [x.y.z]` section here. The release workflow uses that section as the GitHub Release notes.
 
+## [Unreleased]
+
+### Added
+
+- A recorded, static demo build for Cloudflare Pages (`make pages`, `CULL_STATIC=1`): the page replays one scan from a data tape (`scripts/record_tape.py`) with no curator and no API routes, under a hash-based CSP. Scan, export, delete and keep-set filters are shown as *Not in this demo*; labels and tag edits stay in the browser.
+- The Dragonhound shared layer (dh-shared 1.2.1, `web/vendor/dh`): tokens, a light theme beside the dark one with the family toggle, demo badges, the demo strip, and a CI drift check.
+
+### Changed
+
+- The page uses the shared tokens and the system font stack instead of Inter and DM Sans from Google Fonts.
+
 ## [0.4.0] - 2026-11-13
 
 First public release, and the first with a web image published to `ghcr.io/smk762/argus-cull`.

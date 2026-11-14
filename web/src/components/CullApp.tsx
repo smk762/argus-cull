@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, deleteCachedScan, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
+import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getDisplay, getGuardPolicies, getHealth, getImageDetail, getLabels, getScan, getScans, deleteCachedScan, purgeScans, putLabel, resetDemoLabels, scanFolder, ScanStopped, selectScan } from "@/lib/api";
+import { LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
+import { loadTape } from "@/lib/staticApi";
+import type { Tape } from "@/lib/tape";
 import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
@@ -15,6 +18,7 @@ import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTempl
 import { availability, guardBody, selectBody } from "@/lib/select";
 import { evaluateSubset } from "@/lib/subset";
 import {
+  DEFAULT_FILTER,
   PAGE_SIZE,
   type Detectors,
   type ExportMode,
@@ -32,7 +36,11 @@ import { withoutScan } from "@/lib/purge";
 import { withFaceName, withFilter } from "@/lib/urlState";
 import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch } from "@/lib/urlStore";
 
+import { DemoBadge, NotInDemo } from "./DemoBadge";
+import { DemoProvenance } from "./DemoProvenance";
 import { ExportDialog } from "./ExportDialog";
+import { ExternalLink } from "./ExternalLink";
+import { ThemeToggle } from "./ThemeToggle";
 import { SubsetDialog } from "./SubsetDialog";
 import packageJson from "../../package.json";
 
@@ -47,7 +55,9 @@ import { SetAgeOutcome } from "./ScanChecks";
 import { ScanDialog } from "./ScanDialog";
 import { ScansTable } from "./ScansTable";
 
-const LIGHTBOX_URL = "https://github.com/smk762/argus-lightbox";
+/** The static demo build (make pages): data from the recorded tape, no curator, no API routes. */
+const STATIC = staticDemo();
+const LIGHTBOX_URL = STATIC ? LIGHTBOX_DEMO_URL : LIGHTBOX_REPO_URL;
 
 function subscribeHydration(): () => void {
   return () => {};
@@ -59,11 +69,18 @@ function sameJson(left: unknown, right: unknown): boolean {
 
 const CULL_VERSION = packageJson.version;
 const NO_POLICIES_OFF: string[] = [];
+const DEMO_INTRO = "A content-safety screen for training images, on argus-curator: every frame stays blurred until its NudeNet, MiVOLO age and SingGuard policy results are in, and a frame the policy would not keep stays veiled.";
 
 export function CullApp() {
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const search = useSyncExternalStore(subscribeUrl, currentSearch, serverSearch);
-  const view = useMemo(() => viewFromSearch(search), [search]);
+  // The demo holds the keep set for the default filters only, so a link's keep-set filters are not read.
+  const view = useMemo(() => {
+    const parsed = viewFromSearch(search);
+    return STATIC ? { ...parsed, filter: DEFAULT_FILTER } : parsed;
+  }, [search]);
+  const [tape, setTape] = useState<Tape | null>(null);
+  const [tapeError, setTapeError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [detectors, setDetectors] = useState<Detectors | null>(null);
@@ -111,11 +128,25 @@ export function CullApp() {
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
 
   useEffect(() => {
+    if (!STATIC) return;
     let cancel = false;
-    fetch("/api/display")
-      .then((response) => response.json())
+    loadTape()
+      .then(({ tape: loaded }) => {
+        if (!cancel) setTape(loaded);
+      })
+      .catch((err: unknown) => {
+        if (!cancel) setTapeError(err instanceof Error ? err.message : "Could not read the data tape.");
+      });
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    getDisplay()
       .then((body: BlurPolicy) => {
-        if (!cancel && typeof body.exposedScore === "number") setBlur(body);
+        if (!cancel) setBlur(body);
       })
       .catch(() => {
         // The defaults still lift the blur at 0.25 and re-apply it on a policy issue.
@@ -216,7 +247,8 @@ export function CullApp() {
       }
     }
     void loadStatus();
-    const timer = window.setInterval(() => void loadStatus(), 8000);
+    // The tape does not change while the page is open.
+    const timer = STATIC ? undefined : window.setInterval(() => void loadStatus(), 8000);
     return () => {
       cancel = true;
       window.clearInterval(timer);
@@ -271,7 +303,7 @@ export function CullApp() {
         });
     };
     load();
-    const timer = window.setInterval(load, 2000);
+    const timer = STATIC ? undefined : window.setInterval(load, 2000);
     return () => {
       cancel = true;
       window.clearInterval(timer);
@@ -294,6 +326,22 @@ export function CullApp() {
       cancel = true;
     };
   }, [hydrated, scanning, view.scan, summary?.scan_id]);
+
+  // Demo: the detail view's score breakdown and boxes live in detail/<id>.json; put them back when a photo opens.
+  const openPath = view.photo;
+  useEffect(() => {
+    if (!STATIC || !openPath || scanning) return;
+    const image = rawSummary?.results.find((item) => item.rel_path === openPath);
+    if (!image || image.score_breakdown) return;
+    let cancel = false;
+    getImageDetail(image).then((full) => {
+      if (cancel || full === image) return;
+      setSummary((current) => (current ? { ...current, results: current.results.map((item) => (item.rel_path === full.rel_path ? full : item)) } : current));
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [openPath, rawSummary, scanning]);
 
   const activeScanId = scanList?.active?.scan_id ?? null;
   useEffect(() => {
@@ -437,6 +485,12 @@ export function CullApp() {
     }
   }
 
+  async function resetLabels() {
+    if (!scanFolderPath) return;
+    const file = await resetDemoLabels(scanFolderPath);
+    setLabels(new Map(Object.entries(file.labels)));
+  }
+
   function downloadLabels() {
     if (!summary) return;
     const absPaths = new Map(summary.results.map((image) => [image.rel_path, image.abs_path]));
@@ -523,6 +577,20 @@ export function CullApp() {
   }, [sourceReady, scanning, scanList?.active, prefilterOffered]);
 
   const root = health?.source_root ?? null;
+
+  /** Demo: replay the recorded scan the way a live one streams in, so each frame's blur waits for its own scores. */
+  const replay = useCallback(async () => {
+    if (!tape || !detectors) return;
+    const recorded = await getScan(tape.scans.scans[0].scan_id);
+    void onScan(templateFromSummary(recorded, health?.source_root ?? null, detectors));
+  }, [tape, detectors, health?.source_root, onScan]);
+  const replayed = useRef(false);
+  useEffect(() => {
+    // A first visit replays the scan; a link that names it (or a reload after the replay) opens it scored.
+    if (!STATIC || replayed.current || !hydrated || !tape || !detectors || !sourceReady || view.scan) return;
+    replayed.current = true;
+    void replay();
+  }, [hydrated, tape, detectors, sourceReady, view.scan, replay]);
 
   /** Open the form empty, filled from the URL: a shared link shows what it would scan. */
   function openScanForm() {
@@ -784,13 +852,33 @@ export function CullApp() {
     }
   }
 
+  // Demo: hold the page until the tape is read, so the sidebar does not grow under the reader as it loads.
+  if (STATIC && (!tape || !scanList || !detectors)) {
+    return (
+      <div className="cull-shell min-h-(--cull-h) p-4">
+        <h1 className="font-display text-heading">Argus Cull</h1>
+        <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+        <p className="my-4 max-w-prose text-small text-text-secondary">{DEMO_INTRO}</p>
+        <DemoProvenance tape={tape} error={tapeError} />
+        <main id="main" />
+      </div>
+    );
+  }
+
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[19rem_1fr]">
-      <aside className="space-y-5 overflow-y-auto border-base-700 p-4 lg:max-h-dvh lg:border-r">
-        <div>
-          <p className="font-display text-heading">Argus Cull</p>
-          <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+    <div className="cull-shell grid min-h-(--cull-h) lg:grid-cols-[19rem_1fr]">
+      <aside className="space-y-5 overflow-y-auto border-base-700 p-4 lg:max-h-(--cull-h) lg:border-r">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display text-heading">Argus Cull</h1>
+            <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+          </div>
+          <ThemeToggle />
         </div>
+        {STATIC ? <p className="text-small text-text-secondary">{DEMO_INTRO}</p> : null}
+        {STATIC ? (
+          <DemoProvenance tape={tape} error={tapeError} />
+        ) : (
         <p className="text-caption" role="status">
           {healthError ? <span className="text-error">{healthError}. Scan stays off until the curator answers.</span> : null}
           {health?.status === "ok" ? (
@@ -800,30 +888,57 @@ export function CullApp() {
           ) : null}
           {health && !health.source_root ? <span className="text-warning"> No source root is configured.</span> : null}
         </p>
+        )}
+        {STATIC ? (
+          <div className="space-y-2">
+            <button
+              type="button"
+              className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
+              disabled={!tape || !detectors || scanning}
+              onClick={() => void replay()}
+            >
+              {scanning ? "Replaying…" : "Replay recorded scan"}
+            </button>
+            <p className="text-caption text-text-muted">Streams the recorded results in batches, the way a live scan arrives: frames stay blurred until their scores land.</p>
+            <NotInDemo reason={OFF.scan} />
+          </div>
+        ) : (
         <button
           type="button"
-          className="w-full rounded-md bg-interactive px-3 py-2 text-small font-medium disabled:opacity-40"
+          className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
           disabled={!sourceReady}
           title={scanBusy ? "A scan is running. The form opens; Scan waits for it to finish." : "Choose a folder, policy and checks"}
           onClick={openScanForm}
         >
           {scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "New scan"}
         </button>
+        )}
         <ScansTable
           scans={scanList}
           root={root}
           current={view.scan}
-          canPurge={scanControl}
+          canPurge={scanControl && !STATIC}
           purging={purging}
           rerunning={rerunning}
           onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
-          onRerun={(scanId) => void openRerun(scanId)}
+          onRerun={STATIC ? undefined : (scanId) => void openRerun(scanId)}
           onPurge={() => void onPurge()}
-          canForget={Boolean(health?.scan_delete)}
+          canForget={Boolean(health?.scan_delete) && !STATIC}
           forgetting={forgetting}
           onForget={(scanId) => void onForget(scanId)}
         />
         <SetAgeOutcome summary={summary} />
+        {STATIC ? (
+          <div className="space-y-1 text-caption text-text-muted">
+            <p className="flex flex-wrap items-center gap-2">
+              <DemoBadge state="browser" title="Labels and tag edits are kept in this browser's localStorage; nothing is sent anywhere" />
+              Labels and tag edits stay in this browser (localStorage).
+            </p>
+            <button type="button" className="rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40" disabled={!summary} onClick={() => void resetLabels()}>
+              Reset to the recorded labels
+            </button>
+          </div>
+        ) : null}
         <Filters
           filter={view.filter}
           detectors={detectors}
@@ -847,9 +962,10 @@ export function CullApp() {
             if (rawSummary) setPolicyOff({ scanId: rawSummary.scan_id, off });
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
+          keepSetLocked={STATIC ? OFF.keepSet : null}
         />
       </aside>
-      <main className="space-y-4 overflow-y-auto p-4 lg:max-h-dvh">
+      <main id="main" tabIndex={-1} className="space-y-4 overflow-y-auto p-4 lg:max-h-(--cull-h)">
         <header className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-small text-text-secondary">
@@ -915,11 +1031,11 @@ export function CullApp() {
                 Run stats
               </button>
             </Tooltip>
-            <Tooltip text={selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
+            <Tooltip text={STATIC ? `Not in this demo. ${OFF.export}` : selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
               <button
                 type="button"
-                className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40"
-                disabled={!selection}
+                className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40"
+                disabled={!selection || STATIC}
                 onClick={() => {
                   setExportResult(null);
                   setExportError(null);
@@ -932,6 +1048,15 @@ export function CullApp() {
             </Tooltip>
           </div>
           </div>
+          {STATIC ? (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <p className="flex flex-wrap items-center gap-2 text-caption text-text-muted">
+                <DemoBadge state="browser" />
+                Download paths, Run stats and the labels JSONL are written in your browser from the tape.
+              </p>
+              <NotInDemo reason={OFF.export} />
+            </div>
+          ) : null}
           {liveProgress ? (
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
@@ -968,8 +1093,9 @@ export function CullApp() {
             active={view.cluster}
             names={view.faceNames}
             sensitive={sensitive}
-            onOpen={(cluster) => replaceView(withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
-            onClear={() => replaceView(withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
+            // The demo's keep set is the default filters', so a cluster narrows the gallery only.
+            onOpen={(cluster) => replaceView(STATIC ? { ...view, view: "people", cluster } : withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
+            onClear={() => replaceView(STATIC ? { ...view, cluster: null } : withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
             onName={(cluster, name) => replaceView(withFaceName(view, cluster, name))}
           />
         ) : null}
@@ -1019,6 +1145,7 @@ export function CullApp() {
             labels={labels}
             policies={gridPolicies}
             deleteAny={deleteAny}
+            deleteOff={STATIC ? OFF.delete : null}
           />
         ) : null}
         {summary && view.view === "people" && view.cluster ? (
@@ -1067,14 +1194,25 @@ export function CullApp() {
             labels={labels}
             policies={gridPolicies}
             deleteAny={deleteAny}
+            deleteOff={STATIC ? OFF.delete : null}
           />
         ) : null}
         <p className="text-caption text-text-muted">
           Captions and compare live in{" "}
-          <a className="text-accent-tertiary hover:underline" href={LIGHTBOX_URL}>
-            lightbox
-          </a>
+          <ExternalLink className="text-accent-tertiary underline underline-offset-2" href={LIGHTBOX_URL}>
+            Lightbox
+          </ExternalLink>
           . This demo does not train, geotag, or write names back into the photo folder.
+          {STATIC ? (
+            <>
+              {" "}
+              Run it yourself against a curator:{" "}
+              <ExternalLink className="text-accent-tertiary underline underline-offset-2" href={REPO_URL}>
+                {REPO_URL.replace(/^https:\/\//, "")}
+              </ExternalLink>
+              .
+            </>
+          ) : null}
         </p>
       </main>
       {photo && summary ? (
@@ -1098,6 +1236,7 @@ export function CullApp() {
           cohorts={cohorts}
           autoTags={auto.get(photo.rel_path) ?? []}
           caption={captions.get(photo.abs_path) ?? null}
+          deleteOff={STATIC ? OFF.delete : null}
           onDelete={async () => {
             if (!summary || !photo) return;
             const scanId = summary.scan_id;

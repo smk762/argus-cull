@@ -1,0 +1,215 @@
+{
+ "format": "argus-cull-tape",
+ "version": 1,
+ "generated_at": "2026-11-14T09:13:02Z",
+ "provenance": {
+  "kind": "sample",
+  "source": "saved-scan",
+  "curator": {
+   "version": "sample",
+   "commit": null
+  },
+  "note": "The repo's drawn-shape fixture with hand-written detector results, standing in until the demo set is approved."
+ },
+ "scan_config": {
+  "faces_config": {
+   "enabled": true,
+   "fairface": false,
+   "mivolo": true
+  },
+  "scenes_config": {
+   "enabled": true
+  },
+  "garments_config": {
+   "enabled": true,
+   "min_conf": 0.3
+  },
+  "nsfw_config": {
+   "enabled": true
+  },
+  "erax_config": {
+   "enabled": false
+  },
+  "guard_config": {
+   "enabled": true,
+   "policy": "adult",
+   "variants": [
+    "strict"
+   ]
+  }
+ },
+ "stats": {
+  "total": 10,
+  "passed": 9,
+  "rejected": 1,
+  "duplicates": 1,
+  "reject_reasons": {
+   "blur": 1
+  },
+  "kept": 7,
+  "faces": 3,
+  "nudenet_checked": 9,
+  "flagged_by_policy": {
+   "adult": 1,
+   "strict": 2
+  }
+ },
+ "health": {
+  "status": "ok",
+  "service": "argus-curator",
+  "version": "sample",
+  "manifest_version": "1",
+  "source_root": "/data/images",
+  "export_root": "/data/out",
+  "allow_move": false,
+  "guard_policy_text": true
+ },
+ "detectors": {
+  "torch": false,
+  "cuda": false,
+  "clip": false,
+  "insightface": true,
+  "onnxruntime": true,
+  "fairface": false,
+  "mivolo": true,
+  "places365": true,
+  "garments": true,
+  "bodies": false,
+  "nudenet": true,
+  "erax": false,
+  "watermark": false,
+  "singguard": true,
+  "singguard_policies": [
+   "adult",
+   "strict"
+  ]
+ },
+ "guard_policies": {
+  "singguard": true,
+  "policies": [
+   {
+    "name": "adult",
+    "recorded": "adult",
+    "source": "builtin",
+    "text": "Sample wording for the layout. A recorded tape carries the policy text the curator served.",
+    "error": null
+   },
+   {
+    "name": "strict",
+    "recorded": "strict",
+    "source": "builtin",
+    "text": "Sample wording for the layout. A recorded tape carries the policy text the curator served.",
+    "error": null
+   }
+  ]
+ },
+ "display": {
+  "exposedScore": 0.25,
+  "policyBlur": true
+ },
+ "scans": {
+  "active": null,
+  "scans": [
+   {
+    "scan_id": "sample0fixture01",
+    "folder": "/data/images/fixture",
+    "total": 10,
+    "updated_at": "2026-11-14T09:13:02Z"
+   }
+  ]
+ },
+ "select": {
+  "request": {
+   "min_score": 0.6,
+   "keep_similar": false,
+   "face_clusters": null,
+   "face_poses": null,
+   "face_genders": null,
+   "face_ages": null,
+   "min_age_years": null,
+   "max_age_years": null,
+   "min_attribute_conf": 0,
+   "scenes": null,
+   "scene_environments": null,
+   "min_scene_conf": 0.1,
+   "garments": null,
+   "exclude_garments": null,
+   "min_garment_conf": 0.5,
+   "garments_uncropped": false,
+   "nsfw_threshold": null,
+   "nsfw_label_thresholds": null,
+   "content_ratings": null,
+   "guard_unsafe": false,
+   "guard_rules": null
+  },
+  "result": {
+   "scan_id": "sample0fixture01",
+   "total": 10,
+   "kept": 7,
+   "rows": [
+    {
+     "rel_path": "duplicates/original.png",
+     "abs_path": "/data/images/fixture/duplicates/original.png",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "duplicates/copy.png",
+     "abs_path": "/data/images/fixture/duplicates/copy.png",
+     "keep_reason": "similar-to:duplicates/original.png"
+    },
+    {
+     "rel_path": "faces/front.png",
+     "abs_path": "/data/images/fixture/faces/front.png",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "faces/three-quarter.png",
+     "abs_path": "/data/images/fixture/faces/three-quarter.png",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "faces/profile.png",
+     "abs_path": "/data/images/fixture/faces/profile.png",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "garments/dress.png",
+     "abs_path": "/data/images/fixture/garments/dress.png",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "garments/jacket.png",
+     "abs_path": "/data/images/fixture/garments/jacket.png",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "rejects/blurry.png",
+     "abs_path": "/data/images/fixture/rejects/blurry.png",
+     "keep_reason": "rejected"
+    },
+    {
+     "rel_path": "scenes/room.png",
+     "abs_path": "/data/images/fixture/scenes/room.png",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "scenes/sky.png",
+     "abs_path": "/data/images/fixture/scenes/sky.png",
+     "keep_reason": "below-score"
+    }
+   ]
+  }
+ },
+ "files": {
+  "duplicates/original.png": "d7df2da624047f67",
+  "duplicates/copy.png": "f47da61dbd55621b",
+  "faces/front.png": "e585b47426c9eef0",
+  "faces/three-quarter.png": "ad0ccc2a59802052",
+  "faces/profile.png": "e21a225908133bd2",
+  "garments/dress.png": "2cc7c79ae24df343",
+  "garments/jacket.png": "24165b1810f9c428",
+  "rejects/blurry.png": "64480ad288eb6400",
+  "scenes/room.png": "438783ba29353852",
+  "scenes/sky.png": "78f11dc375ad8c8f"
+ }
+}

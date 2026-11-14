@@ -2,3 +2,7 @@ web/node_modules
 web/.next
 .git
 out
+web/out
+web/.wrangler
+# The static demo's recorded tape: only `make pages` serves it, so the live image leaves it out.
+web/public/data-tape

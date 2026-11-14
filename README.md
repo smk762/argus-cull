@@ -129,6 +129,38 @@ People lists the clusters the scan already computed. A name field on each cluste
 
 NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold or a rule list is sent on the select and export bodies the server already accepts. The NudeNet group also has a content-rating facet (`safe` / `suggestive` / `explicit`, counts from the scan, `content_ratings` on `/select`): explicit is an exposed class at 0.2 or above, suggestive is a covered intimate class without that, safe is neither. An image NudeNet did not check is dropped once a rating is selected (`nsfw-unchecked`). Flagged frames stay blurred until you show the image. This page does not invent a score. The SingGuard policy a scan is judged under is picked in the scan form (below) and kept in the URL as `policy=` and `variants=`. Under `adult`, consensual adult nudity passes SingGuard while apparent minors, non-consent and sexual violence are still rule A, and the rule list names it that way. The policy does not change NudeNet scores, the blur line, or the rule that a MiVOLO age under 18 with exposure is never kept.
 
+## Hosted demo (static build)
+
+`make pages` builds the page as a pure static export (`web/out/`) for a static host such as Cloudflare Pages. It reads a recorded **data tape** instead of the curator and the page's API routes, so it needs no GPU, no curator and no server.
+
+**The tape** is written by `scripts/record_tape.py` (needs Pillow) into `web/public/data-tape/`:
+
+```bash
+# From a running curator: the newest finished scan, or SCAN_ID=…
+make tape CURATOR_URL=http://localhost:8101 IMAGES=/path/to/the/scanned/folder LABELS=labels/<folder>-<digest>.json NOTE="What the set is"
+
+# Offline: a saved scan (GET /scan/{id}) and the folder it read
+python scripts/record_tape.py saved --scan scan.json --images ./set --health health.json --detectors detectors.json --policies policies.json --select select.json
+```
+
+| File | What it holds |
+| --- | --- |
+| `tape.json` | `format`, `version`, `generated_at`; `provenance` (`recorded` or `sample`, curator version and commit, a note); the scan config; run stats; `/health`, `/detectors`, `/guard/policies`; the blur policy; the scan list; the keep set the curator returned for the default filters (`select`); the `rel_path` → file id map |
+| `scan.json` | the scan summary with every detector field and verdict, less the detail-only fields |
+| `detail/<id>.json` | per image: `score_breakdown` and the NudeNet and EraX boxes, read when the detail view opens |
+| `cohorts.json`, `captions.json`, `labels.json` | the cohort rules, the caption sidecars by `abs_path`, and the labels file for the folder |
+| `thumbs/<id>.webp`, `images/<id>.webp` | 480 px and 1600 px renditions, with no metadata carried over |
+
+Paths are rewritten under `/data/images`, the container's source mount, and the recorder fails if a home directory, a private address or a `.local`/`.lan` host name is still in the JSON. `CULL_TAPE_DIR` (or `--out`) writes the tape elsewhere; build with `make pages TAPE_DIR=web/public/<dir>` and the page reads it from `/<dir>` (`NEXT_PUBLIC_CULL_TAPE_URL`). The tape must be on the same site: the CSP names no other origin.
+
+**What the demo does.** A first visit replays the scan the way a live one streams in: the quality pass first with every slow check pending, so every tile is blurred and says *Scanning…*, then the scored batches, so each frame's blur lifts or stays by its own recorded scores. Rejected and under-18 exposed frames stay held; frames the policy flags stay veiled with *Unblur*, exactly as on the live page. *Replay recorded scan* runs it again. The grid, sort, age, faces, verdict and cohort filters, the detail view, *Policies counted*, the *Policies* panel, *Evaluate keep set*, *Download paths*, *Run stats* and the labels JSONL all work in the browser from the tape. Labels and by-hand tag edits are kept in this browser's `localStorage` (*Reset to the recorded labels* drops them). New scan, rerun, purge, export, delete and the keep-set filters need the curator: they are shown disabled with a *Not in this demo* badge and the reason. The sidebar says whether the tape is *Recorded* (a real curator run) or *Sample data*.
+
+**The build.** `CULL_STATIC=1` switches `next.config.ts` to `output: "export"` and leaves out the API routes (they are named `route.live.ts`, which only the live build treats as routes). `scripts/csp.mjs` then gives each page a `<meta>` Content-Security-Policy with the hashes of its inline scripts and a Trusted Types policy (from argus-lightbox), plus `_headers` for `frame-ancestors` and the rest, and `scripts/check-static.mjs` fails the build if an API route was exported, a page has no CSP, or a tape file is missing. The live image leaves the tape out (`.dockerignore`).
+
+The committed tape is a **stand-in**: `make tape-sample` builds it from `fixture/` with hand-written detector results (`scripts/make_sample_scan.py`, inputs in `tape/sample/`), and the page labels it *Sample data*. To drop in the real demo set, record it with `make tape`, check the sidebar says *Recorded*, run `make pages`, and commit `web/public/data-tape/`.
+
+The page shares the Dragonhound Labs design layer (`web/vendor/dh`, dh-shared, vendored from dragonhound-site with `sync-shared.mjs` and checked in CI with `make shared-check`): the tokens behind both themes, the family theme toggle and cookie, the demo badges and, in the static build, the demo strip.
+
 ## Fixture
 
 `fixture/` is a handful of drawn shapes: faces, scenes, garments, one identical pair, and one blurred frame. It is labeled as a fixture. CI installs `argus-curator` with no GPU extras and scans it.
@@ -138,6 +170,7 @@ NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold o
 ```bash
 cd web
 npm run lint && npm run typecheck && npm test && npm run build
+npm run build:pages   # the static demo export, see Hosted demo
 ```
 
 `make check` runs those web checks and `scripts/sync_check.py`. That script checks offline that the recorded fixture scan (`sync/fixture-scan.json`) and any imported curator docs match `sync/argus-curator.json`, the argus-curator `dev` commit and version cull follows. CI installs curator at that commit, checks the fixture, and compares a fresh scan with the record. A daily job (`.github/workflows/sync-drift.yml`) opens a PR with a new record when curator's `dev` moves on, or an issue if the fixture no longer passes. To move by hand, run `make sync-curator`, optionally with `COMMIT=<sha>`.
