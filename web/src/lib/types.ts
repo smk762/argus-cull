@@ -225,6 +225,8 @@ export interface CheckConfig {
 export interface GuardConfig extends CheckConfig {
   policy?: GuardPolicy;
   variants?: GuardPolicy[];
+  /** The thinking mode the scan asked for (argus-curator#152). Not recorded by curator yet; read when present. */
+  thinking?: string | null;
 }
 
 export interface NsfwDetection {
@@ -251,6 +253,8 @@ export interface GuardResult {
   explanation?: string | null;
   model?: string | null;
   policy?: string;
+  /** The mode that judged this verdict (argus-cortex 0.5). Cascade reports `fast` for a frame it did not escalate. */
+  thinking?: string | null;
 }
 
 /**
