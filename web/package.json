@@ -9,15 +9,22 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:pages": "CULL_STATIC=1 next build && CULL_STATIC=1 node scripts/csp.mjs out && node scripts/check-static.mjs out"
+    "build:pages": "CULL_STATIC=1 next build && CULL_STATIC=1 node scripts/csp.mjs out && node scripts/check-static.mjs out",
+    "docs:pull": "node scripts/curator-docs.mjs --pull",
+    "docs:check": "node scripts/curator-docs.mjs --check"
   },
   "dependencies": {
     "next": "16.2.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

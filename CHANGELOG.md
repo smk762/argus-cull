@@ -6,6 +6,8 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ### Added
 
+- `/docs`: argus-curator's README and docs pages, imported at the curator `dev` commit the sync record names, behind an opsec gate, with the version, commit, PyPI and GitHub links in the header. `make check` fails when a doc, the pin or the allowlist disagrees with the record, and `make sync-curator` and the drift job re-import them with the fixture (#63).
+- In-context docs links on the scan form's checks, the filter groups and a missing model's setup, the detail view's folds, *Run stats* and the Made-with line (#63).
 - A recorded, static demo build for Cloudflare Pages (`make pages`, `CULL_STATIC=1`): the page replays one scan from a data tape (`scripts/record_tape.py`) with no curator and no API routes, under a hash-based CSP. Scan, export, delete and keep-set filters are shown as *Not in this demo*; labels and tag edits stay in the browser.
 - The Dragonhound shared layer (dh-shared 1.2.1, `web/vendor/dh`): tokens, a light theme beside the dark one with the family toggle, demo badges, the demo strip, and a CI drift check.
 

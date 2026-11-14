@@ -8,12 +8,14 @@ import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type Coh
 import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
 import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/lib/guardText";
 import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
+import { DOCS } from "@/lib/docsLinks";
 import { contentRating, nudeNetLabel } from "@/lib/moderation";
 import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle } from "@/lib/policies";
 import { formatYears } from "@/lib/years";
 import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
 import { NotInDemo } from "./DemoBadge";
+import { DocLink } from "./DocLink";
 import { closeModal, Modal } from "./Modal";
 import { Shield } from "./Shield";
 
@@ -313,6 +315,7 @@ function PolicyReports({ image, override }: { image: ImageResult; override: stri
           );
         })}
       </div>
+      <FoldDocs title="SingGuard" docs={[{ href: DOCS.policyCheck, text: "Policy check" }, { href: DOCS.moderation, text: "Moderation and its limits" }]} />
     </section>
   );
 }
@@ -329,7 +332,10 @@ function labelFields(label: ImageLabel | null): Omit<ImageLabel, "updated_at"> {
 }
 
 /** A collapsible section that starts open when it holds a value. The summary names what is set. */
-function Fold({ title, summary, open, children }: { title: string; summary: string | null; open: boolean; children: ReactNode }) {
+/** A doc link a fold ends with: what the numbers in it mean, in the curator docs. */
+type FoldDoc = { href: string; text: string };
+
+function Fold({ title, summary, open, docs = [], children }: { title: string; summary: string | null; open: boolean; docs?: FoldDoc[]; children: ReactNode }) {
   return (
     <details open={open} className="border-t border-base-700 pt-3">
       <summary className="cursor-pointer text-caption text-text-muted">
@@ -337,7 +343,21 @@ function Fold({ title, summary, open, children }: { title: string; summary: stri
         {summary ? <span className="text-text-secondary"> · {summary}</span> : null}
       </summary>
       {children}
+      <FoldDocs title={title} docs={docs} />
     </details>
+  );
+}
+
+function FoldDocs({ title, docs }: { title: string; docs: FoldDoc[] }) {
+  if (docs.length === 0) return null;
+  return (
+    <p className="mt-1 flex flex-wrap gap-x-3 text-caption">
+      {docs.map((doc) => (
+        <DocLink key={doc.href} href={doc.href} label={`${title}: ${doc.text}`}>
+          {doc.text}
+        </DocLink>
+      ))}
+    </p>
   );
 }
 
@@ -710,21 +730,26 @@ function PhotoPanel({
         {blocked && deleteOff ? <NotInDemo reason={deleteOff} /> : null}
         <AppearanceTable image={image} />
         {/* The numbers the summary strip already gives are folded: the strip says how much, these say why. */}
-        <Fold title="Quality" summary={qualityLine(image)} open={false}>
+        <Fold title="Quality" summary={qualityLine(image)} open={false} docs={[{ href: DOCS.quality, text: "How scoring works" }]}>
           <QualityTable image={image} />
         </Fold>
         {image.nsfw ? (
-          <Fold title="NudeNet" summary={nudeNetLine(image.nsfw, contentRating(image), nsfwSource(image))} open={false}>
+          <Fold
+            title="NudeNet"
+            summary={nudeNetLine(image.nsfw, contentRating(image), nsfwSource(image))}
+            open={false}
+            docs={[{ href: DOCS.nudity, text: "Nudity detection" }, ...(image.erax ? [{ href: DOCS.erax, text: "EraX" }] : []), { href: DOCS.moderation, text: "Moderation and its limits" }]}
+          >
             <NudeNetTable nsfw={image.nsfw} rating={contentRating(image)} source={nsfwSource(image)} erax={image.erax ?? null} />
           </Fold>
         ) : null}
         {image.scene ? (
-          <Fold title="Places365" summary={sceneLine(image.scene.categories, image.scene.environment)} open={false}>
+          <Fold title="Places365" summary={sceneLine(image.scene.categories, image.scene.environment)} open={false} docs={[{ href: DOCS.scenes, text: "Scene tags" }]}>
             <ConfTable rows={image.scene.categories.map((category) => ({ label: category.label, conf: category.conf }))} caption={`Environment: ${image.scene.environment}`} />
           </Fold>
         ) : null}
         {worn.length > 0 ? (
-          <Fold title="Fashionpedia" summary={confLine(worn)} open={false}>
+          <Fold title="Fashionpedia" summary={confLine(worn)} open={false} docs={[{ href: DOCS.wardrobe, text: "Garments" }]}>
             <ConfTable rows={worn} />
           </Fold>
         ) : null}
