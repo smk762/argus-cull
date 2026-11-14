@@ -326,8 +326,11 @@ export interface WatermarkDetection {
   bbox: number[];
 }
 
-/** The curator's default `max_cut`, in percent, and the whole percents it accepts (above 0, below 50). */
-export const DEFAULT_CROP_MAX_CUT = 15;
+/**
+ * The form's `max_cut`, in percent, and the whole percents the curator accepts (above 0, below 50).
+ * 17, not the curator's own 15: the frames 15 rejected as overlays needed cuts of up to 16.8%.
+ */
+export const DEFAULT_CROP_MAX_CUT = 17;
 export const MIN_CROP_MAX_CUT = 1;
 export const MAX_CROP_MAX_CUT = 49;
 
@@ -342,7 +345,7 @@ export function cropMaxCutFromFraction(value: unknown): number {
   return typeof value === "number" ? cropMaxCutPercent(value * 100) : DEFAULT_CROP_MAX_CUT;
 }
 
-/** What a scan crops before every check. Cull sends `enabled`, `detect` and, off its default, `max_cut`. */
+/** What a scan crops before every check. Cull sends `enabled`, `detect` and `max_cut`. */
 export interface CropConfig {
   enabled: boolean;
   detect?: boolean;
