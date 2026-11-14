@@ -1,4 +1,4 @@
-/*! dh-strip v1.2.2 | Dragonhound Labs family bar. Requires dh-tokens.css. Works without JS.
+/*! dh-strip v1.2.3 | Dragonhound Labs family bar. Requires dh-tokens.css. Works without JS.
  * Current site: data-dh-site="<site>" on <html> or on the .dh-strip; the rules below show it without JS,
  * and dh-theme.js adds aria-current="page" to that link. A hand-set aria-current still works. */
 .dh-strip {
@@ -29,8 +29,8 @@
 .dh-strip[data-dh-site="lightbox"] .dh-strip-links a[data-dh-site="lightbox"],
 :root[data-dh-site="studio"] .dh-strip:not([data-dh-site]) .dh-strip-links a[data-dh-site="studio"],
 .dh-strip[data-dh-site="studio"] .dh-strip-links a[data-dh-site="studio"],
-:root[data-dh-site="realms"] .dh-strip:not([data-dh-site]) .dh-strip-links a[data-dh-site="realms"],
-.dh-strip[data-dh-site="realms"] .dh-strip-links a[data-dh-site="realms"],
+:root[data-dh-site="atlas"] .dh-strip:not([data-dh-site]) .dh-strip-links a[data-dh-site="atlas"],
+.dh-strip[data-dh-site="atlas"] .dh-strip-links a[data-dh-site="atlas"],
 :root[data-dh-site="cull"] .dh-strip:not([data-dh-site]) .dh-strip-links a[data-dh-site="cull"],
 .dh-strip[data-dh-site="cull"] .dh-strip-links a[data-dh-site="cull"]
 /* @end */ { color: var(--dh-text); font-weight: var(--dh-weight-semibold); box-shadow: inset 0 -2px 0 var(--dh-accent); border-radius: 0; }
