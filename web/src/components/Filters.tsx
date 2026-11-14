@@ -173,7 +173,7 @@ function KeepViewSwitch({ value, keptCount, leftOutCount, onChange }: { value: K
               onChange={() => onChange(option.view)}
             />
             {option.label}
-            {option.count != null ? <span className="tabular-nums text-text-secondary"> ({option.count})</span> : null}
+            {option.count != null ? <span className="tabular-nums"> ({option.count})</span> : null}
           </label>
         ))}
       </div>
