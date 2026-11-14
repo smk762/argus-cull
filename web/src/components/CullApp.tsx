@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getDisplay, getGuardPolicies, getHealth, getImageDetail, getLabels, getScan, getScans, deleteCachedScan, purgeScans, putLabel, resetDemoLabels, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
+import { IN_BROWSER, LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
 import { loadTape } from "@/lib/staticApi";
 import type { Tape } from "@/lib/tape";
 import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
@@ -18,7 +18,6 @@ import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTempl
 import { availability, guardBody, selectBody } from "@/lib/select";
 import { evaluateSubset } from "@/lib/subset";
 import {
-  DEFAULT_FILTER,
   PAGE_SIZE,
   type Detectors,
   type ExportMode,
@@ -75,11 +74,7 @@ const DEMO_INTRO = "A content-safety screen for training images, on argus-curato
 export function CullApp() {
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const search = useSyncExternalStore(subscribeUrl, currentSearch, serverSearch);
-  // The demo holds the keep set for the default filters only, so a link's keep-set filters are not read.
-  const view = useMemo(() => {
-    const parsed = viewFromSearch(search);
-    return STATIC ? { ...parsed, filter: DEFAULT_FILTER } : parsed;
-  }, [search]);
+  const view = useMemo(() => viewFromSearch(search), [search]);
   const [tape, setTape] = useState<Tape | null>(null);
   const [tapeError, setTapeError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -868,6 +863,23 @@ export function CullApp() {
     );
   }
 
+  const scansTable = (
+    <ScansTable
+      scans={scanList}
+      root={root}
+      current={view.scan}
+      canPurge={scanControl && !STATIC}
+      purging={purging}
+      rerunning={rerunning}
+      onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
+      onRerun={STATIC ? undefined : (scanId) => void openRerun(scanId)}
+      onPurge={() => void onPurge()}
+      canForget={Boolean(health?.scan_delete) && !STATIC}
+      forgetting={forgetting}
+      onForget={(scanId) => void onForget(scanId)}
+    />
+  );
+
   return (
     <div className="cull-shell grid min-h-(--cull-h) lg:grid-cols-[19rem_1fr]">
       <aside className="space-y-5 overflow-y-auto border-base-700 p-4 lg:max-h-(--cull-h) lg:border-r">
@@ -875,13 +887,18 @@ export function CullApp() {
           <div>
             <h1 className="font-display text-heading">Argus Cull</h1>
             <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+            {STATIC ? (
+              // The demo's provenance, replay and scans sit at the foot of the sidebar; this jumps there.
+              <a href="#about-demo" className="mt-1.5 inline-flex items-center gap-1.5 text-caption text-text-secondary underline-offset-2 hover:text-text-primary hover:underline">
+                <DemoBadge state={tape?.provenance.kind === "sample" ? "sample" : "recorded"} />
+                synthetic demo · about
+              </a>
+            ) : null}
           </div>
           <ThemeToggle />
         </div>
-        {STATIC ? <p className="text-small text-text-secondary">{DEMO_INTRO}</p> : null}
-        {STATIC ? (
-          <DemoProvenance tape={tape} error={tapeError} />
-        ) : (
+        {STATIC ? null : (
+          <>
         <p className="text-caption" role="status">
           {healthError ? <span className="text-error">{healthError}. Scan stays off until the curator answers.</span> : null}
           {health?.status === "ok" ? (
@@ -891,21 +908,6 @@ export function CullApp() {
           ) : null}
           {health && !health.source_root ? <span className="text-warning"> No source root is configured.</span> : null}
         </p>
-        )}
-        {STATIC ? (
-          <div className="space-y-2">
-            <button
-              type="button"
-              className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
-              disabled={!tape || !detectors || scanning}
-              onClick={() => void replay()}
-            >
-              {scanning ? "Replaying…" : "Replay recorded scan"}
-            </button>
-            <p className="text-caption text-text-muted">Streams the recorded results in batches, the way a live scan arrives: frames stay blurred until their scores land.</p>
-            <NotInDemo reason={OFF.scan} />
-          </div>
-        ) : (
         <button
           type="button"
           className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
@@ -915,33 +917,10 @@ export function CullApp() {
         >
           {scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "New scan"}
         </button>
+        {scansTable}
+          </>
         )}
-        <ScansTable
-          scans={scanList}
-          root={root}
-          current={view.scan}
-          canPurge={scanControl && !STATIC}
-          purging={purging}
-          rerunning={rerunning}
-          onOpen={(scanId, folder) => replaceView({ ...withoutScan(view, folder), scan: scanId })}
-          onRerun={STATIC ? undefined : (scanId) => void openRerun(scanId)}
-          onPurge={() => void onPurge()}
-          canForget={Boolean(health?.scan_delete) && !STATIC}
-          forgetting={forgetting}
-          onForget={(scanId) => void onForget(scanId)}
-        />
         <SetAgeOutcome summary={summary} />
-        {STATIC ? (
-          <div className="space-y-1 text-caption text-text-muted">
-            <p className="flex flex-wrap items-center gap-2">
-              <DemoBadge state="browser" title="Labels and tag edits are kept in this browser's localStorage; nothing is sent anywhere" />
-              Labels and tag edits stay in this browser (localStorage).
-            </p>
-            <button type="button" className="rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40" disabled={!summary} onClick={() => void resetLabels()}>
-              Reset to the recorded labels
-            </button>
-          </div>
-        ) : null}
         <Filters
           filter={view.filter}
           detectors={detectors}
@@ -965,8 +944,37 @@ export function CullApp() {
             if (rawSummary) setPolicyOff({ scanId: rawSummary.scan_id, off });
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
-          keepSetLocked={STATIC ? OFF.keepSet : null}
+          keepSetNote={STATIC ? IN_BROWSER.keepSet : null}
         />
+        {STATIC ? (
+          // The demo's preamble, at the foot so the filters lead: where the tape came from, the replay, the scan, and what stays in this browser.
+          <section id="about-demo" aria-label="About this demo" tabIndex={-1} className="space-y-4 border-t border-base-700 pt-4">
+            <p className="text-small text-text-secondary">{DEMO_INTRO}</p>
+            <DemoProvenance tape={tape} error={tapeError} />
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
+                disabled={!tape || !detectors || scanning}
+                onClick={() => void replay()}
+              >
+                {scanning ? "Replaying…" : "Replay recorded scan"}
+              </button>
+              <p className="text-caption text-text-muted">Streams the recorded results in batches, the way a live scan arrives: frames stay blurred until their scores land.</p>
+              <NotInDemo reason={OFF.scan} />
+            </div>
+            {scansTable}
+            <div className="space-y-1 text-caption text-text-muted">
+              <p className="flex flex-wrap items-center gap-2">
+                <DemoBadge state="browser" title="Labels and tag edits are kept in this browser's localStorage; nothing is sent anywhere" />
+                Labels and tag edits stay in this browser (localStorage).
+              </p>
+              <button type="button" className="rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40" disabled={!summary} onClick={() => void resetLabels()}>
+                Reset to the recorded labels
+              </button>
+            </div>
+          </section>
+        ) : null}
       </aside>
       <main id="main" tabIndex={-1} className="space-y-4 overflow-y-auto p-4 lg:max-h-(--cull-h)">
         <header className="space-y-3">
@@ -981,6 +989,17 @@ export function CullApp() {
                 : summary
                   ? `${summary.total} images`
                   : "No scan yet"}
+            {STATIC ? (
+              // The replay lives at the foot of the sidebar too; this keeps it in reach beside the grid.
+              <button
+                type="button"
+                className="ml-2 rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
+                disabled={!tape || !detectors || scanning}
+                onClick={() => void replay()}
+              >
+                {scanning ? "Replaying…" : "Replay scan"}
+              </button>
+            ) : null}
           </p>
           {summary && summary.total > 0 ? (
             (() => {
@@ -1096,9 +1115,8 @@ export function CullApp() {
             active={view.cluster}
             names={view.faceNames}
             veils={veils}
-            // The demo's keep set is the default filters', so a cluster narrows the gallery only.
-            onOpen={(cluster) => replaceView(STATIC ? { ...view, view: "people", cluster } : withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
-            onClear={() => replaceView(STATIC ? { ...view, cluster: null } : withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
+            onOpen={(cluster) => replaceView(withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
+            onClear={() => replaceView(withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
             onName={(cluster, name) => replaceView(withFaceName(view, cluster, name))}
           />
         ) : null}

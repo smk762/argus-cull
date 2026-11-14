@@ -342,7 +342,7 @@ export function PhotoGrid({
                   ) : (
                     <VeilFrame source={source} fit="cover" across={cellsAcross(source.cells, image.width, image.height, "cover")} className="aspect-square w-full" />
                   )}
-                  {/* The selection outcome: Keep, Held, Veiled: policy or NudeNet, or Left out. Top right, clear of the checkbox. */}
+                  {/* The selection outcome: Keep, Held, Veiled · Keep, or Left out (a veiled one says why on the panel). Top right, clear of the checkbox. */}
                   {verdict ? (
                     <span className={`dh-badge absolute top-2 right-2 ${CHIP[verdict.tone]}`} title={verdict.title}>
                       {verdict.chip}

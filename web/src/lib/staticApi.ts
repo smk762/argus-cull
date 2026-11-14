@@ -8,6 +8,7 @@
 import type { BlurPolicy } from "./chunks";
 import type { Caption, CohortConfig } from "./cohorts";
 import { NotInDemo, tapeBase } from "./demo";
+import { demoSelection } from "./demoSelect";
 import type { ImageLabel, LabelFile } from "./labels";
 import {
   browserLabels,
@@ -103,10 +104,12 @@ export async function getDetail(image: ImageResult): Promise<ImageResult> {
 }
 
 export async function selectScan(scanId: string, request: SelectRequest): Promise<SelectResult> {
-  const { tape } = await loadTape();
+  const { tape, scan } = await loadTape();
   const found = recordedSelection(tape, scanId, request);
-  if (!found) throw new NotInDemo("A keep set for other filters");
-  return found;
+  if (found) return found;
+  // Other filters: the keep set is worked out here from the recorded scores, the way the curator decides it.
+  if (scanId !== tape.select.result.scan_id || scanId !== scan.scan_id) throw new NotInDemo("A keep set for another scan");
+  return demoSelection(scan, request, tape.select.result);
 }
 
 export async function getCohorts(): Promise<CohortConfig & { source: string | null; error: string | null }> {

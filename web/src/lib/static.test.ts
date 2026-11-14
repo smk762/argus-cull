@@ -54,6 +54,9 @@ describe("static demo api", () => {
     const { availability, selectBody } = await import("./select");
     const kept = await api.selectScan(scan.scan_id, selectBody(DEFAULT_FILTER, availability(detectors, scan), scan));
     expect(kept.rows.length).toBe(scan.results.length);
+    // Other filters: the keep set is worked out in the browser, with no fetch past the tape.
+    const tight = await api.selectScan(scan.scan_id, selectBody({ ...DEFAULT_FILTER, minScore: 0.95 }, availability(detectors, scan), scan));
+    expect(tight.kept).toBeLessThan(kept.kept);
     expect(api.thumbUrl(scan.scan_id, scan.results[0].rel_path)).toMatch(/^\/data-tape\/thumbs\/[a-f0-9]+\.webp$/);
     expect(api.imageUrl(scan.scan_id, scan.results[0].rel_path)).toMatch(/^\/data-tape\/images\/[a-f0-9]+\.webp$/);
     expect(fetched.length).toBeGreaterThan(0);
@@ -71,7 +74,7 @@ describe("static demo api", () => {
     expect((await api.resetDemoLabels(scan.folder)).labels[rel]?.expect).not.toBe("other");
   });
 
-  it("refuses scans of other filters, writes, deletes and exports without fetching", async () => {
+  it("refuses another scan's keep set, writes, deletes and exports without fetching", async () => {
     const api = await import("./api");
     const scan = await api.getScan((await api.getScans())!.scans[0].scan_id);
     const before = fetched.length;
@@ -86,7 +89,7 @@ describe("static demo api", () => {
     ];
     for (const call of refused) await expect(Promise.resolve().then(() => call())).rejects.toBeInstanceOf(NotInDemo);
     expect(fetched.length).toBe(before);
-    await expect(api.selectScan(scan.scan_id, { min_score: 0.9 } as never)).rejects.toBeInstanceOf(NotInDemo);
+    await expect(api.selectScan("another-scan", { min_score: 0.9 } as never)).rejects.toBeInstanceOf(NotInDemo);
   });
 
   it("replays the recorded scan for a scan request, whatever was asked", async () => {

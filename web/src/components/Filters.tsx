@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
 import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
 import { checkStage, checkStageNote } from "@/lib/progress";
 import { facetCounts, recordedScenes, type FilterAvailability } from "@/lib/select";
+import { CLOSED_SECTIONS, sidebarSections } from "@/lib/sidebarSections";
 import {
   CONTENT_RATINGS,
+  DEFAULT_FILTER,
   ENVIRONMENTS,
   NUDENET_LABELS,
   GARMENTS,
@@ -23,7 +25,7 @@ import {
 } from "@/lib/types";
 import { clearedFilter, clusterLabel, isDefaultFilter, toggleValue } from "@/lib/urlState";
 
-import { NotInDemo } from "./DemoBadge";
+import { DemoBadge } from "./DemoBadge";
 import { Info, Tooltip } from "./Tooltip";
 
 const APPEARANCE = "Gender and age are appearance guesses from MiVOLO, not facts about a person. Min and max years read MiVOLO's age for each face.";
@@ -47,9 +49,9 @@ function CheckList<T extends string>({
   const count = (option: T): number | undefined => (counts instanceof Map ? counts.get(option) : (counts as Partial<Record<T, number>> | undefined)?.[option]);
   const shown = hideEmpty ? options.filter((option) => (count(option) ?? 0) > 0 || selected.includes(option)) : options;
   if (shown.length === 0) return <p className="text-caption text-text-muted">Nothing recorded in this scan.</p>;
-  // Capped and scrolling while its checkboxes can take focus; a disabled group (the static demo) lists in full, so no region is out of keyboard reach.
+  // Capped and scrolling; every checkbox in it takes focus, so the region is in keyboard reach.
   return (
-    <ul className="max-h-36 space-y-1 overflow-auto pr-1 in-[fieldset:disabled]:max-h-none in-[fieldset:disabled]:overflow-visible">
+    <ul className="max-h-36 space-y-1 overflow-auto pr-1">
       {shown.map((option) => (
         <li key={option}>
           <label className="flex items-center gap-2 text-small">
@@ -65,17 +67,29 @@ function CheckList<T extends string>({
   );
 }
 
-function Group({ title, hint, info, children }: { title: string; hint: string | null; info?: string; children?: ReactNode }) {
+/**
+ * One collapsible sidebar section: closed on first load, its summary saying how
+ * many of its filters are on, and the open state remembered (lib/sidebarSections.ts).
+ * A section whose check this scan did not run says why instead of its controls.
+ */
+function Section({ id, title, info, active = 0, hint = null, children }: { id: string; title: string; info?: string; active?: number; hint?: string | null; children?: ReactNode }) {
+  const open = useSyncExternalStore(sidebarSections.subscribe, () => sidebarSections.snapshot()[id] ?? false, () => CLOSED_SECTIONS[id] ?? false);
   return (
-    <fieldset disabled={hint !== null} className="space-y-2 border-t border-base-700 pt-3">
-      <legend className="flex items-center gap-1.5 font-display text-small font-semibold">
-        {title}
-        {info ? <Info text={info} /> : null}
-      </legend>
-      {hint ? <p className="text-caption text-text-muted">{hint}</p> : children}
-    </fieldset>
+    <details className="cull-section border-t border-base-700 pt-2" open={open} onToggle={(event) => sidebarSections.set(id, event.currentTarget.open)} data-section={id}>
+      <summary className="cull-section-summary flex cursor-pointer items-center gap-1.5 rounded-md py-1 font-display text-small font-semibold hover:text-accent-primary">
+        <span>{title}</span>
+        {active > 0 ? <span className="font-normal text-text-secondary">· {active} on</span> : null}
+      </summary>
+      <div className="space-y-2 pt-1 pb-2">
+        {info ? <p className="text-caption text-text-muted">{info}</p> : null}
+        {hint ? <p className="text-caption text-text-muted">{hint}</p> : children}
+      </div>
+    </details>
   );
 }
+
+const ticked = (...lists: readonly (readonly unknown[])[]) => lists.reduce((sum, list) => sum + list.length, 0);
+const moved = (value: number | null, fallback: number | null) => (value !== fallback ? 1 : 0);
 
 function RangeField({
   label,
@@ -154,7 +168,7 @@ export function Filters({
   policiesOff = [],
   onPoliciesOff,
   live,
-  keepSetLocked = null,
+  keepSetNote = null,
 }: {
   filter: FilterState;
   detectors: Detectors | null;
@@ -177,10 +191,9 @@ export function Filters({
   onPoliciesOff?: (off: string[]) => void;
   /** The scan on screen is still running: its phases on the bar and the checks it says are pending. */
   live: { phases: readonly Progress[]; pending: readonly string[] } | null;
-  /** The static demo: the keep set is the recorded one, so its filters show but are off, with this reason. */
-  keepSetLocked?: string | null;
+  /** The static demo: the keep set is worked out in the browser, and this says so beside an In-browser badge. */
+  keepSetNote?: string | null;
 }) {
-  const locked = keepSetLocked != null;
   // A running scan's summary is partial and records no check as run yet, so say where the scan is instead.
   const liveNote = (...checks: string[]): string | null => (live ? checkStageNote(checkStage(checks, live.phases, live.pending)) : null);
   const groups = detectors ? detectorGroups(detectors) : [];
@@ -204,65 +217,86 @@ export function Filters({
   }, [summary]);
   const facets = facetCounts(summary?.results ?? [], filter.minSceneConf, filter.minGarmentConf);
 
+  const f = filter;
+  const D = DEFAULT_FILTER;
+  const on = {
+    display: (unblurNsfw ? 1 : 0) + (hideRejected ? 1 : 0),
+    quality: moved(f.minScore, D.minScore) + (f.keepSimilar ? 1 : 0),
+    people: ticked(f.faceClusters, f.facePoses),
+    appearance: ticked(f.faceGenders) + moved(f.minAgeYears, null) + moved(f.maxAgeYears, null) + moved(f.minAttributeConf, D.minAttributeConf),
+    places: ticked(f.scenes, f.sceneEnvironments) + moved(f.minSceneConf, D.minSceneConf),
+    garments: ticked(f.garments, f.excludeGarments) + (f.garmentsUncropped ? 1 : 0) + moved(f.minGarmentConf, D.minGarmentConf),
+    nudenet: ticked(f.contentRatings) + (f.nsfwThreshold != null ? 1 : 0),
+    guard: ticked(policiesOff, f.guardRules) + (f.guardUnsafe ? 1 : 0),
+  };
+  const nudenetShown = detectors != null && (contentRatingAvailable(detectors) || summary?.nsfw_config?.enabled === true);
+  const guardShown = detectors != null && (policyAvailable(detectors) || summary?.guard_config?.enabled === true);
+
   return (
-    <section className="space-y-3">
-      <h2 className="flex items-center gap-1.5 font-display text-small font-semibold">
-        Display
-        <Info text="Changes what the grid shows. The keep set and export do not change." />
-      </h2>
-      <Toggle
-        label="Unblur NSFW"
-        info="Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame the scan has not finished checking."
-        checked={unblurNsfw}
-        onChange={onUnblurNsfw}
-      />
-      <Toggle
-        label="Hide rejected"
-        info={
-          hideRejectedReady
-            ? "Hides every image the keep set leaves out, whether a hard reject (blur, size, aspect), a near-duplicate, or dropped by a filter below. The same switch as Show → Kept on the grid."
-            : "Available once the keep set is calculated, after the scan."
-        }
-        checked={hideRejected}
-        // Still clearable when on, so a switch left on from an earlier keep set is never stuck.
-        disabled={!hideRejectedReady && !hideRejected}
-        onChange={onHideRejected}
-      />
+    <section className="space-y-1" aria-label="Filters">
+      <Section id="display" title="Display" info="Changes what the grid shows. The keep set and export do not change." active={on.display}>
+        <Toggle
+          label="Unblur NSFW"
+          info="Shows frames hidden by the NudeNet score or a policy verdict. A MiVOLO age under 18 stays blurred, and so does a frame the scan has not finished checking."
+          checked={unblurNsfw}
+          onChange={onUnblurNsfw}
+        />
+        <Toggle
+          label="Hide rejected"
+          info={
+            hideRejectedReady
+              ? "Hides every image the keep set leaves out, whether a hard reject (blur, size, aspect), a near-duplicate, or dropped by a filter below. The same switch as Show → Kept on the grid."
+              : "Available once the keep set is calculated, after the scan."
+          }
+          checked={hideRejected}
+          // Still clearable when on, so a switch left on from an earlier keep set is never stuck.
+          disabled={!hideRejectedReady && !hideRejected}
+          onChange={onHideRejected}
+        />
+      </Section>
 
-      <h2 className="flex items-center gap-1.5 border-t border-base-700 pt-3 font-display text-small font-semibold">
-        Keep set
-        <Info text="These filters decide which images are kept, for Kept and Left out on the grid, Download paths, and Export." />
-        <Tooltip text="Untick every filter below and put the sliders back to their defaults. Unblur NSFW and Hide rejected stay as they are." className="ml-auto">
-          <button
-            type="button"
-            className="rounded-md border border-base-600 px-1.5 py-0.5 text-caption font-normal text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
-            disabled={locked || isDefaultFilter(filter)}
-            onClick={() => onChange(clearedFilter())}
-          >
-            Clear all
-          </button>
-        </Tooltip>
-      </h2>
-      {keepSetLocked ? <NotInDemo reason={keepSetLocked} /> : null}
-      {/* `contents` keeps the layout; `disabled` turns off every control inside. */}
-      <fieldset disabled={locked} className="contents">
-      <RangeField
-        label="Quality score"
-        info="Curator quality score, from sharpness, resolution, and artifacts. NudeNet score is separate and does not move this slider."
-        value={filter.minScore}
-        min={0}
-        max={1}
-        step={0.05}
-        onChange={(minScore) => onChange({ minScore })}
-      />
-      <Toggle
-        label="Keep near-duplicates"
-        info="Adds near-duplicate frames to the keep set. It does not hide them in the grid."
-        checked={filter.keepSimilar}
-        onChange={(keepSimilar) => onChange({ keepSimilar })}
-      />
+      <div className="space-y-2 border-t border-base-700 pt-3 pb-1">
+        <h2 className="flex items-center gap-1.5 font-display text-small font-semibold">
+          Keep set
+          <Info text="These filters decide which images are kept, for Kept and Left out on the grid, Download paths, and Export." />
+          <Tooltip text="Untick every filter below and put the sliders back to their defaults. Unblur NSFW and Hide rejected stay as they are." className="ml-auto">
+            <button
+              type="button"
+              className="rounded-md border border-base-600 px-1.5 py-0.5 text-caption font-normal text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
+              disabled={isDefaultFilter(filter)}
+              onClick={() => onChange(clearedFilter())}
+            >
+              Clear all
+            </button>
+          </Tooltip>
+        </h2>
+        {keepSetNote ? (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-text-muted">
+            <DemoBadge state="browser" title={keepSetNote} />
+            <span>{keepSetNote}</span>
+          </p>
+        ) : null}
+      </div>
 
-      <Group title="People" hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
+      <Section id="quality" title="Quality score" active={on.quality}>
+        <RangeField
+          label="Quality score"
+          info="Curator quality score, from sharpness, resolution, and artifacts. NudeNet score is separate and does not move this slider."
+          value={filter.minScore}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(minScore) => onChange({ minScore })}
+        />
+        <Toggle
+          label="Keep near-duplicates"
+          info="Adds near-duplicate frames to the keep set. It does not hide them in the grid."
+          checked={filter.keepSimilar}
+          onChange={(keepSimilar) => onChange({ keepSimilar })}
+        />
+      </Section>
+
+      <Section id="people" title="People" active={on.people} hint={blocked(missing("insightface")?.ready, summary?.faces_config.enabled ?? true, "insightface", ["faces", "identities"])}>
         <Caption text="Face cluster" />
         <CheckList
           options={clusters}
@@ -280,9 +314,9 @@ export function Filters({
           label={poseLabel}
           onToggle={(pose) => onChange({ facePoses: toggleValue(filter.facePoses, pose) })}
         />
-      </Group>
+      </Section>
 
-      <Group title="Appearance" info={APPEARANCE} hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
+      <Section id="appearance" title="Appearance" info={APPEARANCE} active={on.appearance} hint={blocked(missing("mivolo")?.ready, summary?.faces_config.mivolo ?? true, "mivolo", ["faces"])}>
         <Caption text="Gender" />
         <CheckList
           options={GENDERS}
@@ -331,9 +365,9 @@ export function Filters({
           step={0.05}
           onChange={(minAttributeConf) => onChange({ minAttributeConf })}
         />
-      </Group>
+      </Section>
 
-      <Group title="Places365" hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
+      <Section id="places365" title="Places365" active={on.places} hint={blocked(missing("places365")?.ready, summary?.scenes_config.enabled ?? true, "places365", ["scenes"])}>
         <Caption text="Scene" info="Places365 labels this scan recorded at or above the scene confidence, with the number of images for each." />
         <CheckList
           options={scenes}
@@ -353,9 +387,9 @@ export function Filters({
           onToggle={(environment) => onChange({ sceneEnvironments: toggleValue(filter.sceneEnvironments, environment) })}
         />
         <RangeField label="Scene confidence" info="A scene or environment counts only at or above this confidence. The counts above follow it." value={filter.minSceneConf} min={0} max={1} step={0.05} onChange={(minSceneConf) => onChange({ minSceneConf })} />
-      </Group>
+      </Section>
 
-      <Group title="Fashionpedia" hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
+      <Section id="fashionpedia" title="Fashionpedia" active={on.garments} hint={blocked(missing("garments")?.ready, summary?.garments_config.enabled ?? true, "garments", ["garments"])}>
         <Caption text="Garment present" info="Garments this scan recorded at or above the garment confidence, with the number of images for each." />
         <CheckList
           options={GARMENTS}
@@ -389,12 +423,14 @@ export function Filters({
           step={0.05}
           onChange={(minGarmentConf) => onChange({ minGarmentConf })}
         />
-      </Group>
+      </Section>
 
-      {detectors && (contentRatingAvailable(detectors) || summary?.nsfw_config?.enabled === true) ? (
-        <Group
+      {nudenetShown ? (
+        <Section
+          id="nudenet"
           title="NudeNet"
           info="Drops an image when the highest score among the checked classes is at or above the threshold. An equal score counts, and an image NudeNet did not check is dropped too."
+          active={on.nudenet}
           hint={
             live
               ? liveNote("nsfw")
@@ -444,14 +480,15 @@ export function Filters({
               />
             </>
           ) : null}
-        </Group>
+        </Section>
       ) : null}
 
-      </fieldset>
-      {detectors && (policyAvailable(detectors) || summary?.guard_config?.enabled === true) ? (
-        <Group
-          title="SingGuard"
+      {guardShown ? (
+        <Section
+          id="singguard"
+          title="SingGuard policies"
           info="A verdict, not a score. Dropping every unsafe image ignores the rule list. With only rules selected, an unsafe image whose rules are all unlisted stays, and one that names no rule is dropped."
+          active={on.guard}
           hint={
             live
               ? liveNote("guard")
@@ -478,7 +515,6 @@ export function Filters({
               {policiesOff.length === policies.length ? <p className="text-caption text-warning">Every policy is off: no verdict blurs, and the SingGuard filters below do nothing.</p> : null}
             </>
           ) : null}
-          <fieldset disabled={locked} className="contents">
           <Toggle
             label="Drop every unsafe verdict"
             info="Drops any image a policy judged unsafe, whatever rule it named. Ticking it clears the rule list."
@@ -494,8 +530,7 @@ export function Filters({
             label={(id) => guardRuleLabel(id, summary)}
             onToggle={(rule) => onChange({ guardUnsafe: false, guardRules: toggleValue(filter.guardRules, rule) })}
           />
-          </fieldset>
-        </Group>
+        </Section>
       ) : null}
     </section>
   );

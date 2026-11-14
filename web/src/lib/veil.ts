@@ -155,6 +155,42 @@ function capital(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** A keep reason a sidebar filter gave (argus-curator selection.py), in a few words, or null for any other reason. */
+function filterWords(raw: string): string | null {
+  const [code, policy] = raw.split(":");
+  const under = policy ? ` (${policy})` : "";
+  const fixed: Record<string, string> = {
+    "face-cluster-excluded": "Face cluster not ticked",
+    "face-pose-excluded": "Head pose not ticked",
+    "face-attributes-missing": "No face to read gender or age from",
+    "face-gender-missing": "No gender reading",
+    "face-gender-excluded": "Gender not ticked",
+    "face-gender-low-confidence": "Gender reading under the confidence",
+    "face-age-years-missing": "No MiVOLO age",
+    "face-age-out-of-range": "Age outside the min and max years",
+    "scene-missing": "No scene recorded",
+    "scene-excluded": "Scene not ticked",
+    "scene-low-confidence": "Scene under the confidence",
+    "scene-environment-excluded": "Environment not ticked",
+    "scene-environment-low-confidence": "Environment under the confidence",
+    "garments-missing": "No garments recorded",
+    "garment-excluded": "Shows an excluded garment",
+    "garment-not-found": "No ticked garment",
+    "garment-low-confidence": "Ticked garment under the confidence",
+    "garment-cropped": "Ticked garment cut by the frame edge",
+    "nsfw-unchecked": "Not checked by NudeNet",
+    "nsfw-exposed": "NudeNet score at or over the limit",
+    "guard-unsafe": `Unsafe verdict${under}`,
+    "guard-unchecked": `No policy verdict${under}`,
+    "guard-rule-unknown": `Unsafe, no rule named${under}`,
+  };
+  if (code in fixed) return fixed[code];
+  if (code === "content-rating") return `Rated ${policy ?? "otherwise"}`;
+  const rule = /^guard-rule-([a-z0-9])(?:-|$)/.exec(code);
+  if (rule) return `Policy rule ${rule[1].toUpperCase()} fired${under}`;
+  return null;
+}
+
 /**
  * A reject or keep reason in plain words. `headline` is the detail view's
  * first line; `detail` the second; `short` fits a tooltip.
@@ -208,6 +244,8 @@ export function rejectWords(reason: string): { headline: string; detail: string;
     return { headline: "Left out: duplicate", detail: `A near-duplicate of ${base}; the scan keeps one frame of each group.`, short: `Near-duplicate of ${base}` };
   }
   if (raw === "below-score") return { headline: "Left out: low quality", detail: "Its quality score is under the keep set's minimum.", short: "Quality under the minimum" };
+  const filtered = filterWords(raw);
+  if (filtered) return { headline: "Left out: filtered", detail: `A sidebar filter left it out (${raw}).`, short: filtered };
   if (raw === "") return { headline: held, detail: `Rejected, ${never}`, short: "Rejected" };
   return { headline: held, detail: `Rejected (${raw}), ${never}`, short: raw };
 }
@@ -263,8 +301,9 @@ export function reasonTitle(reason: string): string {
 /**
  * The tile's verdict chip (top right) and the colour it carries. `keep`: in the
  * keep set (success). `held`: rejected or never cleared (danger). `veiled`: a
- * policy or NudeNet flag the viewer may unblur (warn). `left-out`: scored and
- * shown, but not in the keep set, e.g. a near-duplicate (neutral).
+ * policy or NudeNet flag the viewer may unblur, kept ("Veiled · Keep", warn).
+ * `left-out`: not in the keep set, e.g. a near-duplicate, shown or veiled
+ * (neutral); a veiled one says why on its frosted frame.
  */
 export type VerdictTone = "keep" | "held" | "veiled" | "left-out";
 
@@ -289,9 +328,12 @@ export function tileVerdict(image: Pick<ImageResult, "passed">, reason: string |
     const words = rejectWords(reason ?? "");
     return { chip: "Held", tone: "held", title: words.headline, line: words.short };
   }
+  // A policy or NudeNet veil: the frosted frame's panel says why it is veiled, so the chip says where the keep set put it.
   if (veil) {
-    const where = reason == null ? "" : reason === "" ? ". In the keep set" : `. Left out: ${rejectWords(reason).short}`;
-    return { chip: veil.chip ?? veil.headline, tone: "veiled", title: `${veil.headline}${where}`, line: null };
+    if (reason === "") return { chip: "Veiled · Keep", tone: "veiled", title: `${veil.headline}. In the keep set`, line: null };
+    if (reason == null) return { chip: veil.chip ?? veil.headline, tone: "veiled", title: veil.headline, line: null };
+    const words = rejectWords(reason);
+    return { chip: "Left out", tone: "left-out", title: `${veil.headline}. Left out: ${words.short}`, line: words.short };
   }
   if (reason == null) return null;
   if (reason === "") return { chip: "Keep", tone: "keep", title: "In the keep set", line: null };

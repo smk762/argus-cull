@@ -27,8 +27,12 @@ export const OFF = {
   scan: "Scanning runs the curator's GPU models; this page replays one recorded scan.",
   export: "Export writes files on the curator's host.",
   delete: "Delete removes files from the curator's source folder.",
-  keepSet: "The keep set is computed by the curator; this tape holds it for the default filters.",
   rerun: "Rerunning a scan needs the curator.",
+} as const;
+
+/** What the demo works out in the browser instead of asking the curator ("In-browser"). */
+export const IN_BROWSER = {
+  keepSet: "Worked out in your browser from the recorded scores, by the curator's rules.",
 } as const;
 
 /** Thrown by the static data layer for anything that needs the curator or the page's server. */

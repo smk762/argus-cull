@@ -161,6 +161,16 @@ describe("veil cell counts", () => {
   });
 });
 
+describe("rejectWords: a sidebar filter's keep reason", () => {
+  it("names the filter in a few words, with the policy where the curator gives one", () => {
+    expect(rejectWords("guard-unsafe:adult")).toMatchObject({ headline: "Left out: filtered", short: "Unsafe verdict (adult)" });
+    expect(rejectWords("guard-rule-b:adult-granular").short).toBe("Policy rule B fired (adult-granular)");
+    expect(rejectWords("scene-environment-excluded").short).toBe("Environment not ticked");
+    expect(rejectWords("content-rating:suggestive").short).toBe("Rated suggestive");
+    expect(rejectWords("face-age-out-of-range").detail).toBe("A sidebar filter left it out (face-age-out-of-range).");
+  });
+});
+
 describe("tileVerdict: the grid chip and its colour", () => {
   const veiled = (name: string) => veilFor(frame(name), [], DEFAULT_BLUR);
 
@@ -184,13 +194,22 @@ describe("tileVerdict: the grid chip and its colour", () => {
     expect(tileVerdict({ passed: false }, "blurry (sharpness=3.9 < 100.0)", null)).toMatchObject({ chip: "Held", tone: "held", line: "Blurry: sharpness 3.9 < 100.0" });
   });
 
-  it("says Veiled: NudeNet or Veiled: policy (warn), and notes the keep set in the tooltip", () => {
-    expect(tileVerdict(frame("E_locker_room.jpg"), "", veiled("E_locker_room.jpg"))).toMatchObject({ chip: "Veiled: NudeNet", tone: "veiled", line: null, title: "Veiled: NudeNet. In the keep set" });
-    expect(tileVerdict(frame("D_action_film.jpg"), "below-score", veiled("D_action_film.jpg"))).toMatchObject({
-      chip: "Veiled: policy",
-      tone: "veiled",
+  it("says Veiled · Keep (warn) for a policy or NudeNet veil in the keep set; the frame's panel says why", () => {
+    expect(tileVerdict(frame("E_locker_room.jpg"), "", veiled("E_locker_room.jpg"))).toEqual({ chip: "Veiled · Keep", tone: "veiled", line: null, title: "Veiled: NudeNet. In the keep set" });
+    expect(tileVerdict(frame("D_action_film.jpg"), "", veiled("D_action_film.jpg"))).toMatchObject({ chip: "Veiled · Keep", tone: "veiled", title: "Veiled: policy. In the keep set" });
+  });
+
+  it("says Left out (neutral) for a veiled frame the keep set leaves out, with the veil and the reason in the tooltip", () => {
+    expect(tileVerdict(frame("D_action_film.jpg"), "below-score", veiled("D_action_film.jpg"))).toEqual({
+      chip: "Left out",
+      tone: "left-out",
       title: "Veiled: policy. Left out: Quality under the minimum",
+      line: "Quality under the minimum",
     });
+  });
+
+  it("names the veil alone before the keep set exists", () => {
+    expect(tileVerdict(frame("D_action_film.jpg"), undefined, veiled("D_action_film.jpg"))).toMatchObject({ chip: "Veiled: policy", tone: "veiled", title: "Veiled: policy" });
   });
 
   it("shows no chip while the tile says Scanning…, or before a shown frame is selected", () => {

@@ -264,3 +264,29 @@ dialog::backdrop {
   color: var(--dh-warn-ink);
   border-color: transparent;
 }
+
+/*
+ * Sidebar sections (components/Filters.tsx): a <details> each, closed on first
+ * load. The summary is a flex row, so it draws its own chevron in place of the
+ * list marker: pointing right when closed, down when open.
+ */
+.cull-section-summary {
+  list-style: none;
+}
+.cull-section-summary::-webkit-details-marker {
+  display: none;
+}
+.cull-section-summary::before {
+  content: "";
+  flex-shrink: 0;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-inline: 0.15rem 0.3rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease;
+}
+.cull-section[open] > .cull-section-summary::before {
+  transform: rotate(45deg);
+}
