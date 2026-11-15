@@ -74,7 +74,7 @@ async function stripOutputs(version) {
   const mod = await import(pathToFileURL(join(SRC, "dh-strip.mjs")).href);
   const html = `<!-- dh-strip v${version}: Dragonhound Labs family bar. Generated from dh-strip.mjs by --stamp: do not edit.
      Paste everything from the nav element below as the first element after the skip link. Mark the current site
-     with a data-dh-site attribute (lightbox, studio, realms or cull) on the html element or on the nav element:
+     with a data-dh-site attribute (lightbox, studio, atlas or cull) on the html element or on the nav element:
      dh-strip.css shows it, dh-theme.js adds aria-current="page".
      Links are same-tab: every *.dragonhound.dev host is internal. Needs dh-tokens.css + dh-strip.css. -->
 ${mod.stripHtml()}

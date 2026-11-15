@@ -1,7 +1,7 @@
-/*! dh-strip v1.2.2 | TypeScript declarations for dh-strip.mjs (vendored alongside it; a .mjs import resolves .d.mts). */
+/*! dh-strip v1.2.3 | TypeScript declarations for dh-strip.mjs (vendored alongside it; a .mjs import resolves .d.mts). */
 
 /** A site id used in data-dh-site: the lab home or one of the demos. */
-export type DhSite = "dragonhound" | "lightbox" | "studio" | "realms" | "cull";
+export type DhSite = "dragonhound" | "lightbox" | "studio" | "atlas" | "cull";
 
 export interface DhStripLink {
   readonly site: DhSite;
