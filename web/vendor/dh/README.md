@@ -1,7 +1,7 @@
-# Dragonhound shared design layer (dh-shared v1, currently 1.2.4)
+# Dragonhound shared design layer (dh-shared v1, currently 1.2.5)
 
 The one source of truth for what the Dragonhound Labs sites share: dragonhound.dev (this repo,
-the reference look), Studio, Lightbox, Atlas, Cull and Realms. Each repo vendors a pinned copy, so there is no
+the reference look), Studio, Lightbox, Atlas, Cull, Realms, Safelight, Assay and Sightline. Each repo vendors a pinned copy, so there is no
 runtime dependency and no CSP change. A checksum keeps the copies honest.
 
 | File | What it is |
@@ -121,7 +121,7 @@ One source, two forms: `dh-strip.mjs` exports the links, labels and mark (`strip
 `dh-strip.html` is generated from it by `npm run shared:stamp`, and the build fails if the two drift.
 
 - **Static HTML:** paste `dh-strip.html` as the first element in `<body>` after the skip link, include `dh-strip.css`
-  after the tokens, and say which site this is with **`data-dh-site="studio"`** (or `lightbox`, `atlas`, `cull`, `realms`) on `<html>`
+  after the tokens, and say which site this is with **`data-dh-site="studio"`** (or `lightbox`, `atlas`, `cull`, `realms`, `safelight`, `assay`, `sightline`) on `<html>`
   or on the `<nav class="dh-strip">`. Don't edit the markup: `dh-strip.css` shows the current link from that
   attribute (no JS needed), and `dh-theme.js` adds `aria-current="page"` to it, also for strips mounted later.
   A hand-set `aria-current` still works.
@@ -137,9 +137,11 @@ One source, two forms: `dh-strip.mjs` exports the links, labels and mark (`strip
   TypeScript picks up the types from `dh-strip.d.mts` next to it (1.2.1; for a `.mjs` import TypeScript looks for `.d.mts`, not `.d.ts`).
 
 It is a `<nav aria-label="Dragonhound Labs demos">` landmark, 30 px tall. Links are same-tab (all `*.dragonhound.dev` hosts are internal: make sure your
-external-link rewriter treats them that way). Below 720 px (640 px in 1.2.2 and 1.2.3, 560 px before) the "Dragonhound Labs" text and the label suffix are
-visually hidden (still read out); spacing tightens below 420 px, and below 360 px the strip text drops to 12 px.
-As a last resort the bar scrolls sideways instead of wrapping, but with five links it fits from 320 px up.
+external-link rewriter treats them that way). Below 880 px (720 px in 1.2.4, 640 px in 1.2.2 and 1.2.3, 560 px before) the "Dragonhound Labs" text and
+the label suffix are visually hidden (still read out). Below 600 px the eight links no longer fit, so the link list scrolls
+sideways on its own (1.2.5) while the mark and "Live demo" stay put; its edges fade while there is more to scroll that way
+(scroll-driven animations; browsers without them clip the list at the edge), and `dh-theme.js` scrolls the current
+site's link into view. Spacing tightens below 420 px, and below 360 px the strip text drops to 12 px. The bar never wraps.
 If your header is sticky, offset it by `var(--dh-strip-h)` or put the strip inside it.
 
 ## Theme
@@ -229,6 +231,21 @@ CI snippet for a target repo (GitHub Actions):
 9. Verify: 390 px and 1440 px in both themes, toggle on one subdomain and reload another (cookie `Domain=.dragonhound.dev`), zero CSP errors, Lighthouse unchanged or better.
 
 ## Changelog
+
+- **1.2.5**
+  - `dh-strip.mjs`: Safelight (`safelight`, https://safelight.dragonhound.dev/, argus-darkroom), Assay (`assay`,
+    https://assay.dragonhound.dev/, argus-mint) and Sightline (`sightline`, https://sightline.dragonhound.dev/,
+    argus-survey) join the strip after Realms: Lightbox, Studio, Atlas, Cull, Realms, Safelight, Assay, Sightline.
+    `dh-strip.html`, the current-site rules in `dh-strip.css` and the `DhSite` type follow.
+  - `dh-strip.css`: eight links and the longer suffix need about 860 px, so the phone layout (mark only, short label)
+    applies below 880 px (was 720 px). Below 600 px the link list scrolls sideways inside the strip instead of the
+    whole bar, with edge fades driven by `animation-timeline: scroll()` that show only while there is more to scroll
+    that way (none when the list fits; no fade, just a clip, without scroll-driven animation support). The 420 px and
+    360 px tightening is unchanged. Measured in Chromium at every width from 320 to 1440 px, both suffixes, each site
+    current: no page or bar overflow, "Live demo" always on screen, the current link always in view, links at least
+    25 px wide.
+  - `dh-theme.js`: when it marks the current site's link and the link list scrolls, it scrolls that link into view
+    (the list only, never the page). Its comments and this README name the new sites.
 
 - **1.2.4**
   - `dh-strip.mjs`: Realms (`realms`, https://realms.dragonhound.dev/), the argus-atlas minigame, joins the strip after
