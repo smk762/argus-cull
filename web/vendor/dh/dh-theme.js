@@ -1,4 +1,4 @@
-/*! dh-theme v1.2.4 | Dragonhound Labs light/dark theme, shared across *.dragonhound.dev.
+/*! dh-theme v1.2.5 | Dragonhound Labs light/dark theme, shared across *.dragonhound.dev.
  *
  * Load it as a plain, blocking script in <head>, before the stylesheet if you can:
  *     <meta name="color-scheme" content="light dark">
@@ -10,7 +10,7 @@
  * Model (two-state, system default): no stored value means "follow prefers-color-scheme".
  * Toggling stores an explicit override; toggling back to the system's own scheme clears it.
  * Storage: a "dh-theme" cookie on Domain=.dragonhound.dev (so the choice follows you between
- * dragonhound.dev, studio., lightbox., atlas., cull., realms.), host-only on any other host (localhost, previews).
+ * dragonhound.dev, studio., lightbox., atlas., cull., realms., safelight., assay., sightline.), host-only on any other host (localhost, previews).
  * The cookie is set only when someone uses the toggle. A legacy localStorage "theme" value
  * (the landing page's old key) is read once and migrated.
  *
@@ -24,7 +24,8 @@
  * theme alone (set() does nothing, subscribe() never fires). Such a site may skip this file entirely.
  *
  * Demo strip: data-dh-site="<site>" on <html> or on a .dh-strip puts aria-current="page" on that site's
- * strip link (dh-strip.css shows the visual state from the same attribute, also without JS).
+ * strip link (dh-strip.css shows the visual state from the same attribute, also without JS) and, where the
+ * link list scrolls (phones, 1.2.5), scrolls that link into view.
  */
 (() => {
   const root = document.documentElement;
@@ -35,11 +36,19 @@
   const effective = () => valid(root.dataset.theme) || (system.matches ? "dark" : "light");
 
   // ---- Demo strip: current-site marking ----
+  // On phones the link list scrolls sideways (1.2.5): bring the current site's link into view, without moving the page.
+  const reveal = (a) => {
+    const ul = a.closest(".dh-strip-links");
+    if (!ul || ul.scrollWidth <= ul.clientWidth) return;
+    const u = ul.getBoundingClientRect(), r = a.getBoundingClientRect(), pad = 24;
+    if (r.right > u.right - pad) ul.scrollLeft += r.right - u.right + pad;
+    else if (r.left < u.left + pad) ul.scrollLeft -= u.left - r.left + pad;
+  };
   const markStrip = (nav) => {
     const site = nav.getAttribute("data-dh-site") || root.getAttribute("data-dh-site");
     if (!site) return;
     nav.querySelectorAll("a[data-dh-site]").forEach((a) => {
-      if (a.getAttribute("data-dh-site") === site) a.setAttribute("aria-current", "page");
+      if (a.getAttribute("data-dh-site") === site) { a.setAttribute("aria-current", "page"); reveal(a); }
       else if (a.getAttribute("aria-current") === "page") a.removeAttribute("aria-current");
     });
   };
