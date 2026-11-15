@@ -1,7 +1,7 @@
-# Dragonhound shared design layer (dh-shared v1, currently 1.2.3)
+# Dragonhound shared design layer (dh-shared v1, currently 1.2.4)
 
 The one source of truth for what the Dragonhound Labs sites share: dragonhound.dev (this repo,
-the reference look), Studio, Lightbox, Atlas and Cull. Each repo vendors a pinned copy, so there is no
+the reference look), Studio, Lightbox, Atlas, Cull and Realms. Each repo vendors a pinned copy, so there is no
 runtime dependency and no CSP change. A checksum keeps the copies honest.
 
 | File | What it is |
@@ -112,25 +112,34 @@ Four labels replace the seven found in the audit ("RECORDED", "DEMO", "DEMO SAMP
 ```
 
 Retired: "Demo", "Demo sample", "Coming soon" (inside a demo), "Recorded pipeline run", "demo on recorded data".
-The strip's own label is fixed: "Live demo · recorded output" ("Live demo" on phones).
+The strip's own label is "Live demo · recorded output" ("Live demo" on phones). A demo that computes in the visitor's
+browser instead (Realms) sets `data-dh-label="browser"` for "Live demo · runs in your browser" (1.2.4; see Demo strip).
 
 ## Demo strip
 
-One source, two forms: `dh-strip.mjs` exports the links, labels and mark (`strip`), plus `stripHtml({ current })`.
+One source, two forms: `dh-strip.mjs` exports the links, labels and mark (`strip`), plus `stripHtml({ current, label })`.
 `dh-strip.html` is generated from it by `npm run shared:stamp`, and the build fails if the two drift.
 
 - **Static HTML:** paste `dh-strip.html` as the first element in `<body>` after the skip link, include `dh-strip.css`
-  after the tokens, and say which site this is with **`data-dh-site="studio"`** (or `lightbox`, `atlas`, `cull`) on `<html>`
+  after the tokens, and say which site this is with **`data-dh-site="studio"`** (or `lightbox`, `atlas`, `cull`, `realms`) on `<html>`
   or on the `<nav class="dh-strip">`. Don't edit the markup: `dh-strip.css` shows the current link from that
   attribute (no JS needed), and `dh-theme.js` adds `aria-current="page"` to it, also for strips mounted later.
   A hand-set `aria-current` still works.
+- **Label suffix (1.2.4):** the default is "· recorded output". A site whose demo runs in the visitor's browser adds
+  **`data-dh-label="browser"`** ("· runs in your browser") next to `data-dh-site`, on `<html>` or on the nav; a nav's own
+  attribute wins over `<html>`. The pasted markup carries every suffix (`<span class="dh-strip-more" data-dh-label="…">`,
+  all but the default `hidden`) and `dh-strip.css` shows the chosen one, so there is still nothing to edit and no JS.
+  The keys and texts live in `strip.labelSuffixes` (`strip.labelMore` is the default); a new suffix is a dh-shared
+  change, not a local patch. Natively, render `strip.labelSuffixes.browser` in place of `strip.labelMore`, or call
+  `stripHtml({ label: "browser" })` for a string with only that suffix.
 - **React / Next:** `import { strip } from "./vendor/dh/dh-strip.mjs"` and render it natively (the file header
   has a ready JSX snippet); set `aria-current="page"` on your own link. No HTML string replacement.
   TypeScript picks up the types from `dh-strip.d.mts` next to it (1.2.1; for a `.mjs` import TypeScript looks for `.d.mts`, not `.d.ts`).
 
 It is a `<nav aria-label="Dragonhound Labs demos">` landmark, 30 px tall. Links are same-tab (all `*.dragonhound.dev` hosts are internal: make sure your
-external-link rewriter treats them that way). Below 640 px (560 px before 1.2.2) the "Dragonhound Labs" text and "· recorded output" are
-visually hidden (still read out) and, as a last resort, the bar scrolls sideways instead of wrapping.
+external-link rewriter treats them that way). Below 720 px (640 px in 1.2.2 and 1.2.3, 560 px before) the "Dragonhound Labs" text and the label suffix are
+visually hidden (still read out); spacing tightens below 420 px, and below 360 px the strip text drops to 12 px.
+As a last resort the bar scrolls sideways instead of wrapping, but with five links it fits from 320 px up.
 If your header is sticky, offset it by `var(--dh-strip-h)` or put the strip inside it.
 
 ## Theme
@@ -220,6 +229,21 @@ CI snippet for a target repo (GitHub Actions):
 9. Verify: 390 px and 1440 px in both themes, toggle on one subdomain and reload another (cookie `Domain=.dragonhound.dev`), zero CSP errors, Lighthouse unchanged or better.
 
 ## Changelog
+
+- **1.2.4**
+  - `dh-strip.mjs`: Realms (`realms`, https://realms.dragonhound.dev/), the argus-atlas minigame, joins the strip after
+    Cull: Lightbox, Studio, Atlas, Cull, Realms. `dh-strip.html`, the current-site rules in `dh-strip.css` and the
+    `DhSite` type follow.
+  - Label suffix option: `data-dh-label="browser"` on `<html>` or the nav shows "Live demo · runs in your browser"
+    instead of the default "· recorded output", without editing the pasted strip. `dh-strip.mjs` gains
+    `labelSuffixes`, `defaultLabel`, `stripHtml({ label })` and `labelSuffixCss()`; `dh-strip.html` now carries both
+    suffix spans (the non-default one `hidden`), and `--stamp` generates the matching rules into a second
+    `@generated` block in `dh-strip.css`. Types: `DhLabel`. The default output is unchanged.
+  - `dh-strip.css`: five links and the longer suffix need about 680 px, so the phone layout applies below 720 px
+    (was 640 px), the tight spacing below 420 px (was 380 px) with 3 px link padding, and below 360 px the strip
+    text is 12 px with 2 px link padding. Measured in Chromium at every width from 320 to 1440 px with both suffixes:
+    no sideways scroll; the closest fit is about 10 px of spare room at 320 px. Links stay at least 24 px wide.
+  - Comments in `dh-theme.js` and `sync-shared.mjs` and this README name Realms.
 
 - **1.2.3**
   - `dh-strip.mjs`: the Realms link becomes **Atlas** (`atlas`, https://atlas.dragonhound.dev/). The painted-map demo

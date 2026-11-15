@@ -10,7 +10,7 @@
 //                                                        vendor shared/ into <repo>/<dest>, write <repo>/.dh-shared.json.
 //                                                        favicons/ (the lab's own icons) are left out unless asked for;
 //                                                        --no-theme-script leaves out dh-theme.js (locked single-theme sites).
-// --stamp also regenerates dh-strip.html and the current-site rules in dh-strip.css from dh-strip.mjs.
+// --stamp also regenerates dh-strip.html and the current-site and label-suffix rules in dh-strip.css from dh-strip.mjs.
 //
 // In a target repo (after vendoring):
 //   node vendor/dh/sync-shared.mjs --check .             fail if any vendored file was edited
@@ -70,18 +70,21 @@ function stampVersions(version) {
 }
 // dh-strip.mjs is the source of dh-strip.html and of the current-site selectors in dh-strip.css.
 const STRIP_CSS_BLOCK = /(\/\* @generated from dh-strip\.mjs[^*]*\*\/\n)[\s\S]*?(\/\* @end \*\/)/;
+const LABEL_CSS_BLOCK = /(\/\* @generated label suffixes from dh-strip\.mjs[^*]*\*\/\n)[\s\S]*?(\/\* @end \*\/)/;
 async function stripOutputs(version) {
   const mod = await import(pathToFileURL(join(SRC, "dh-strip.mjs")).href);
   const html = `<!-- dh-strip v${version}: Dragonhound Labs family bar. Generated from dh-strip.mjs by --stamp: do not edit.
      Paste everything from the nav element below as the first element after the skip link. Mark the current site
-     with a data-dh-site attribute (lightbox, studio, atlas or cull) on the html element or on the nav element:
-     dh-strip.css shows it, dh-theme.js adds aria-current="page".
+     with a data-dh-site attribute (${mod.strip.links.map((l) => l.site).join(", ").replace(/, (?=[^,]*$)/, " or ")}) on the html element or on the nav element:
+     dh-strip.css shows it, dh-theme.js adds aria-current="page". The label suffix defaults to "${mod.strip.labelSuffixes[mod.strip.defaultLabel].replace(/^ · /, "")}";
+     pick another with data-dh-label (${Object.keys(mod.strip.labelSuffixes).filter((k) => k !== mod.strip.defaultLabel).map((k) => `${k}: "${mod.strip.labelSuffixes[k].replace(/^ · /, "")}"`).join(", ")}) on the html or nav element.
      Links are same-tab: every *.dragonhound.dev host is internal. Needs dh-tokens.css + dh-strip.css. -->
 ${mod.stripHtml()}
 `;
   const cssNow = readFileSync(join(SRC, "dh-strip.css"), "utf8").replace(/\r\n/g, "\n");
-  if (!STRIP_CSS_BLOCK.test(cssNow)) die("dh-strip.css lost its @generated/@end markers");
-  const css = cssNow.replace(STRIP_CSS_BLOCK, (_, open, close) => `${open}${mod.currentSiteSelector()}\n${close}`);
+  if (!STRIP_CSS_BLOCK.test(cssNow) || !LABEL_CSS_BLOCK.test(cssNow)) die("dh-strip.css lost its @generated/@end markers");
+  const css = cssNow.replace(STRIP_CSS_BLOCK, (_, open, close) => `${open}${mod.currentSiteSelector()}\n${close}`)
+    .replace(LABEL_CSS_BLOCK, (_, open, close) => `${open}${mod.labelSuffixCss()}\n${close}`);
   const svgPath = (readFileSync(join(SRC, "dh-mark.svg"), "utf8").match(/ d="([^"]+)"/) || [])[1];
   if (svgPath !== mod.strip.markPath) die("dh-strip.mjs markPath differs from dh-mark.svg");
   return { "dh-strip.html": html, "dh-strip.css": css };

@@ -17,18 +17,23 @@ const squash = (html: string) =>
     .replace(/>\s+</g, "><")
     .replace(/<(path)([^>]*)\/>/g, "<$1$2></$1>")
     .trim();
+// dh-shared 1.2.4: the static strip carries every label suffix (data-dh-label picks one); the JSX renders the default only.
+const defaultSuffixOnly = (html: string) =>
+  html
+    .replace(/<span class="dh-strip-more" data-dh-label="[a-z]+" hidden>[^<]*<\/span>/g, "")
+    .replace(/<span class="dh-strip-more" data-dh-label="[a-z]+">/, '<span class="dh-strip-more">');
 // The JSX strip also carries data-dh-site on the <nav> (dh-strip.css marks the current link from it).
 const rendered = (current?: string) => renderToStaticMarkup(createElement(DemoStrip, current ? { current } : {})).replace(/<nav ([^>]*) data-dh-site="[a-z]+">/, "<nav $1>");
 
 describe("dh-strip", () => {
   it("renders the shared source's markup", () => {
-    expect(rendered()).toBe(squash(stripHtml({ current: "cull" })));
-    expect(rendered("lightbox")).toBe(squash(stripHtml({ current: "lightbox" })));
+    expect(rendered()).toBe(squash(stripHtml({ current: "cull", label: strip.defaultLabel })));
+    expect(rendered("lightbox")).toBe(squash(stripHtml({ current: "lightbox", label: strip.defaultLabel })));
   });
 
   it("matches the vendored static strip", () => {
     // The static file carries no aria-current (dh-theme.js adds it from data-dh-site); the JSX sets it itself.
-    expect(rendered().replace(' aria-current="page"', "")).toBe(squash(read("vendor/dh/dh-strip.html")));
+    expect(rendered().replace(' aria-current="page"', "")).toBe(defaultSuffixOnly(squash(read("vendor/dh/dh-strip.html"))));
   });
 
   it("says this is cull on the nav and marks the Cull link current", () => {
