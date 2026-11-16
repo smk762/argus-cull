@@ -4,7 +4,14 @@ import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 import { contentRatingAvailable, detectorGroups, policyAvailable } from "@/lib/detectors";
 import { DOCS, MODEL_SETUP } from "@/lib/docsLinks";
-import { guardRuleCounts, guardRuleLabel, nudeNetLabel, ratingCounts, recordedGuardRules } from "@/lib/moderation";
+import {
+  DEFAULT_NSFW_THRESHOLD,
+  guardRuleCounts,
+  guardRuleLabel,
+  nudeNetLabel,
+  ratingCounts,
+  recordedGuardRules,
+} from "@/lib/moderation";
 import type { KeepView } from "@/lib/chunks";
 import { checkStage, checkStageNote } from "@/lib/progress";
 import { facetCounts, recordedScenes, type FilterAvailability } from "@/lib/select";
@@ -495,9 +502,9 @@ export function Filters({
           />
           <Toggle
             label="Drop exposed nudity"
-            info="Drops an image whose highest score among the classes below is at or above the NudeNet score."
+            info="Drops an image whose highest score among the classes below is at or above the NudeNet score. Starts at 0.2, any exposure NudeNet reports: conservative, so raise it if it drops too much."
             checked={filter.nsfwThreshold != null}
-            onChange={(checked) => onChange({ nsfwThreshold: checked ? 0.5 : null })}
+            onChange={(checked) => onChange({ nsfwThreshold: checked ? DEFAULT_NSFW_THRESHOLD : null })}
           />
           {filter.nsfwThreshold != null ? (
             <>
