@@ -13,6 +13,7 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 ### Added
 
 - The *Scanned by* line names SingGuard's thinking mode, read from the mode each verdict was judged in: fast and slow together read as `cascade (fast N, slow M)`. All fast may be a cascade scan whose screen flagged nothing, and the tooltip says so; once curator records the requested mode (argus-curator#152), that is used instead (#63).
+- README's *Run* section links the suite's setup pages for SingGuard, NudeNet, EraX-NSFW, the watermark detector, the GPU host and Moderation, and drops its own account of SingGuard's thinking modes, which the SingGuard page now carries (#63).
 - README links this UI's row in the suite's [What to run for which UI](https://docs.dragonhound.dev/setup/which-services/#cull) matrix.
 - `/docs`: argus-curator's README and docs pages, imported at the curator `dev` commit the sync record names, behind an opsec gate, with the version, commit, PyPI and GitHub links in the header. `make check` fails when a doc, the pin or the allowlist disagrees with the record, and `make sync-curator` and the drift job re-import them with the fixture (#63).
 - In-context docs links on the scan form's checks, the filter groups and a missing model's setup, the detail view's folds, *Run stats* and the Made-with line (#63).
