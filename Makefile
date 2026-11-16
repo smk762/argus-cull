@@ -17,7 +17,7 @@ web-check:
 # build, and import curator's docs at that commit. Needs network.
 COMMIT ?= $(shell gh api repos/smk762/argus-curator/commits/dev --jq .sha)
 sync-curator:
-	uv venv -q --python 3.12 .venv-curator
+	uv venv -q --clear --python 3.12 .venv-curator
 	VIRTUAL_ENV=.venv-curator uv pip install -q "argus-curator @ git+https://github.com/smk762/argus-curator@$(COMMIT)"
 	.venv-curator/bin/python scripts/check_fixture.py
 	.venv-curator/bin/python scripts/record_fixture.py --commit $(COMMIT)

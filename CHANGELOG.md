@@ -7,7 +7,7 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 ### Changed
 
 - **"Drop exposed nudity" starts at a NudeNet score of 0.2**, not 0.5: any exposure NudeNet reports, the same default as curator (`DEFAULT_NSFW_THRESHOLD`) and darkroom. On NudeNet 640m, 0.5 let through exposed images scored 0.27–0.49 (argus-curator#156). Conservative on purpose; the slider still goes up to 1.
-- **Curator moves to dev at 8dc3ef625**, which carries curator 0.16.0 (its `/health` reports `0.15.1.dev22`, as a dev build without the release tag): argus-cortex 0.6, the argus-iris GPU broker, the requested SingGuard mode recorded as `guard_config.thinking` (argus-curator#152), and the under-18 rule over the whole frame by default. The fixture scan is unchanged; the imported curator docs gain `docs/gpu.md`.
+- **Curator moves to dev at ed7ba0a1a**, which carries curator 0.17.0 (its `/health` reports `0.15.1.dev40`, as a dev build without the release tag): argus-cortex 0.7, 0.2 as the recommended NudeNet threshold, and docs that point at argus-retina's shared NudeNet server. The fixture scan is unchanged. Before that, dev at 8dc3ef625 brought curator 0.16.0: argus-cortex 0.6, the argus-iris GPU broker, the requested SingGuard mode recorded as `guard_config.thinking` (argus-curator#152), and the under-18 rule over the whole frame by default. The fixture scan is unchanged; the imported curator docs gain `docs/gpu.md`.
 - Compose passes the broker settings to the curator: `ARGUS_GPU_COORDINATOR=broker` with `ARGUS_GPU_BROKER_URL` (an IP: the container does not resolve LAN host names), `ARGUS_GPU_BROKER_TOKEN` and `ARGUS_GPU_BROKER_FALLBACK` (the host lease, by default). The tenant manifest is the one the curator image ships. `.env.example` shows them. It also passes `CURATOR_TRUSTED_HOSTS` (argus-cortex 0.6 refuses a same-host write by DNS name).
 
 ### Added
@@ -21,6 +21,7 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ### Fixed
 
+- The curator drift job could not open its sync PR: it staged `web/public/docs`, which does not exist, so `git add` failed and the job filed an issue instead (#82, #90). `make sync-curator` also failed when `.venv-curator` already existed; it now recreates it.
 - A rejected frame's detail view said "Scanning…" over its blur. It now says it was rejected, with the reason, and why it stays blurred.
 - The keep-set lists in a disabled group (the static demo) were scroll regions no keyboard could reach; they now list in full.
 
