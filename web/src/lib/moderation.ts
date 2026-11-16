@@ -13,6 +13,14 @@ import {
   type ScanSummary,
 } from "./types";
 
+/**
+ * The NudeNet score "Drop exposed nudity" starts at: any exposure NudeNet reports (its 0.2
+ * reporting floor; curator's DEFAULT_NSFW_THRESHOLD, darkroom's default). Conservative on
+ * purpose: on NudeNet 640m a 0.5 cutoff let through exposed images scored 0.27-0.49
+ * (argus-curator#156).
+ */
+export const DEFAULT_NSFW_THRESHOLD = 0.2;
+
 export function sameMembers(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false;
   const have = new Set(right);
