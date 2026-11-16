@@ -50,6 +50,10 @@ The curator is the CUDA build (`gpus: all`), so the host needs the NVIDIA contai
 
 Put machine-local changes like those in `compose.override.yaml`, which compose merges automatically and git ignores. Check it after an update: an override that pins its own `image:` or `build:` keeps the old curator.
 
+### Licences
+
+argus-cull is MIT. The NudeNet, EraX and watermark sidecars are the exception: each image combines its MIT `app.py` with an AGPL-3.0 library (NudeNet or Ultralytics), so the built images are AGPL-3.0 works. They are built locally, never published, and reached only over HTTP, so curator and the rest of the suite stay MIT. Each sidecar's `NOTICE.md` ([nudenet](nudenet/NOTICE.md), [erax](erax/NOTICE.md), [watermark](watermark/NOTICE.md)) lists the licence of its library and weights. The default watermark weights state no licence; the notice names the licensed alternative.
+
 ### Sidecar and web tuning
 
 The NudeNet, EraX and watermark sidecars all serve `POST /infer` in NudeNet's shape: multipart image fields (`f1`, `f2`, …) in, `{"prediction": [[{"class", "score", "box": [x, y, w, h]}, …], …], "success": true}` out, one list per image in the order sent. Each also answers `GET /health`. A detector that speaks this contract can stand in for one of them. Their settings are baked into each image as defaults and compose does not pass them through, so set them under that service's `environment:` in `compose.override.yaml`.

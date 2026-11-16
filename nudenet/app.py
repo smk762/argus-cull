@@ -14,7 +14,7 @@ import threading
 from pathlib import Path
 
 from fastapi import FastAPI
-from nudenet import NudeDetector
+from nudenet import NudeDetector  # nosemgrep: agpl-import -- this sidecar serves NudeNet (AGPL-3.0) over HTTP; see NOTICE.md
 from sidecar import add_infer, decode_bgr
 
 log = logging.getLogger("nudenet")

@@ -30,5 +30,8 @@ ENV PYTHONUNBUFFERED=1 \
     ERAX_MODEL=/models/erax_nsfw_yolo11s.pt \
     ERAX_CONF=0.2 \
     ERAX_IOU=0.3
+LABEL org.opencontainers.image.licenses="AGPL-3.0" \
+      org.opencontainers.image.source="https://github.com/smk762/argus-cull" \
+      org.opencontainers.image.description="argus-cull erax sidecar: MIT app.py combined with ultralytics (AGPL-3.0). See erax/NOTICE.md."
 EXPOSE 8080
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]

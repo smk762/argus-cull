@@ -37,5 +37,8 @@ ENV PYTHONUNBUFFERED=1 \
     WATERMARK_CONF=0.2 \
     WATERMARK_IOU=0.5 \
     WATERMARK_IMGSZ=1024
+LABEL org.opencontainers.image.licenses="AGPL-3.0" \
+      org.opencontainers.image.source="https://github.com/smk762/argus-cull" \
+      org.opencontainers.image.description="argus-cull watermark sidecar: MIT app.py combined with ultralytics (AGPL-3.0). See watermark/NOTICE.md."
 EXPOSE 8080
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
