@@ -2,6 +2,6 @@
   "package": "argus-curator",
   "repo": "smk762/argus-curator",
   "branch": "dev",
-  "commit": "f9aae0bbfe20f9a25cc57dd608643dc168828b1b",
-  "version": "0.15.1.dev9+gf9aae0bbf"
+  "commit": "8dc3ef625084b00eff954e0d875309cbc389323f",
+  "version": "0.15.1.dev22+g8dc3ef625"
 }
