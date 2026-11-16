@@ -74,6 +74,21 @@ jobs:
           python scripts/make_fixture.py
           if [ -n "$(git status --porcelain fixture)" ]; then git status --short fixture; exit 1; fi
 
+  # The detectors are argus-retina's AGPL-3.0 images, reached over HTTP. Nothing here may
+  # import nudenet or ultralytics: suite-rules' agpl-import catches the import, and this
+  # catches an exemption that would silence it.
+  licence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: No agpl-import exemptions
+        run: |
+          if git grep -n "nosemgrep: *agpl-import" -- ':!CLAUDE.md' ':!.github/workflows/ci.yml'; then
+            echo "::error::An agpl-import exemption is back. Use argus-retina's detector images instead."
+            exit 1
+          fi
+
   suite-rules:
     # argus-ci suite rules: lint rules that each eliminate a finding class. New violations fail;
     # existing ones are in .suite-rules-baseline.json, which may only shrink.

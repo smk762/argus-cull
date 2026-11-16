@@ -12,16 +12,6 @@ argus-cortex's SUITE.md** (a PR to argus-cortex in the same release).
 
 Not checked out? Read https://github.com/smk762/argus-cortex/blob/dev/SUITE.md
 
-## Must never happen
-
-Each row names what enforces it. An **UNENFORCED** row is a known gap. (Only the licensing rows so far; #92 covers the rest.)
-
-| Never | Enforced by |
-|---|---|
-| Anything outside the three sidecars importing `nudenet` or `ultralytics` (AGPL-3.0) | CI `suite-rules` (argus-ci `agpl-import`). Only `nudenet/`, `erax/` and `watermark/` `app.py` carry a reasoned `nosemgrep` |
-| A sidecar image published, or run in a public deployment without an AGPL source offer | **UNENFORCED**. Today `release.yml` pushes only the web image, and the demo runs no sidecars |
-| A sidecar's library or weights changed without updating its `NOTICE.md` | **UNENFORCED** |
-
 ## Branches
 
 `dev` is the default branch and the base for every PR. Cut feature branches from `origin/dev` and bring them up to date by merging `origin/dev`, never `main`. Never push work to `main` or open a PR against it, except the release PR from `dev`: `main` must never be ahead of `dev`, with one exception. A release fast-forwards `main` to a `dev` commit that passed CI (`git push origin origin/dev:main`), then tags it. If `main` is protected, the release is a reviewed PR from `dev` into `main`, and merging it leaves a merge commit on `main` alone. That merge commit is the one exception to the rule: it leaves `main` one commit ahead of `dev` with an identical tree. Leave it there and don't merge `main` back into `dev`. Anything else on `main` that `dev` lacks is a mistake (`git diff origin/dev origin/main` must be empty). Once `main` carries such a commit it can't be fast-forwarded, so later releases are PRs too.
@@ -41,6 +31,7 @@ Read this before touching `shouldBlur`, `veilFor`, the static demo, the tape or 
 | `web/vendor/dh` is edited here | CI job `dh-shared` (`sync-shared.mjs --check`) |
 | The curator commit, its docs and the recorded fixture scan disagree | CI job `fixture` (`sync_check.py`, `record_fixture.py --check`) and `npm run docs:check`. Move them together with `make sync-curator` |
 | `fixture/` holds anything but the shapes `scripts/make_fixture.py` draws | CI job `fixture`, step "fixture/ is what make_fixture.py draws" |
+| Code in this repo imports `nudenet` or `ultralytics` (AGPL-3.0). The detectors are argus-retina's published images, reached over HTTP, never built or vendored here | CI `suite-rules` (argus-ci `agpl-import`, empty baseline), and CI job `licence`, which fails on any `nosemgrep: agpl-import` exemption |
 | The demo tape holds a minor, or anything but the set `PROVENANCE.md` describes | `web/src/lib/tape.test.ts` "is the adult set PROVENANCE.md describes…" checks the ages and the count. That the images are synthetic, with no real people or photos, is **UNENFORCED**: a human reviews every re-recorded tape against `web/public/data-tape/PROVENANCE.md` |
 
 ## Web guidance
