@@ -4,6 +4,11 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ## [Unreleased]
 
+### Changed
+
+- **Curator moves to dev at 8dc3ef625**, which carries curator 0.16.0 (its `/health` reports `0.15.1.dev22`, as a dev build without the release tag): argus-cortex 0.6, the argus-iris GPU broker, the requested SingGuard mode recorded as `guard_config.thinking` (argus-curator#152), and the under-18 rule over the whole frame by default. The fixture scan is unchanged; the imported curator docs gain `docs/gpu.md`.
+- Compose passes the broker settings to the curator: `ARGUS_GPU_COORDINATOR=broker` with `ARGUS_GPU_BROKER_URL` (an IP: the container does not resolve LAN host names), `ARGUS_GPU_BROKER_TOKEN` and `ARGUS_GPU_BROKER_FALLBACK` (the host lease, by default). The tenant manifest is the one the curator image ships. `.env.example` shows them. It also passes `CURATOR_TRUSTED_HOSTS` (argus-cortex 0.6 refuses a same-host write by DNS name).
+
 ### Added
 
 - The *Scanned by* line names SingGuard's thinking mode, read from the mode each verdict was judged in: fast and slow together read as `cascade (fast N, slow M)`. All fast may be a cascade scan whose screen flagged nothing, and the tooltip says so; once curator records the requested mode (argus-curator#152), that is used instead (#63).

@@ -24,11 +24,11 @@ services:
     # host needs the NVIDIA container runtime and a driver for CUDA 13; on a host
     # without one, set CURATOR_GPU=0 in .env and drop `gpus` below.
     # docker-compose.local-curator.yaml builds a sibling checkout instead.
-    image: argus-curator:dev-f9aae0bbf
+    image: argus-curator:dev-8dc3ef625
     build:
-      context: https://github.com/smk762/argus-curator.git#f9aae0bbfe20f9a25cc57dd608643dc168828b1b
+      context: https://github.com/smk762/argus-curator.git#8dc3ef625084b00eff954e0d875309cbc389323f
       args:
-        VERSION: 0.15.1.dev9+gf9aae0bbf
+        VERSION: 0.15.1.dev22+g8dc3ef625
         GPU: ${CURATOR_GPU:-1}
     gpus: all
     ports:
@@ -65,6 +65,11 @@ services:
       # Empty keeps the curator's localhost:3000 allow-list. A set value replaces
       # that list, so name every origin the page is opened as.
       - CURATOR_CORS_ORIGINS=${CURATOR_CORS_ORIGINS-}
+      # Host names (no port) the curator is reached by, when a page served from
+      # the curator's own host:port writes to it (argus-cortex 0.6 refuses a
+      # same-host write by DNS name otherwise). Cull's page is another origin,
+      # so CURATOR_CORS_ORIGINS covers it; this is rarely needed.
+      - CURATOR_TRUSTED_HOSTS=${CURATOR_TRUSTED_HOSTS-}
       # Export's Move: each kept file (and its .txt / .xmp / .json sidecars)
       # leaves the source folder for the curated output root. ALLOW_MOVE=1 in
       # .env turns it on; off, the export dialog offers Copy and Symlink only.
@@ -80,6 +85,14 @@ services:
       - ARGUS_GPU_COORDINATOR=${ARGUS_GPU_COORDINATOR:-lease}
       - ARGUS_GPU_LEASE_PATH=/run/argus-gpu/argus-gpu.lock
       - ARGUS_GPU_LEASE_TIMEOUT_S=${ARGUS_GPU_LEASE_TIMEOUT_S:-300}
+      # ARGUS_GPU_COORDINATOR=broker asks argus-iris, the suite's GPU broker,
+      # instead; the lease above is its fallback while iris is down. Give the
+      # broker URL as an IP: the container does not resolve LAN host names.
+      # The token is the suite's caller token, from the host's .env only.
+      - ARGUS_GPU_BROKER_URL=${ARGUS_GPU_BROKER_URL-}
+      - ARGUS_GPU_BROKER_TOKEN=${ARGUS_GPU_BROKER_TOKEN-}
+      - ARGUS_GPU_TENANT_MANIFEST=${ARGUS_GPU_TENANT_MANIFEST:-/app/gpu-tenant.yaml}
+      - ARGUS_GPU_BROKER_FALLBACK=${ARGUS_GPU_BROKER_FALLBACK:-lease}
     volumes:
       - ${CURATOR_SOURCE_PATH:-./fixture}:/data/images
       # The curated output root (CURATED_OUTPUT_ROOT_PATH in .env).
