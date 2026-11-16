@@ -3,7 +3,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { awaitingChecks, DEFAULT_BLUR, mergeChunk, shouldBlur } from "./chunks";
+import { awaitingChecks, DEFAULT_BLUR, isMinorExposed, measuredAges, mergeChunk, shouldBlur, youngestAge } from "./chunks";
 import { autoTags, parseCohortConfig } from "./cohorts";
 import { availability, selectBody } from "./select";
 import { runStats } from "./runStats";
@@ -58,6 +58,20 @@ describe("the committed tape", () => {
     expect(recordedSelection(tape, scan.scan_id, { ...request, min_score: 0.8 })).toBeNull();
     expect(recordedSelection(tape, "another-scan", request)).toBeNull();
     expect(tape.select.result.rows.map((row) => row.rel_path).sort()).toEqual(scan.results.map((image) => image.rel_path).sort());
+  });
+
+  // PROVENANCE.md says what the set is. That the images are synthetic is a human review rule; that every
+  // face reads as an adult, and that the set is the size the document says, are checked here.
+  it("is the adult set PROVENANCE.md describes: every face 25 or older, nothing under-18 exposed", () => {
+    const provenance = readFileSync(new URL("PROVENANCE.md", TAPE), "utf8");
+    const stated = /The (\d+) images in this demo are \*\*synthetic\*\*/.exec(provenance);
+    expect(stated, "PROVENANCE.md no longer states the image count").not.toBeNull();
+    expect(scan.results).toHaveLength(Number(stated![1]));
+    for (const image of scan.results) {
+      for (const age of measuredAges(image)) expect(age, image.rel_path).toBeGreaterThanOrEqual(25);
+      expect(youngestAge(image) ?? 18, image.rel_path).toBeGreaterThanOrEqual(18);
+      expect(isMinorExposed(image), image.rel_path).toBe(false);
+    }
   });
 
   it("names no host path, private address or local host name", () => {
