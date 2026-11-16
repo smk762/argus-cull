@@ -16,7 +16,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from sidecar import add_infer, decode_bgr
-from ultralytics import YOLO
+from ultralytics import YOLO  # nosemgrep: agpl-import -- this sidecar serves Ultralytics (AGPL-3.0) over HTTP; see NOTICE.md
 
 log = logging.getLogger("erax")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

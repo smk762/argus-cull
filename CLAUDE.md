@@ -10,7 +10,17 @@ argus-cortex's SUITE.md** (a PR to argus-cortex in the same release).
 
 @../argus-core/SUITE.md
 
-Not checked out? Read https://github.com/smk762/argus-cortex/blob/main/SUITE.md
+Not checked out? Read https://github.com/smk762/argus-cortex/blob/dev/SUITE.md
+
+## Must never happen
+
+Each row names what enforces it. An **UNENFORCED** row is a known gap. (Only the licensing rows so far; #92 covers the rest.)
+
+| Never | Enforced by |
+|---|---|
+| Anything outside the three sidecars importing `nudenet` or `ultralytics` (AGPL-3.0) | CI `suite-rules` (argus-ci `agpl-import`). Only `nudenet/`, `erax/` and `watermark/` `app.py` carry a reasoned `nosemgrep` |
+| A sidecar image published, or run in a public deployment without an AGPL source offer | **UNENFORCED**. Today `release.yml` pushes only the web image, and the demo runs no sidecars |
+| A sidecar's library or weights changed without updating its `NOTICE.md` | **UNENFORCED** |
 
 ## Branches
 

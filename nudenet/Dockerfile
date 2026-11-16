@@ -25,5 +25,8 @@ COPY app.py .
 ENV PYTHONUNBUFFERED=1 \
     NUDENET_MODEL=/models/640m.onnx \
     NUDENET_RESOLUTION=640
+LABEL org.opencontainers.image.licenses="AGPL-3.0" \
+      org.opencontainers.image.source="https://github.com/smk762/argus-cull" \
+      org.opencontainers.image.description="argus-cull nudenet sidecar: MIT app.py combined with nudenet (AGPL-3.0). See nudenet/NOTICE.md."
 EXPOSE 8080
 CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
