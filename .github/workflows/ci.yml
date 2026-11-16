@@ -66,6 +66,13 @@ jobs:
           pip install "argus-curator @ git+https://github.com/smk762/argus-curator@${commit}"
       - run: python scripts/check_fixture.py
       - run: python scripts/record_fixture.py --check
+      # fixture/ is drawn shapes, not photographs and not people: exactly what make_fixture.py draws.
+      # A file added by hand shows as deleted once the folder is cleared and redrawn.
+      - name: fixture/ is what make_fixture.py draws
+        run: |
+          find fixture -type f ! -name README.md -delete
+          python scripts/make_fixture.py
+          if [ -n "$(git status --porcelain fixture)" ]; then git status --short fixture; exit 1; fi
 
   suite-rules:
     # argus-ci suite rules: lint rules that each eliminate a finding class. New violations fail;
