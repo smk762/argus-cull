@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 
 import type { Caption } from "./cohorts";
@@ -26,14 +26,39 @@ function stem(imagePath: string): string {
   return path.join(parsed.dir, parsed.name);
 }
 
+function missing(err: unknown): boolean {
+  return err instanceof Error && "code" in err && (err.code === "ENOENT" || err.code === "ENOTDIR" || err.code === "EISDIR");
+}
+
+/** The first MAX_SIDECAR_BYTES bytes of *file* as text: a larger sidecar is never read past the cap. */
 async function readSmall(file: string): Promise<string | null> {
+  let handle: FileHandle;
   try {
-    const text = await readFile(file, "utf8");
-    return text.length > MAX_SIDECAR_BYTES ? text.slice(0, MAX_SIDECAR_BYTES) : text;
+    handle = await open(file, "r");
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err && (err.code === "ENOENT" || err.code === "ENOTDIR" || err.code === "EISDIR")) return null;
+    if (missing(err)) return null;
     throw err;
   }
+  try {
+    const buffer = Buffer.alloc(MAX_SIDECAR_BYTES);
+    let filled = 0;
+    while (filled < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, filled, buffer.length - filled, filled);
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+    return buffer.subarray(0, filled).toString("utf8");
+  } catch (err: unknown) {
+    if (missing(err)) return null;
+    throw err;
+  } finally {
+    await handle.close();
+  }
+}
+
+/** A numeric character reference's character, or U+FFFD when it names no code point. */
+function codePoint(value: number): string {
+  return Number.isSafeInteger(value) && value <= 0x10ffff ? String.fromCodePoint(value) : "\uFFFD";
 }
 
 function decodeEntities(text: string): string {
@@ -42,7 +67,8 @@ function decodeEntities(text: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#(\d+);/g, (_, code: string) => codePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => codePoint(Number.parseInt(hex, 16)))
     .replace(/&amp;/g, "&");
 }
 
