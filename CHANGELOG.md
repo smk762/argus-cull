@@ -23,6 +23,15 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ### Fixed
 
+- Audit fixes (ai-code-auditor packs):
+  - SingGuard: an `<answer>` that is a fragment ("B", "No"), a heading cut mid-word, or fits more than one heading is unreadable (unsafe, no rule) rather than the first heading it prefixes; a run-on answer needs punctuation after the heading. Same rule as agent-composer's guard policy.
+  - SingGuard refuses to start with `trust_remote_code` and no pinned revision: `SINGGUARD_REVISION` must be a full commit sha, and unset, the default model loads at the sha `singguard/inputs.py` pins. A request image over 80 MP or 64 MiB of base64 is a 400 before it is decoded, and a decompression bomb is a 400, not a 500.
+  - The ages-still-coming hold no longer lifts on an adult set age while face detection runs.
+  - Labels apply only to the folder they were loaded for, so another folder's shield overrides never unveil a frame; a note saved on blur survives a verdict clicked straight after.
+  - Caption batches in flight when results stream in are no longer dropped; a watched scan from another tab is fetched once more when it ends.
+  - SSE frames with CRLF or CR line endings parse, and a non-JSON frame no longer drops the frames around it.
+  - Caption sidecars are read up to 64 KiB, in bytes, without buffering the rest; an out-of-range `&#…;` entity is U+FFFD, and hex entities decode.
+  - `record_tape.py`: a dotted image name reads its own sidecar; a failed fetch leaves the previous tape in place; a scan result with no `keep_reason` counts as left out.
 - The curator drift job could not open its sync PR: it staged `web/public/docs`, which does not exist, so `git add` failed and the job filed an issue instead (#82, #90). `make sync-curator` also failed when `.venv-curator` already existed; it now recreates it.
 - A rejected frame's detail view said "Scanning…" over its blur. It now says it was rejected, with the reason, and why it stays blurred.
 - The keep-set lists in a disabled group (the static demo) were scroll regions no keyboard could reach; they now list in full.
