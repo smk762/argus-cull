@@ -9,7 +9,9 @@ import type { Tape } from "@/lib/tape";
 import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
-import { labelsJsonl, type ImageLabel } from "@/lib/labels";
+import { fetchMissingCaptions } from "@/lib/captionBatches";
+import { scanToRefetch } from "@/lib/scanWatch";
+import { LabelSaver, labelsForFolder, labelsJsonl, type ImageLabel, type LabelPatch } from "@/lib/labels";
 import { DOCS } from "@/lib/docsLinks";
 import { madeWith } from "@/lib/madeWith";
 import { defaultExportDest, exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
@@ -83,8 +85,9 @@ export function CullApp() {
   const [healthError, setHealthError] = useState<string | null>(null);
   const [detectors, setDetectors] = useState<Detectors | null>(null);
   const [guardPolicies, setGuardPolicies] = useState<GuardPolicyInfo[] | null>(null);
-  const [labels, setLabels] = useState<Map<string, ImageLabel>>(() => new Map());
+  const [loadedLabels, setLabels] = useState<Map<string, ImageLabel>>(() => new Map());
   const [labelsFolder, setLabelsFolder] = useState<string | null>(null);
+  const [labelSaver] = useState(() => new LabelSaver(putLabel));
   const [labelSaving, setLabelSaving] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -102,6 +105,10 @@ export function CullApp() {
   // Switched-off policies belong to one scan; opening another starts with every policy on.
   const offPolicies = policyOff && policyOff.scanId === rawSummary?.scan_id ? policyOff.off : NO_POLICIES_OFF;
   const summary = useMemo(() => (rawSummary ? withoutPolicies(rawSummary, offPolicies) : null), [rawSummary, offPolicies]);
+  // Labels follow the scanned folder, not the scan, so they survive a rescan under other policies.
+  const scanFolderPath = summary?.folder ?? null;
+  // Until this folder's labels load (or if they fail to), none apply: never the last folder's overrides.
+  const labels = labelsForFolder(loadedLabels, labelsFolder, scanFolderPath);
   const allPolicies = useMemo(() => policiesRun(rawSummary), [rawSummary]);
   const policyFlags = useMemo(() => policyFlagCounts(rawSummary?.results ?? []), [rawSummary]);
   const [selection, setSelection] = useState<SelectResult | null>(null);
@@ -177,40 +184,18 @@ export function CullApp() {
   const resultPaths = summary?.results ?? [];
   useEffect(() => {
     if (!wantsCaptions || captionError) return;
-    const missing = resultPaths.map((image) => image.abs_path).filter((abs) => !captionsAsked.current.has(abs));
-    if (missing.length === 0) return;
-    for (const abs of missing) captionsAsked.current.add(abs);
-    let cancel = false;
-    const batches: string[][] = [];
-    for (let start = 0; start < missing.length; start += 400) batches.push(missing.slice(start, start + 400));
-    const giveBack = (batch: string[]) => {
-      for (const abs of batch) captionsAsked.current.delete(abs);
-    };
-    (async () => {
-      for (const [index, batch] of batches.entries()) {
-        try {
-          const found = await getCaptions(batch);
-          if (cancel) {
-            giveBack(batch);
-            batches.slice(index + 1).forEach(giveBack);
-            return;
-          }
-          setCaptions((current) => {
-            const next = new Map(current);
-            for (const [abs, caption] of Object.entries(found)) next.set(abs, caption);
-            return next;
-          });
-        } catch (err: unknown) {
-          giveBack(batch);
-          batches.slice(index + 1).forEach(giveBack);
-          if (!cancel) setCaptionError(err instanceof Error ? err.message : "Could not read captions.");
-          return;
-        }
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
+    // No cancel on re-run: a batch in flight when more results stream in is still applied (see fetchMissingCaptions).
+    fetchMissingCaptions(
+      resultPaths.map((image) => image.abs_path),
+      captionsAsked.current,
+      getCaptions,
+      (found) =>
+        setCaptions((current) => {
+          const next = new Map(current);
+          for (const [abs, caption] of Object.entries(found)) next.set(abs, caption);
+          return next;
+        }),
+    ).catch((err: unknown) => setCaptionError(err instanceof Error ? err.message : "Could not read captions."));
     // resultPaths is a new array each render; the length and scan are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantsCaptions, captionError, summary?.scan_id, resultPaths.length]);
@@ -342,8 +327,26 @@ export function CullApp() {
   }, [openPath, rawSummary, scanning]);
 
   const activeScanId = scanList?.active?.scan_id ?? null;
+  // The running scan this tab is polling, so the poll's end can fetch the finished summary.
+  const watchedScan = useRef<string | null>(null);
   useEffect(() => {
-    if (!activeScanId || scanning || view.scan !== activeScanId) return;
+    if (!activeScanId || scanning || view.scan !== activeScanId) {
+      const finished = scanToRefetch(watchedScan.current, activeScanId, view.scan, scanning);
+      watchedScan.current = null;
+      if (!finished) return;
+      let cancel = false;
+      getScan(finished)
+        .then((body) => {
+          if (!cancel) setSummary(body);
+        })
+        .catch(() => {
+          // The load effect and the next visit still read it; a missed refresh only leaves the partial summary.
+        });
+      return () => {
+        cancel = true;
+      };
+    }
+    watchedScan.current = activeScanId;
     let cancel = false;
     const refresh = () => {
       getScan(activeScanId)
@@ -447,8 +450,6 @@ export function CullApp() {
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
 
-  // Labels follow the scanned folder, not the scan, so they survive a rescan under other policies.
-  const scanFolderPath = summary?.folder ?? null;
   useEffect(() => {
     if (!scanFolderPath) return;
     if (scanFolderPath === labelsFolder) return;
@@ -468,12 +469,12 @@ export function CullApp() {
     };
   }, [scanFolderPath, labelsFolder]);
 
-  async function saveLabel(relPath: string, next: Omit<ImageLabel, "updated_at"> | null) {
+  async function saveLabel(relPath: string, patch: LabelPatch | null) {
     if (!scanFolderPath) return;
     setLabelSaving(true);
     setLabelError(null);
     try {
-      const file = await putLabel(scanFolderPath, relPath, next);
+      const file = await labelSaver.save(scanFolderPath, relPath, patch, labels.get(relPath) ?? null);
       setLabels(new Map(Object.entries(file.labels)));
       setLabelsFolder(scanFolderPath);
     } catch (err: unknown) {
@@ -487,6 +488,7 @@ export function CullApp() {
     if (!scanFolderPath) return;
     const file = await resetDemoLabels(scanFolderPath);
     setLabels(new Map(Object.entries(file.labels)));
+    setLabelsFolder(scanFolderPath);
   }
 
   function downloadLabels() {

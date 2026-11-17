@@ -853,6 +853,16 @@ describe("set age", () => {
     expect(isMinorExposed(adult)).toBe(false);
     expect(filterByAge([body, adult], 18, null).map((image) => image.set_age?.years)).toEqual([24]);
   });
+
+  it("does not lift the hold while face detection is still running", () => {
+    // An adult set age on an exposed frame whose own face reading has not landed yet.
+    const waiting = { face_count: 0, faces: [], primary_face_attributes: null, set_age: { ...set, years: 24 }, nsfw: exposed } as unknown as ImageResult;
+    expect(revealHeld(waiting, ["faces"])).toBe(true);
+    expect(awaitingChecks(waiting, ["faces"])).toBe(true);
+    expect(shouldBlur(waiting, ["faces"], { exposedScore: 0.9, policyBlur: false, unblurNsfw: true })).toBe(true);
+    // Once faces have run and found no one, the set age stands in and an adult one adds no hold.
+    expect(revealHeld(waiting, [])).toBe(false);
+  });
 });
 
 describe("EraX fill-in", () => {

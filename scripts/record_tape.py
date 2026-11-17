@@ -150,9 +150,10 @@ def parse_xmp(xml: str) -> tuple[list[str], str]:
 
 
 def read_caption(images: Path, rel_path: str) -> dict | None:
-    stem = (images / rel_path).with_suffix("")
-    txt = stem.with_suffix(".txt")
-    xmp = stem.with_suffix(".xmp")
+    # The image's own suffix swapped, as web/src/lib/captionStore.ts does: portrait.v2.jpg -> portrait.v2.txt.
+    image = images / rel_path
+    txt = image.with_suffix(".txt")
+    xmp = image.with_suffix(".xmp")
     text = txt.read_text(errors="replace")[:65536].strip() if txt.is_file() else ""
     keywords, description = parse_xmp(xmp.read_text(errors="replace")[:65536]) if xmp.is_file() else ([], "")
     if not txt.is_file() and not xmp.is_file():
@@ -241,8 +242,12 @@ def run_stats(summary: dict, select: dict | None) -> dict:
 
 
 def select_from_scan(summary: dict) -> dict:
-    """Without a curator to ask: the keep reasons the scan recorded, which are its default filters."""
-    rows = [{"rel_path": image["rel_path"], "abs_path": image["abs_path"], "keep_reason": image.get("keep_reason", "")} for image in summary["results"]]
+    """Without a curator to ask: the keep reasons the scan recorded, which are its default filters.
+
+    As in curator's SelectRow, an empty keep_reason means kept and a non-empty one is why the frame
+    was left out. A result with no keep_reason at all is left out ("unknown"), not counted as kept.
+    """
+    rows = [{"rel_path": image["rel_path"], "abs_path": image["abs_path"], "keep_reason": image.get("keep_reason", "unknown")} for image in summary["results"]]
     return {"scan_id": summary["scan_id"], "total": len(rows), "kept": sum(1 for row in rows if row["keep_reason"] == ""), "rows": rows}
 
 
@@ -366,8 +371,48 @@ def record(args: argparse.Namespace) -> None:
         raise SystemExit("--about must be a JSON list of {label, text}")
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+    # Build beside the old tape and swap it in only once it is whole: a fetch that fails partway
+    # (the curator down, an image gone) leaves the previous tape as it was.
+    final = out
+    out = final.with_name(final.name + ".tmp")
     if out.exists():
         shutil.rmtree(out)
+    try:
+        write_tape(out, args, summary, select, fetch, captions, labels, cohorts, about, health, detectors, policies, source, curator_version, folder, scrub, now)
+    except BaseException:
+        shutil.rmtree(out, ignore_errors=True)
+        raise
+    old = final.with_name(final.name + ".old")
+    if old.exists():
+        shutil.rmtree(old)
+    if final.exists():
+        os.replace(final, old)
+    os.replace(out, final)
+    shutil.rmtree(old, ignore_errors=True)
+    tape = json.loads((final / "tape.json").read_text())
+    print(f"tape: {len(tape['files'])} images, {tape['provenance']['kind']}, curator {curator_version or 'unknown'} -> {final}")
+
+
+def write_tape(
+    out: Path,
+    args: argparse.Namespace,
+    summary: dict,
+    select: dict,
+    fetch: Callable[[str], bytes],
+    captions: dict[str, Any],
+    labels: dict,
+    cohorts: Any,
+    about: Any,
+    health: dict,
+    detectors: Any,
+    policies: Any,
+    source: str,
+    curator_version: str | None,
+    folder: str,
+    scrub: Callable[[Any], Any],
+    now: str,
+) -> None:
+    """Every tape file under *out*, a fresh folder; raises SystemExit if one still names a host path."""
     for sub in ("thumbs", "images", "detail", "veils"):
         (out / sub).mkdir(parents=True)
 
@@ -424,7 +469,6 @@ def record(args: argparse.Namespace) -> None:
     if args.provenance_doc:
         shutil.copyfile(args.provenance_doc, out / "PROVENANCE.md")
     check_leaks(out)
-    print(f"tape: {len(files)} images, {tape['provenance']['kind']}, curator {curator_version or 'unknown'} -> {out}")
 
 
 def main() -> None:

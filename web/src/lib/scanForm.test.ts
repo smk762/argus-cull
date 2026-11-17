@@ -260,6 +260,26 @@ describe("run stats", () => {
     expect(young.age.frames_minor_exposed).toBe(1);
   });
 
+  it("counts an under-18 set age on a faceless frame as aged and under 18", () => {
+    const set = { ...SET_AGE, years: 16.4 };
+    const minor = runStats(
+      { ...SUMMARY, set_age: set, results: [image("a.jpg", { set_age: set, nsfw: { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.4 }, exposed_score: 0.4 } })] },
+      null,
+      new Map(),
+      new Map(),
+      NO_TAGS,
+      [],
+    );
+    expect(minor.age).toMatchObject({
+      frames_with_set_age: 1,
+      frames_without_age: 0,
+      frames_under_18: 1,
+      frames_minor_exposed: 1,
+      frames_under_18_not_exposed: 0,
+      youngest_from: { face: 0, body: 0, set: 1 },
+    });
+  });
+
   it("bands NudeNet and rates each policy", () => {
     expect(stats.nudenet).toMatchObject({ scored: 5, mean_exposed: 0.34, bands: { low: 2, mid: 1, high: 2, unscored: 0 } });
     expect(stats.nudenet.source).toEqual({ nudenet: 5, erax_filled: 0, erax_only: 0, unscored: 0 });

@@ -200,8 +200,10 @@ services:
     environment:
       - HF_HOME=/data/hf
       - SINGGUARD_MODEL=${SINGGUARD_MODEL:-inclusionAI/Sing-Guard-4b}
-      # Hub commit sha to pin. The model loads with trust_remote_code, so this
-      # also pins the code that runs. Empty follows the branch head.
+      # Hub commit sha (all 40 characters) to pin. The model loads with
+      # trust_remote_code, so this also pins the code that runs. Empty uses the
+      # sha singguard/inputs.py pins for the default model; another model
+      # refuses to start without one.
       - SINGGUARD_REVISION=${SINGGUARD_REVISION:-}
       - SINGGUARD_LOAD_IN_4BIT=${SINGGUARD_LOAD_IN_4BIT:-0}
       # Generation budget for the reasoning modes (fast-slow, slow) and for

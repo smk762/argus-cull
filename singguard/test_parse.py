@@ -1,6 +1,6 @@
 import unittest
 
-from parse import NoVerdict, parse_generation, to_response
+from parse import NoVerdict, _first_line_verdict, parse_generation, to_response
 
 
 class ParseGenerationTest(unittest.TestCase):
@@ -198,6 +198,58 @@ class ParseGenerationTest(unittest.TestCase):
             "unsafe\n<answer>A. Illegal Sexual Content</answer>", policy
         )
         self.assertEqual(rule, "A. Illegal Sexual Content")
+        self.assertNotIn("unreadable", explanation)
+
+
+    def test_first_line_verdict_of_an_empty_generation_is_none(self) -> None:
+        self.assertIsNone(_first_line_verdict(""))
+        self.assertIsNone(_first_line_verdict("  \n\n"))
+        self.assertFalse(_first_line_verdict("\nunsafe\n<answer>x</answer>"))
+
+    def test_empty_generation_is_a_failed_check(self) -> None:
+        for text in ("", "   \n\n  "):
+            with self.assertRaises(NoVerdict):
+                parse_generation(text)
+
+    def test_a_one_letter_answer_is_not_a_rule(self) -> None:
+        safe, rule, explanation, _ = parse_generation("unsafe\n<answer>B</answer>")
+        self.assertFalse(safe)
+        self.assertEqual(rule, "")
+        self.assertIn("unreadable", explanation)
+
+    def test_a_word_that_opens_a_heading_is_not_a_rule(self) -> None:
+        policy = "### Non-violent Crimes\n  - fraud\n### Safe\n  - anything else\n"
+        safe, rule, explanation, _ = parse_generation("unsafe\n<answer>No</answer>", policy)
+        self.assertFalse(safe)
+        self.assertEqual(rule, "")
+        self.assertIn("unreadable", explanation)
+
+    def test_a_heading_cut_mid_word_is_not_a_rule(self) -> None:
+        safe, rule, explanation, _ = parse_generation("unsafe\n<answer>B. Real-Wor</answer>")
+        self.assertFalse(safe)
+        self.assertEqual(rule, "")
+        self.assertIn("unreadable", explanation)
+
+    def test_a_shortened_answer_that_fits_two_headings_is_not_a_rule(self) -> None:
+        policy = "### S1 Violent Crimes\n  - a\n### S1 Violent Crimes Against Animals\n  - b\n"
+        safe, rule, explanation, _ = parse_generation("unsafe\n<answer>S1 Violent</answer>", policy)
+        self.assertFalse(safe)
+        self.assertEqual(rule, "")
+        self.assertIn("unreadable", explanation)
+
+    def test_a_run_on_answer_needs_a_boundary_after_the_heading(self) -> None:
+        policy = "### S1\n  - a\n### S10\n  - b\n"
+        safe, rule, _, _ = parse_generation("unsafe\n<answer>S10, elections</answer>", policy)
+        self.assertFalse(safe)
+        self.assertEqual(rule, "S10")
+        safe, rule, explanation, _ = parse_generation("unsafe\n<answer>S10 Elections</answer>", policy)
+        self.assertEqual(rule, "")
+        self.assertIn("unreadable", explanation)
+
+    def test_a_shortened_heading_at_a_word_boundary_is_still_a_rule(self) -> None:
+        safe, rule, explanation, _ = parse_generation("unsafe\n<answer>B. Real-World</answer>")
+        self.assertFalse(safe)
+        self.assertEqual(rule, "B. Real-World")
         self.assertNotIn("unreadable", explanation)
 
 
