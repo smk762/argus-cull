@@ -7,7 +7,7 @@ import { ageMissing, awaitingChecks, bodyAges, DEFAULT_BLUR, isMinorExposed, mea
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
 import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/lib/guardText";
-import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
+import { EXPECT_LABELS, EXPECTS, labelFields, type ImageLabel, type LabelPatch } from "@/lib/labels";
 import { DOCS } from "@/lib/docsLinks";
 import { contentRating, nudeNetLabel } from "@/lib/moderation";
 import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle } from "@/lib/policies";
@@ -327,17 +327,6 @@ function PolicyReports({ image, override }: { image: ImageResult; override: stri
   );
 }
 
-/** The saved fields of a label, so a change to one keeps the others, tags included. */
-function labelFields(label: ImageLabel | null): Omit<ImageLabel, "updated_at"> {
-  return {
-    expect: label?.expect ?? null,
-    proxy: label?.proxy ?? false,
-    override: label?.override ?? null,
-    note: label?.note ?? "",
-    ...(label?.tags ? { tags: label.tags } : {}),
-  };
-}
-
 /** A collapsible section that starts open when it holds a value. The summary names what is set. */
 /** A doc link a fold ends with: what the numbers in it mean, in the curator docs. */
 type FoldDoc = { href: string; text: string };
@@ -380,10 +369,11 @@ function LabelControl({
   policies: string[];
   saving: boolean;
   error: string | null;
-  onChange: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+  /** A change to some fields. The page merges it over the last change it sent, not this render's label, so a note saved on blur survives a click straight after. */
+  onChange: (patch: LabelPatch | null) => void;
 }) {
   const current = labelFields(label);
-  const update = (patch: Partial<typeof current>) => onChange({ ...current, ...patch });
+  const update = (patch: LabelPatch) => onChange(patch);
   const canProxy = current.expect === "hard" || current.expect === "ambiguous";
   const set = Boolean(current.expect || current.override || (current.note && current.note.trim()));
   const summary = [
@@ -615,7 +605,7 @@ function PhotoPanel({
   policies?: string[];
   labelSaving?: boolean;
   labelError?: string | null;
-  onLabel?: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+  onLabel?: (patch: LabelPatch | null) => void;
   /** Cohort rules, the tags they derive for this image, and the caption sidecar they read. */
   cohorts?: CohortConfig;
   autoTags?: readonly string[];
@@ -781,11 +771,7 @@ function PhotoPanel({
             label={label}
             caption={caption}
             saving={labelSaving}
-            onChange={(tags) => {
-              const fields = labelFields(label);
-              delete fields.tags;
-              onLabel(tags ? { ...fields, tags } : fields);
-            }}
+            onChange={(tags) => onLabel({ tags })}
           />
         ) : null}
         {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}

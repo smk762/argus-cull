@@ -82,3 +82,57 @@ export function labelsJsonl(
   }
   return rows.length > 0 ? `${rows.join("\n")}\n` : "";
 }
+
+export type LabelFields = Omit<ImageLabel, "updated_at">;
+/** A change to some fields of a label. `tags: undefined` hands the tags back to cohorts.json. */
+export type LabelPatch = Partial<LabelFields>;
+
+/** The saved fields of a label, so a change to one keeps the others, tags included. */
+export function labelFields(label: LabelFields | null): LabelFields {
+  return {
+    expect: label?.expect ?? null,
+    proxy: label?.proxy ?? false,
+    override: label?.override ?? null,
+    note: label?.note ?? "",
+    ...(label?.tags ? { tags: label.tags } : {}),
+  };
+}
+
+export function applyLabelPatch(base: LabelFields, patch: LabelPatch): LabelFields {
+  const next = { ...base, ...patch };
+  if ("tags" in patch && patch.tags === undefined) delete next.tags;
+  return next;
+}
+
+/** The labels for *folder*: the loaded ones only when they were loaded for that folder, so one folder's labels never reach another's scan. */
+export function labelsForFolder(labels: ReadonlyMap<string, ImageLabel>, labelsFolder: string | null, folder: string | null): ReadonlyMap<string, ImageLabel> {
+  return folder != null && labelsFolder === folder ? labels : NO_LABELS;
+}
+
+const NO_LABELS: ReadonlyMap<string, ImageLabel> = new Map();
+
+/**
+ * Label saves, one at a time and in order, each merged against the last
+ * change submitted for that image rather than the label last rendered. A note
+ * saved on blur and a verdict clicked straight after then both land, where
+ * two saves built from the same render would have the second undo the first.
+ */
+export class LabelSaver {
+  private readonly submitted = new Map<string, LabelFields | null>();
+  private queue: Promise<unknown> = Promise.resolve();
+
+  constructor(private readonly put: (folder: string, relPath: string, label: LabelFields | null) => Promise<LabelFile>) {}
+
+  /** Save *patch* (null clears the label) over *saved*, the label as last loaded. */
+  save(folder: string, relPath: string, patch: LabelPatch | null, saved: LabelFields | null): Promise<LabelFile> {
+    const key = `${folder}\u0000${relPath}`;
+    const base = this.submitted.has(key) ? this.submitted.get(key) ?? null : saved;
+    const next = patch === null ? null : applyLabelPatch(labelFields(base), patch);
+    this.submitted.set(key, next);
+    const run = this.queue.then(() => this.put(folder, relPath, next));
+    this.queue = run.catch(() => undefined);
+    return run.finally(() => {
+      if (this.submitted.get(key) === next) this.submitted.delete(key);
+    });
+  }
+}
