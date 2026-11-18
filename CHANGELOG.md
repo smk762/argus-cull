@@ -32,6 +32,14 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
   - SSE frames with CRLF or CR line endings parse, and a non-JSON frame no longer drops the frames around it.
   - Caption sidecars are read up to 64 KiB, in bytes, without buffering the rest; an out-of-range `&#…;` entity is U+FFFD, and hex entities decode.
   - `record_tape.py`: a dotted image name reads its own sidecar; a failed fetch leaves the previous tape in place; a scan result with no `keep_reason` counts as left out.
+  - `record_tape.py`: `/health` loses every URL and `host:port` at any depth, not just top-level keys named url, host or addr; path scrubbing is one pass, so a source root that prefixes `/data/images` is not swapped twice; palette and keyed-transparency images keep their transparency; a veil never enlarges a frame already under its cell count.
+  - `record_fixture.py --commit` reads the sync record and the compose pin before writing, and writes each of the three files whole, so a failure leaves them agreeing. `make_fixture.py`'s profile eye moves with the head (the committed fixture is unchanged).
+  - The scan form's button names the folder Scan sends, not the last listing; a run-stats folder with `..` segments is resolved before the source-root check.
+  - The imported docs drop reference-style remote badges with their definitions, and relative images outside the vendored copy, instead of rendering broken images.
+  - A label file holding `null` or an array reads as empty instead of failing every read and write for its folder; a `__proto__` image path is stored as a label.
+  - An older curator's unnamed official verdict takes the config's policy name, so shields, policy rows and an override of that policy find it; the cohort table takes the official policy from the verdicts, not from first place in the list.
+  - A finished NudeNet check reads "Waiting for this scan to finish", not "Queued", once faces are reached; a custom rule such as "Drugs" shows in the Rules filter beside rule D.
+  - `CURATOR_URL` keeps a path prefix; the URL fragment survives view updates; a failed `/api/display` falls back to the default blur; the theme labels follow the system scheme when `dh-theme.js` did not load.
 - The curator drift job could not open its sync PR: it staged `web/public/docs`, which does not exist, so `git add` failed and the job filed an issue instead (#82, #90). `make sync-curator` also failed when `.venv-curator` already existed; it now recreates it.
 - A rejected frame's detail view said "Scanning…" over its blur. It now says it was rejected, with the reason, and why it stays blurred.
 - The keep-set lists in a disabled group (the static demo) were scroll regions no keyboard could reach; they now list in full.

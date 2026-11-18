@@ -77,12 +77,11 @@ export function exposedLabelsForRequest(filter: FilterState, active: boolean): N
 
 /** Rules a scan recorded under any of its policies, official or variant, that are not already in the default policy list. */
 export function recordedGuardRules(summary: ScanSummary | null, known: readonly string[]): string[] {
-  const knownSet = new Set(known);
   const extra = new Set<string>();
   for (const image of summary?.results ?? []) {
     for (const rule of policyVerdicts(image).flatMap((verdict) => verdict.result.rules)) {
-      const letter = rule.trim().slice(0, 1).toUpperCase();
-      if (!knownSet.has(letter) && !knownSet.has(rule)) extra.add(rule);
+      // The curator's match, so "Drugs" is not taken for rule D the way "D. Drugs" is.
+      if (!known.some((name) => ruleMatches(rule, name))) extra.add(rule);
     }
   }
   return [...extra].sort();

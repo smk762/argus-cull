@@ -29,7 +29,7 @@ def face(shift: int, profile: bool) -> Image.Image:
     draw.ellipse((200 + shift, 120, 560 + shift, 640), fill=(214, 176, 148))
     if profile:
         draw.rectangle((200 + shift, 120, 360 + shift, 640), fill=(24, 28, 40))
-        draw.ellipse((390, 280, 460, 350), fill=(20, 20, 30))
+        draw.ellipse((390 + shift, 280, 460 + shift, 350), fill=(20, 20, 30))
     else:
         draw.ellipse((280 + shift, 270, 350 + shift, 340), fill=(20, 20, 30))
         draw.ellipse((430 + shift, 270, 500 + shift, 340), fill=(20, 20, 30))

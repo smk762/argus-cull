@@ -15,7 +15,7 @@ import { LabelSaver, labelsForFolder, labelsJsonl, type ImageLabel, type LabelPa
 import { DOCS } from "@/lib/docsLinks";
 import { madeWith } from "@/lib/madeWith";
 import { defaultExportDest, exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
-import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
+import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withOfficialNamed, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
 import { availability, guardBody, selectBody } from "@/lib/select";
@@ -100,7 +100,9 @@ export function CullApp() {
   const [scanForm, setScanForm] = useState<{ template: ScanTemplate; from: string | null } | null>(null);
   const [rerunning, setRerunning] = useState<string | null>(null);
   // The scan as the curator returned it. Most of the page reads `summary`, which leaves out policies switched off in the sidebar.
-  const [rawSummary, setSummary] = useState<ScanSummary | null>(null);
+  const [curatorSummary, setSummary] = useState<ScanSummary | null>(null);
+  // An unnamed official verdict takes the config's policy name, so verdicts and the policy list agree.
+  const rawSummary = useMemo(() => (curatorSummary ? withOfficialNamed(curatorSummary) : null), [curatorSummary]);
   const [policyOff, setPolicyOff] = useState<{ scanId: string; off: string[] } | null>(null);
   // Switched-off policies belong to one scan; opening another starts with every policy on.
   const offPolicies = policyOff && policyOff.scanId === rawSummary?.scan_id ? policyOff.off : NO_POLICIES_OFF;

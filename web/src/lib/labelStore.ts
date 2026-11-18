@@ -14,10 +14,15 @@ export function labelFileName(folder: string): string {
 export async function readLabels(dir: string, folder: string): Promise<LabelFile> {
   const file = path.join(dir, labelFileName(folder));
   try {
-    const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<LabelFile>;
-    return { folder, labels: parsed.labels && typeof parsed.labels === "object" ? parsed.labels : {} };
+    const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<LabelFile> | null;
+    const stored = parsed != null && typeof parsed === "object" ? parsed.labels : undefined;
+    // A null-prototype copy: a file that is not a label object reads as empty, and a relPath of
+    // "__proto__" is an ordinary key, not the object's prototype.
+    const labels: LabelFile["labels"] = Object.create(null);
+    if (stored != null && typeof stored === "object" && !Array.isArray(stored)) Object.assign(labels, stored);
+    return { folder, labels };
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err && err.code === "ENOENT") return { folder, labels: {} };
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return { folder, labels: Object.create(null) };
     throw err;
   }
 }

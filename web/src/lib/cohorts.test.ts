@@ -151,3 +151,25 @@ describe("caption sidecars", () => {
     expect(await readFile(path.join(root, "set", "a.txt"), "utf8")).toContain("classroom");
   });
 });
+
+describe("cohort stats: the official policy", () => {
+  it("comes from the verdicts, not from first place in the order", () => {
+    const images = [image("a.jpg", [["classroom", 0.5]], { guard: unsafe("adult"), guard_variants: { adult: unsafe("adult"), "adult-cautious": safe("adult-cautious") } })];
+    const tags = new Map(images.map((item) => [item.rel_path, autoTags(item, null, CONFIG)]));
+    const [classroom] = cohortStats(images, tags, CONFIG, ["adult-cautious", "adult"]);
+    expect(classroom.policies.map((entry) => [entry.policy, entry.official])).toEqual([
+      ["adult", true],
+      ["adult-cautious", false],
+    ]);
+  });
+
+  it("falls back to the first name while no verdict says", () => {
+    const images = [image("a.jpg", [["classroom", 0.5]])];
+    const tags = new Map(images.map((item) => [item.rel_path, autoTags(item, null, CONFIG)]));
+    const [classroom] = cohortStats(images, tags, CONFIG, ["adult", "adult-cautious"]);
+    expect(classroom.policies.map((entry) => [entry.policy, entry.official])).toEqual([
+      ["adult", true],
+      ["adult-cautious", false],
+    ]);
+  });
+});

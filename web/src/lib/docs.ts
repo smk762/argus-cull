@@ -9,7 +9,8 @@
  * - every heading gets GitHub's id, counted over the whole file, so a deep link means what it means on GitHub;
  * - links to another imported doc stay on this site, links into curator's repo go to GitHub at the recorded
  *   commit, and `../<sibling>/...` goes to that sibling's `dev`;
- * - remote images (badges) are dropped, since `img-src` would block them; relative ones load from the vendored copy.
+ * - remote images (badges), inline or by reference, are dropped with their definitions, since `img-src` would
+ *   block them, and so are relative ones outside the vendored copy; the rest load from that copy.
  * Raw HTML is skipped by the renderer.
  */
 import { readFileSync } from "node:fs";
@@ -72,6 +73,17 @@ function resolveUrl(url: string, page: DocPage, record: CuratorPin): string {
   return `${curatorLinks(record).blob(target)}${anchor ? `#${anchor}` : ""}`;
 }
 
+/** Where a relative image loads from: the vendored copy. Null for one the page cannot serve (remote, or outside the copy). */
+function imageSrc(url: string, page: DocPage): string | null {
+  if (isRemote(url)) return null;
+  const target = posix.normalize(posix.join(posix.dirname(page.file), url));
+  return target === ".." || target.startsWith("../") ? null : `/docs/curator/${target}`;
+}
+
+function remove(node: Nodes, parent: Nodes | null) {
+  if (parent && "children" in parent) (parent.children as Nodes[]).splice((parent.children as Nodes[]).indexOf(node), 1);
+}
+
 function walk(node: Nodes, visit: (node: Nodes, parent: Nodes | null) => void, parent: Nodes | null = null) {
   visit(node, parent);
   if ("children" in node) for (const child of [...(node.children as Nodes[])]) walk(child, visit, node);
@@ -95,22 +107,35 @@ export function curatorDoc(page: DocPage, record: CuratorPin = CURATOR) {
       headings.push({ depth: node.depth, text: textOf(node), id });
     });
 
+    // A definition only images use (`[![CI][ci-badge]][ci]` with `[ci-badge]: …svg`) is an image's source, not a link.
+    const imageIds = new Set<string>();
+    const linkIds = new Set<string>();
+    walk(tree, (node) => {
+      if (node.type === "imageReference") imageIds.add(node.identifier);
+      if (node.type === "linkReference") linkIds.add(node.identifier);
+    });
+    const imageDefs = new Map<string, string>();
     walk(tree, (node, parent) => {
-      if (node.type === "link" || node.type === "definition") (node as Link).url = resolveUrl(node.url, page, record);
-      if (node.type === "image" && parent && "children" in parent) {
-        const image = node as Image;
-        if (isRemote(image.url)) {
-          (parent.children as Nodes[]).splice((parent.children as Nodes[]).indexOf(node), 1);
-        } else {
-          image.url = `/docs/curator/${posix.normalize(posix.join(posix.dirname(page.file), image.url))}`;
-        }
+      if (node.type === "definition" && imageIds.has(node.identifier) && !linkIds.has(node.identifier)) {
+        const src = imageSrc(node.url, page);
+        if (src) {
+          node.url = src;
+          imageDefs.set(node.identifier, src);
+        } else remove(node, parent);
+      } else if (node.type === "link" || node.type === "definition") {
+        (node as Link).url = resolveUrl(node.url, page, record);
+      } else if (node.type === "image") {
+        const src = imageSrc((node as Image).url, page);
+        if (src) (node as Image).url = src;
+        else remove(node, parent);
       }
+    });
+    walk(tree, (node, parent) => {
+      if (node.type === "imageReference" && !imageDefs.has(node.identifier)) remove(node, parent);
     });
     // A badge's link is empty once its image is gone.
     walk(tree, (node, parent) => {
-      if (node.type === "link" && node.children.length === 0 && parent && "children" in parent) {
-        (parent.children as Nodes[]).splice((parent.children as Nodes[]).indexOf(node), 1);
-      }
+      if ((node.type === "link" || node.type === "linkReference") && node.children.length === 0) remove(node, parent);
     });
   };
   return { plugin, headings };

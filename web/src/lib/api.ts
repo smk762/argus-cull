@@ -63,8 +63,15 @@ export const getDetectors = (): Promise<Detectors> => (staticDemo() ? demo.getDe
 /** The blur policy: this page's server env (ARGUS_CULL_BLUR_EXPOSED_SCORE, ARGUS_CULL_POLICY_BLUR), or the tape's. */
 export async function getDisplay(): Promise<BlurPolicy> {
   if (staticDemo()) return demo.getDisplay();
-  const body = (await (await fetch("/api/display")).json()) as BlurPolicy;
-  return typeof body.exposedScore === "number" ? body : DEFAULT_BLUR;
+  // Any failure (network, an error status, a body that is not the policy) falls back to the default blur.
+  try {
+    const response = await fetch("/api/display");
+    if (!response.ok) return DEFAULT_BLUR;
+    const body = (await response.json()) as BlurPolicy | null;
+    return typeof body?.exposedScore === "number" ? body : DEFAULT_BLUR;
+  } catch {
+    return DEFAULT_BLUR;
+  }
 }
 
 /** Static demo only: put the detail-only fields (score breakdown, boxes) back on one result. */

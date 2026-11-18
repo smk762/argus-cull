@@ -1,4 +1,6 @@
 import argparse
+import importlib.util
+import io
 import json
 import sys
 import tempfile
@@ -90,6 +92,85 @@ class RecordTest(unittest.TestCase):
                 record_tape.record(_args(out=str(out), images=str(images), scan=str(scan)))
             self.assertEqual(json.loads((out / "tape.json").read_text()), {"previous": True})
             self.assertEqual(sorted(path.name for path in root.iterdir()), ["images", "scan.json", "tape"])
+
+
+def _png(image: "object", **params: object) -> bytes:
+    out = io.BytesIO()
+    image.save(out, "PNG", **params)
+    return out.getvalue()
+
+
+class ScrubberTest(unittest.TestCase):
+    def test_a_root_that_prefixes_the_source_mount_is_swapped_once(self) -> None:
+        folder, scrub = record_tape.scrubber("/data", "/data/x")
+        self.assertEqual(folder, "/data/images/x")
+        self.assertEqual(scrub({"abs_path": "/data/x/a.jpg", "other": "/data/y/b.jpg"}), {"abs_path": "/data/images/x/a.jpg", "other": "/data/images/y/b.jpg"})
+
+    def test_a_path_already_under_the_mount_is_left_alone(self) -> None:
+        _, scrub = record_tape.scrubber("/home/someone/pics", "/home/someone/pics/set")
+        self.assertEqual(scrub("/home/someone/pics/set/a.jpg"), "/data/images/set/a.jpg")
+        self.assertEqual(scrub("/data/images/set/a.jpg"), "/data/images/set/a.jpg")
+
+
+class PublicHealthTest(unittest.TestCase):
+    def test_endpoints_are_dropped_at_any_depth_and_under_any_name(self) -> None:
+        health = {
+            "status": "ok",
+            "faces": True,
+            "version": "0.15.1",
+            "ai_backend": "http://10.0.0.5:11434",
+            "qdrant": {"endpoint": "qdrant:6333", "ok": True},
+            "backends": {"lens": {"url": "http://lens:8102", "ready": True}, "retina": "retina.internal:8000"},
+            "peers": ["https://a.example/x", "kept"],
+            "uptime": "12:30",
+        }
+        out = record_tape.public_health(health)
+        self.assertEqual(out["qdrant"], {"ok": True})
+        self.assertEqual(out["backends"], {"lens": {"ready": True}})
+        self.assertEqual(out["peers"], ["kept"])
+        self.assertNotIn("ai_backend", out)
+        self.assertEqual((out["faces"], out["version"], out["uptime"]), (True, "0.15.1", "12:30"))
+        self.assertNotRegex(json.dumps(out), r"://|:\d{4}")
+
+
+NEEDS_PILLOW = unittest.skipUnless(importlib.util.find_spec("PIL"), "needs Pillow")
+
+
+@NEEDS_PILLOW
+class EncodeTest(unittest.TestCase):
+    def test_a_palette_image_keeps_its_transparency(self) -> None:
+        from PIL import Image
+
+        image = Image.new("P", (8, 8), 0)
+        image.putpalette([0, 0, 0, 255, 0, 0] + [0] * 762)
+        image.putpixel((0, 0), 1)
+        with Image.open(io.BytesIO(record_tape.encode(_png(image, transparency=0), 480, 80))) as out:
+            self.assertEqual(out.mode, "RGBA")
+            self.assertEqual(out.getpixel((4, 4))[3], 0)
+
+    def test_an_rgb_image_with_a_transparency_key_keeps_it(self) -> None:
+        from PIL import Image
+
+        image = Image.new("RGB", (8, 8), (0, 0, 0))
+        with Image.open(io.BytesIO(record_tape.encode(_png(image.convert("L"), transparency=0), 480, 80))) as out:
+            self.assertEqual(out.mode, "RGBA")
+            self.assertEqual(out.getpixel((4, 4))[3], 0)
+
+
+@NEEDS_PILLOW
+class VeilTest(unittest.TestCase):
+    def test_a_frame_under_the_cell_count_is_never_enlarged(self) -> None:
+        from PIL import Image
+
+        for size in ((10, 6), (28, 28)):
+            with Image.open(io.BytesIO(record_tape.veil(_png(Image.new("RGB", size, (90, 40, 20))), 28))) as out:
+                self.assertEqual(out.size, size)
+
+    def test_a_large_frame_is_cut_to_the_cell_count(self) -> None:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(record_tape.veil(_png(Image.new("RGB", (800, 400))), 28))) as out:
+            self.assertEqual(out.size, (28, 14))
 
 
 if __name__ == "__main__":
