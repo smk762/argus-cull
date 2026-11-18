@@ -45,8 +45,16 @@ export function progressRatio(progress: Progress): number | null {
   return Math.min(1, Math.max(0, progress.done / progress.total));
 }
 
-/** The order the curator runs its phases in. Faces and NudeNet overlap on 0.5.1; `pending_checks` covers that. */
-const ORDER = ["starting", "collecting", "watermarks", "scoring", "faces", "identities", "prefilter", "scenes", "garments", "nsfw", "guard", "clustering"];
+/** The order the curator runs its phases in. NudeNet comes straight after faces, and overlaps it on 0.5.1. */
+const ORDER = ["starting", "collecting", "watermarks", "scoring", "faces", "nsfw", "identities", "prefilter", "scenes", "garments", "guard", "clustering"];
+
+/**
+ * A phase's place for `checkStage`. The phases that run together share faces' place: `pending_checks`
+ * names every check not finished, so a NudeNet check missing from it once faces is reached has run.
+ */
+function rankOf(phase: string): number {
+  return ORDER.indexOf(TOGETHER.has(phase) ? "faces" : phase);
+}
 
 export type CheckStage = "running" | "queued" | "waiting";
 
@@ -59,8 +67,8 @@ export type CheckStage = "running" | "queued" | "waiting";
 export function checkStage(checks: readonly string[], phases: readonly Progress[], pending: readonly string[]): CheckStage {
   const unfinished = (entry: Progress) => !(entry.total > 0 && entry.done >= entry.total);
   if (checks.some((check) => pending.includes(check) || phases.some((entry) => entry.phase === check && unfinished(entry)))) return "running";
-  const first = Math.min(...checks.map((check) => ORDER.indexOf(check)).filter((rank) => rank >= 0));
-  const reached = phases.map((entry) => ORDER.indexOf(entry.phase));
+  const first = Math.min(...checks.map(rankOf).filter((rank) => rank >= 0));
+  const reached = phases.map((entry) => rankOf(entry.phase));
   if (reached.length === 0 || reached.every((rank) => rank >= 0 && rank < first)) return "queued";
   return "waiting";
 }

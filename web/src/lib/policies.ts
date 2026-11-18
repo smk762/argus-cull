@@ -78,6 +78,18 @@ export function policyVerdicts(image: Guarded): PolicyVerdict[] {
 }
 
 /**
+ * The summary with each unnamed official verdict (an older curator's) named after the config's
+ * policy, the name `policiesRun` reports, so a shield, a row or an override of that name finds it.
+ * Returns the summary itself when there is nothing to name.
+ */
+export function withOfficialNamed<T extends { guard_config?: { enabled?: boolean | null; policy?: string }; results: Guarded[] }>(summary: T): T {
+  const config = summary.guard_config;
+  const name = config?.policy && config.enabled !== false ? config.policy : null;
+  if (!name || !summary.results.some((image) => image.guard != null && image.guard.policy == null)) return summary;
+  return { ...summary, results: summary.results.map((image) => (image.guard != null && image.guard.policy == null ? { ...image, guard: { ...image.guard, policy: name } } : image)) } as T;
+}
+
+/**
  * Policy names a scan ran, official first. Taken from the config when it says,
  * else from the results. The curator records a policy name even when SingGuard
  * did not run, so a config marked not run names none.

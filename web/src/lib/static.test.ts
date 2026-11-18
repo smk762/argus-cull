@@ -86,10 +86,11 @@ describe("static demo api", () => {
       () => api.deleteImage(scan.scan_id, scan.results[0].rel_path),
       () => api.exportScan(scan.scan_id, "out", "copy", {} as never, () => {}),
       () => api.getFolders(""),
+      () => api.selectScan("another-scan", { min_score: 0.9 } as never),
     ];
     for (const call of refused) await expect(Promise.resolve().then(() => call())).rejects.toBeInstanceOf(NotInDemo);
+    // Counted after every refusal, the cross-scan keep set included.
     expect(fetched.length).toBe(before);
-    await expect(api.selectScan("another-scan", { min_score: 0.9 } as never)).rejects.toBeInstanceOf(NotInDemo);
   });
 
   it("replays the recorded scan for a scan request, whatever was asked", async () => {

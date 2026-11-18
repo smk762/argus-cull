@@ -364,6 +364,14 @@ describe("run stats", () => {
     expect(lingerie.bands.mid).toEqual({ tagged_checked: 1, tagged_unsafe: 1, rest_checked: 0, rest_unsafe: 0 });
   });
 
+  it("refuses a run whose folder climbs out of the source root", () => {
+    for (const folder of ["/data/images/../../etc", "/data/images/./../secret", "/data/images//..//other"]) {
+      expect(() => templateFromRunStats({ ...JSON.parse(JSON.stringify(stats)), folder }, "/data/images", DETECTORS), folder).toThrow(/not under this curator's source root/);
+    }
+    // A path that only looks odd but stays inside is read as where it lands.
+    expect(templateFromRunStats({ ...JSON.parse(JSON.stringify(stats)), folder: "/data/images/a/./b/../c//" }, "/data/images", DETECTORS).template.folder).toBe("a/c");
+  });
+
   it("fills the scan form back from its own file", () => {
     const file = JSON.parse(JSON.stringify(stats));
     expect(templateFromRunStats(file, "/data/images", DETECTORS)).toEqual({

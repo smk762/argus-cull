@@ -173,14 +173,14 @@ def scrubber(root: str | None, folder: str) -> tuple[str, Callable[[Any], Any]]:
     else:
         rel = Path(folder).name
     new_folder = f"{SOURCE}/{rel}" if rel else SOURCE
-    swaps = sorted({(folder, new_folder), *(((root, SOURCE),) if root else ())}, key=lambda pair: -len(pair[0]))
+    swaps = {old: new for old, new in ((folder, new_folder), *(((root, SOURCE),) if root else ())) if old and old != new}
+    # One pass, longest first, so text a swap wrote is never matched again: with root /data,
+    # /data/x -> /data/images/x must not then have its /data swapped a second time.
+    pattern = re.compile("|".join(re.escape(old) for old in sorted(swaps, key=len, reverse=True))) if swaps else None
 
     def scrub(value: Any) -> Any:
         if isinstance(value, str):
-            for old, new in swaps:
-                if old and old != new:
-                    value = value.replace(old, new)
-            return value
+            return pattern.sub(lambda match: swaps[match.group(0)], value) if pattern else value
         if isinstance(value, list):
             return [scrub(item) for item in value]
         if isinstance(value, dict):
@@ -190,9 +190,30 @@ def scrubber(root: str | None, folder: str) -> tuple[str, Callable[[Any], Any]]:
     return new_folder, scrub
 
 
+# A key that names an endpoint, or a value that is one (a URL, or host:port).
+ENDPOINT_KEY = re.compile(r"url|host|addr|endpoint|uri", re.I)
+ENDPOINT_VALUE = re.compile(
+    r"""[a-z][a-z0-9+.-]*://                                 # a URL, anywhere in the string
+      | ^\s*(?:\[[0-9a-f:]+\]                                # or the whole value is host:port: [ipv6]
+            | \d{1,3}(?:\.\d{1,3}){3}                         #   an IPv4 address
+            | [a-z0-9-]*[a-z][a-z0-9-]*(?:\.[a-z0-9-]+)*         #   a name (one letter at least, so 12:30 is not one)
+        ):\d{1,5}(?:/\S*)?\s*$""",
+    re.I | re.X,
+)
+
+
+def without_endpoints(value: Any) -> Any:
+    """*value* with every endpoint dropped, at any depth: keys that name one, and strings that are one."""
+    if isinstance(value, dict):
+        return {key: without_endpoints(item) for key, item in value.items() if not ENDPOINT_KEY.search(str(key)) and not (isinstance(item, str) and ENDPOINT_VALUE.search(item))}
+    if isinstance(value, list):
+        return [without_endpoints(item) for item in value if not (isinstance(item, str) and ENDPOINT_VALUE.search(item))]
+    return value
+
+
 def public_health(health: dict | None) -> dict:
-    """/health as the demo shows it: no URLs or hosts, paths under the container mounts."""
-    out = {key: value for key, value in (health or {}).items() if not re.search(r"url|host|addr", key, re.I)}
+    """/health as the demo shows it: no URLs or hosts at any depth, paths under the container mounts."""
+    out = without_endpoints(health or {})
     out["status"] = out.get("status", "ok")
     out["source_root"] = SOURCE
     out["export_root"] = EXPORT if out.get("export_root") else None
@@ -257,7 +278,9 @@ def encode(data: bytes, longest: int, quality: int) -> bytes:
     with Image.open(io.BytesIO(data)) as image:
         image = ImageOps.exif_transpose(image)
         if image.mode not in ("RGB", "RGBA"):
-            image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+            # A palette or keyed image (GIF, 8-bit PNG, tRNS) carries its transparency in info, not a band.
+            has_alpha = "A" in image.getbands() or "transparency" in image.info
+            image = image.convert("RGBA" if has_alpha else "RGB")
         image.thumbnail((longest, longest))
         out = io.BytesIO()
         # No EXIF or XMP is carried over: a photo's metadata can name its camera, place and owner.
@@ -272,7 +295,8 @@ def veil(data: bytes, cells: int) -> bytes:
     with Image.open(io.BytesIO(data)) as image:
         image = ImageOps.exif_transpose(image).convert("RGB")
         w, h = image.size
-        scale = cells / max(w, h)
+        # Only ever reduce: a frame already at or under *cells* is kept as it is, never enlarged.
+        scale = min(1.0, cells / max(w, h))
         size = (max(1, round(w * scale)), max(1, round(h * scale)))
         # BOX averages every source pixel into its cell, so no single pixel (an edge, an eye) survives.
         small = image.resize(size, Image.Resampling.BOX)

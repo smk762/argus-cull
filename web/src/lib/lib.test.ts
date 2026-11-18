@@ -445,6 +445,12 @@ describe("moderation", () => {
     scan.results[0].guard = { safe: false, rules: ["A. Sexual Content Risk", "house style"] };
     expect(recordedGuardRules(scan, ["A", "B"])).toEqual(["house style"]);
   });
+
+  it("lists a custom rule that only starts with a default rule's letter", () => {
+    const scan = summary({ guard: true });
+    scan.results[0].guard = { safe: false, rules: ["D. Drug Use", "Drugs", "Self-harm", "a."] };
+    expect(recordedGuardRules(scan, ["A", "D", "S"])).toEqual(["Drugs", "Self-harm"]);
+  });
 });
 
 describe("curator url", () => {
@@ -458,6 +464,9 @@ describe("curator url", () => {
     expect(curatorUrl("203.0.113.39", "http://nas.local:8101")).toBe("http://nas.local:8101");
     expect(curatorUrl("203.0.113.39", "https://curator.example/")).toBe("https://curator.example");
     expect(curatorUrl("203.0.113.39", "http://127.0.0.1:8101")).toBe("http://203.0.113.39:8101");
+    // A curator mounted under a path keeps it, swapped host or not.
+    expect(curatorUrl("203.0.113.39", "https://curator.example/api/curator/")).toBe("https://curator.example/api/curator");
+    expect(curatorUrl("203.0.113.39", "http://localhost:8101/curator")).toBe("http://203.0.113.39:8101/curator");
     expect(curatorUrl("203.0.113.39", "not a url")).toBe("not a url");
   });
 });
@@ -481,6 +490,10 @@ describe("progress", () => {
     // The prefilter step comes after identities, so the late checks are still queued.
     expect(checkStage(["guard"], [{ phase: "prefilter", done: 4, total: 4 }], [])).toBe("queued");
     expect(checkStage(["faces", "identities"], [{ phase: "identities", done: 0, total: 0 }], [])).toBe("running");
+    // NudeNet runs with faces: once it is done and the scan has moved on, it waits for the end, it is not queued.
+    for (const phase of ["faces", "identities", "prefilter", "scenes", "garments"]) {
+      expect(checkStage(["nsfw"], [{ phase, done: 1, total: 4 }], ["faces"].filter((name) => name === phase)), phase).toBe("waiting");
+    }
   });
 
   it("reports a fraction only once the phase has a total", () => {

@@ -27,8 +27,9 @@ export function serverSearch(): string {
 /** Write the view into the query string and notify subscribers. */
 export function replaceView(next: ViewState): void {
   const query = serializeView(next);
-  const target = `${window.location.pathname}${query}`;
-  if (`${window.location.pathname}${window.location.search}` !== target) {
+  // The fragment stays: a view update changes the query, not an anchor or deep link.
+  const target = `${window.location.pathname}${query}${window.location.hash}`;
+  if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== target) {
     window.history.replaceState(null, "", target);
   }
   emit();

@@ -161,7 +161,10 @@ export function cohortStats(
     const byPolicy = new Map<string, CohortPolicyStats>();
     const stat = (policy: string, official: boolean) => {
       let entry = byPolicy.get(policy);
-      if (!entry) {
+      if (entry) {
+        // A name pre-seeded from `order` learns it is official from the verdicts, not its position.
+        entry.official ||= official;
+      } else {
         entry = {
           policy,
           official,
@@ -173,7 +176,7 @@ export function cohortStats(
       }
       return entry;
     };
-    for (const name of order) stat(name, name === order[0]);
+    for (const name of order) stat(name, false);
     for (const image of images) {
       const inCohort = (tags.get(image.rel_path) ?? []).includes(rule.tag);
       const band = bandOf(image);
@@ -186,6 +189,8 @@ export function cohortStats(
         }
       }
     }
+    // No verdict yet: the config's first name stands in as the official one.
+    if (order.length > 0 && ![...byPolicy.values()].some((entry) => entry.official)) byPolicy.get(order[0])!.official = true;
     const policies = [...byPolicy.values()].sort((left, right) => Number(right.official) - Number(left.official) || rank(order, left.policy) - rank(order, right.policy));
     out.push({ tag: rule.tag, group: rule.group, images: tagged.length, policies });
   }

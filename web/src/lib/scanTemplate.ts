@@ -70,6 +70,19 @@ export function templateFromSummary(summary: ScanSummary, root: string | null, d
   };
 }
 
+/** *path* with `.` and `..` resolved and repeated slashes collapsed. A relative path keeps a `..` it cannot resolve. */
+export function normalPath(path: string): string {
+  const absolute = path.startsWith("/");
+  const out: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part !== "..") out.push(part);
+    else if (out.length > 0 && out.at(-1) !== "..") out.pop();
+    else if (!absolute) out.push("..");
+  }
+  return `${absolute ? "/" : ""}${out.join("/")}`;
+}
+
 /** A run-stats file read back into the form, and what could not be carried over. */
 export interface ImportedRun {
   template: ScanTemplate;
@@ -92,7 +105,10 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
   const config = stats.config;
   if (root == null) throw new Error("The curator's source root is not known yet, so the run's folder cannot be placed. Try again once the curator is up.");
   const base = root.replace(/\/$/, "");
-  if (base && stats.folder !== base && !stats.folder.startsWith(`${base}/`)) {
+  // Resolved first, so /data/images/../../etc is read as /etc, not as a folder under /data/images.
+  const folder = normalPath(stats.folder);
+  const rel = folderLabel(folder, root).rel;
+  if ((base && folder !== base && !folder.startsWith(`${base}/`)) || rel.split("/").includes("..")) {
     throw new Error(`The run scanned ${stats.folder}, which is not under this curator's source root (${base}).`);
   }
   const notes: string[] = [];
@@ -117,7 +133,7 @@ export function templateFromRunStats(raw: unknown, root: string | null, detector
   const policy = offered.length > 0 ? { policy: offered[0], variants: offered.slice(1) } : defaultPolicyChoice(available);
   return {
     template: {
-      folder: folderLabel(stats.folder, root).rel,
+      folder: rel,
       policy,
       withGarments: config.garments === true,
       setAge: config.set_age === true,

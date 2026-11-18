@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { shouldBlur, sortImages } from "./chunks";
 import { emptyLabel, isPositive, labelsJsonl, type ImageLabel } from "./labels";
 import { labelFileName, readLabels, writeLabel } from "./labelStore";
-import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policyFlagCounts, policyShields, policySourceLabel, policyStats, policyVerdicts, resolvedGuard, shieldLabel, shieldState, shieldTitle, slowResultSafe, verdictConflict, withoutPolicies } from "./policies";
+import { defaultPolicyChoice, dissentingPolicies, effectiveUnsafe, filterByShield, matchesShieldPick, normalisePolicyChoice, pathsByShield, policiesRun, policyByName, policyFlagCounts, policyShields, policySourceLabel, policyStats, policyVerdicts, resolvedGuard, shieldLabel, shieldState, shieldTitle, slowResultSafe, verdictConflict, withOfficialNamed, withoutPolicies } from "./policies";
 import { guardBody, guardPoliciesForRequest, selectBody } from "./select";
 import { DEFAULT_FILTER, type Detectors, type GuardResult, type ImageResult, type ScanSummary } from "./types";
 
@@ -335,5 +335,34 @@ describe("labels", () => {
     expect(await readLabels(dir, folder)).toEqual({ folder, labels: {} });
     expect(await readdir(dir)).toEqual([labelFileName(folder)]);
     expect(JSON.parse(await readFile(path.join(dir, labelFileName(folder)), "utf8"))).toEqual({ folder, labels: {} });
+  });
+});
+
+describe("an unnamed official verdict", () => {
+  const older = { safe: false, rules: ["A. Sexual Content Risk"] } as GuardResult;
+  const scan = {
+    guard_config: { enabled: true, policy: "adult", variants: ["default"] },
+    results: [{ rel_path: "a.jpg", guard: older, guard_variants: { default: safe("default") } } as unknown as ImageResult],
+  };
+
+  it("takes the config's name, so the verdicts and the policy list agree", () => {
+    const named = withOfficialNamed(scan);
+    const run = policiesRun(named);
+    expect(run).toEqual(["adult", "default"]);
+    expect(policyVerdicts(named.results[0]).map((verdict) => [verdict.policy, verdict.official])).toEqual([
+      ["adult", true],
+      ["default", false],
+    ]);
+    expect(policyShields(named.results[0], run).map((shield) => shield.policy)).toEqual(run);
+    // An override of the config's name follows that verdict, not the variant that passed.
+    expect(effectiveUnsafe(named.results[0], "adult")).toBe(true);
+    expect(policyStats(named.results, new Map(), run).filter((row) => row.official).map((row) => row.policy)).toEqual(["adult"]);
+  });
+
+  it("leaves a summary with nothing to name as it is", () => {
+    const recorded = { ...scan, results: [{ rel_path: "a.jpg", guard: unsafe("adult") } as unknown as ImageResult] };
+    expect(withOfficialNamed(recorded)).toBe(recorded);
+    const off = { ...scan, guard_config: { enabled: false, policy: "adult" } };
+    expect(withOfficialNamed(off)).toBe(off);
   });
 });

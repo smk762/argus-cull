@@ -59,9 +59,13 @@ def problems(commit: str, version: str, path: Path = COMPOSE) -> list[str]:
     return found
 
 
-def write(commit: str, version: str, path: Path = COMPOSE) -> None:
-    text = path.read_text()
+def render(commit: str, version: str, text: str) -> str:
+    """*text* with the curator pinned to *commit* and *version*; raises ValueError before changing anything."""
     for pattern, what, value in ((IMAGE, "image", commit[:9]), (CONTEXT, "build context", commit), (VERSION, "VERSION", version)):
         _one(pattern, text, what)
         text = pattern.sub(lambda m, v=value: m.group(1) + v, text)
-    path.write_text(text)
+    return text
+
+
+def write(commit: str, version: str, path: Path = COMPOSE) -> None:
+    path.write_text(render(commit, version, path.read_text()))

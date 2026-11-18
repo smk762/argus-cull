@@ -2,7 +2,7 @@ export const CURATOR_URL = process.env.NEXT_PUBLIC_CURATOR_URL || "http://localh
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
 
-/** Curator origin for the page the browser actually opened.
+/** Curator base URL (origin plus any path prefix) for the page the browser actually opened.
 
 The port and scheme come from CURATOR_URL. When that URL names a loopback host
 (the default), the host follows the page, so http://203.0.113.39:3000 calls
@@ -17,9 +17,10 @@ export function curatorUrl(pageHost?: string, configured: string = CURATOR_URL):
   } catch {
     return configured;
   }
-  if (!LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
+  // href, not origin: a curator mounted under a path prefix keeps it.
+  if (!LOOPBACK_HOSTS.has(url.hostname)) return url.href.replace(/\/$/, "");
   url.hostname = host;
-  return url.origin;
+  return url.href.replace(/\/$/, "");
 }
 
 export const PAGE_SIZE = 48;
