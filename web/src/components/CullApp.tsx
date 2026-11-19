@@ -314,13 +314,17 @@ export function CullApp() {
 
   // Demo: the detail view's score breakdown and boxes live in detail/<id>.json; put them back when a photo opens.
   const openPath = view.photo;
+  // Paths whose detail was put back since the last replay: a detail with no score_breakdown would otherwise refetch on every summary change.
+  const detailFilled = useRef(new Set<string>());
   useEffect(() => {
+    if (scanning) detailFilled.current.clear();
     if (!STATIC || !openPath || scanning) return;
     const image = rawSummary?.results.find((item) => item.rel_path === openPath);
-    if (!image || image.score_breakdown) return;
+    if (!image || image.score_breakdown || detailFilled.current.has(openPath)) return;
     let cancel = false;
     getImageDetail(image).then((full) => {
       if (cancel || full === image) return;
+      detailFilled.current.add(full.rel_path);
       setSummary((current) => (current ? { ...current, results: current.results.map((item) => (item.rel_path === full.rel_path ? full : item)) } : current));
     });
     return () => {

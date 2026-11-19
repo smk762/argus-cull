@@ -1,3 +1,4 @@
+import { policyVerdicts } from "./policies";
 import type { ScanSummary } from "./types";
 
 /**
@@ -35,8 +36,9 @@ export interface ThinkingRead {
 export function thinkingMode(summary: Summary): ThinkingRead | null {
   const counts = new Map<string, number>();
   for (const image of summary.results) {
-    for (const verdict of [image.guard, ...Object.values(image.guard_variants ?? {})]) {
-      if (verdict?.thinking) counts.set(verdict.thinking, (counts.get(verdict.thinking) ?? 0) + 1);
+    // policyVerdicts skips the official verdict curator repeats among the variants, so it counts once.
+    for (const { result: verdict } of policyVerdicts(image)) {
+      if (verdict.thinking) counts.set(verdict.thinking, (counts.get(verdict.thinking) ?? 0) + 1);
     }
   }
   const tally = (modes: string[]) => modes.map((mode) => `${mode} ${counts.get(mode)}`).join(", ");

@@ -1,5 +1,6 @@
 import { open, type FileHandle } from "node:fs/promises";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 import type { Caption } from "./cohorts";
 
@@ -47,7 +48,8 @@ async function readSmall(file: string): Promise<string | null> {
       if (bytesRead === 0) break;
       filled += bytesRead;
     }
-    return buffer.subarray(0, filled).toString("utf8");
+    // write(), not end(): a character the cap cut in half is dropped, not turned into U+FFFD.
+    return new StringDecoder("utf8").write(buffer.subarray(0, filled));
   } catch (err: unknown) {
     if (missing(err)) return null;
     throw err;

@@ -75,9 +75,11 @@ describe("the committed tape", () => {
   });
 
   it("names no host path, private address or local host name", () => {
-    for (const name of ["tape.json", "scan.json", "captions.json", "labels.json"]) {
+    // Every text file on the tape, detail/ included, against the same terms record_tape.py's LEAKS refuses.
+    const details = readdirSync(new URL("detail/", TAPE)).map((file) => `detail/${file}`);
+    for (const name of ["tape.json", "scan.json", "captions.json", "labels.json", "cohorts.json", "PROVENANCE.md", ...details]) {
       const text = readFileSync(new URL(name, TAPE), "utf8");
-      expect(text, name).not.toMatch(/\/home\/|\/Users\/|\b192\.168\.|\b10\.\d+\.\d+\.\d+\b|\.local\b|\.lan\b/);
+      expect(text, name).not.toMatch(/\/home\/|\/Users\/|\\Users\\|\b192\.168\.|\b10\.\d+\.\d+\.\d+\b|\b172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+\b|\b[\w-]+\.(?:local|lan|internal)\b/);
     }
     for (const image of scan.results) expect(image.abs_path.startsWith(`${scan.folder}/`)).toBe(true);
     expect(tape.health.source_root).toBe("/data/images");

@@ -268,12 +268,13 @@ export function browserLabels(store: KeyValueStore | null, recorded: LabelFile, 
     const raw = store?.getItem(LABEL_STORAGE_PREFIX + folder);
     if (raw) {
       const parsed = JSON.parse(raw) as { labels?: unknown };
-      if (parsed.labels && typeof parsed.labels === "object" && !Array.isArray(parsed.labels)) return { folder, labels: parsed.labels as Record<string, ImageLabel> };
+      if (parsed.labels && typeof parsed.labels === "object" && !Array.isArray(parsed.labels)) return { folder, labels: Object.assign(Object.create(null), parsed.labels) as Record<string, ImageLabel> };
     }
   } catch {
     // Blocked or broken storage: the recorded labels still show.
   }
-  return { folder, labels: folder === recorded.folder ? { ...recorded.labels } : {} };
+  // Null-prototype copies, as labelStore.ts reads them: a relPath of "__proto__" is an ordinary key.
+  return { folder, labels: Object.assign(Object.create(null), folder === recorded.folder ? recorded.labels : {}) as Record<string, ImageLabel> };
 }
 
 /** Set or clear one label in this browser's copy, the way the page's server does it on disk. */
