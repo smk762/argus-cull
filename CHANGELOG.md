@@ -4,6 +4,8 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-19
+
 ### Changed
 
 - **The NudeNet, EraX and watermark detectors are argus-retina's published images** (`ghcr.io/smk762/argus-retina-*`, `RETINA_TAG`, 0.1.0 by default) instead of sidecars built from this repo (#98). The `nudenet/`, `erax/`, `watermark/` and `sidecar-common/` folders are gone, and nothing here imports an AGPL library any more. On 30 images (20 from the demo tape and the 10 fixture images), retina returned the same classes and scores as the old sidecars for all three detectors. Retina's watermark image ships no weights, so a one-shot `watermark-weights` service fetches the same pinned YOLO11x into a volume on the first `up`. The `nsfw-ready` gate now waits for `model_state` `cpu` or `gpu`, because retina answers `/health` while its model loads. A new CI job, `licence`, fails on any `agpl-import` exemption.
