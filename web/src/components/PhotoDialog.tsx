@@ -640,7 +640,8 @@ function PhotoPanel({
   const holdReveal = revealHeld(image, pending);
   const override = label?.override ?? null;
   const obscured = shouldBlur(image, pending, blur, override);
-  const blurred = blocked || (obscured && !shown);
+  // An unblur lasts only while the frame may be unblurred: a frame that turns held (a rescan's unscored copy) blurs again.
+  const blurred = blocked || holdReveal || (obscured && !shown);
   const veil = blurred ? veilFor(image, pending, blur, override) : null;
   const source = frameFor(scanId, image.rel_path, veil, "detail");
   const boxes = veil ? watermarkBoxes(image) : [];
