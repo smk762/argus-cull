@@ -1,0 +1,57 @@
+{
+  "scan_id": "sample0fixture01",
+  "total": 10,
+  "kept": 7,
+  "rows": [
+    {
+      "rel_path": "duplicates/original.png",
+      "abs_path": "/data/images/fixture/duplicates/original.png",
+      "keep_reason": ""
+    },
+    {
+      "rel_path": "duplicates/copy.png",
+      "abs_path": "/data/images/fixture/duplicates/copy.png",
+      "keep_reason": "similar-to:duplicates/original.png"
+    },
+    {
+      "rel_path": "faces/front.png",
+      "abs_path": "/data/images/fixture/faces/front.png",
+      "keep_reason": ""
+    },
+    {
+      "rel_path": "faces/three-quarter.png",
+      "abs_path": "/data/images/fixture/faces/three-quarter.png",
+      "keep_reason": ""
+    },
+    {
+      "rel_path": "faces/profile.png",
+      "abs_path": "/data/images/fixture/faces/profile.png",
+      "keep_reason": ""
+    },
+    {
+      "rel_path": "garments/dress.png",
+      "abs_path": "/data/images/fixture/garments/dress.png",
+      "keep_reason": ""
+    },
+    {
+      "rel_path": "garments/jacket.png",
+      "abs_path": "/data/images/fixture/garments/jacket.png",
+      "keep_reason": ""
+    },
+    {
+      "rel_path": "rejects/blurry.png",
+      "abs_path": "/data/images/fixture/rejects/blurry.png",
+      "keep_reason": "rejected"
+    },
+    {
+      "rel_path": "scenes/room.png",
+      "abs_path": "/data/images/fixture/scenes/room.png",
+      "keep_reason": ""
+    },
+    {
+      "rel_path": "scenes/sky.png",
+      "abs_path": "/data/images/fixture/scenes/sky.png",
+      "keep_reason": "below-score"
+    }
+  ]
+}

@@ -13,6 +13,14 @@ import {
   type ScanSummary,
 } from "./types";
 
+/**
+ * The NudeNet score "Drop exposed nudity" starts at: any exposure NudeNet reports (its 0.2
+ * reporting floor; curator's DEFAULT_NSFW_THRESHOLD, darkroom's default). Conservative on
+ * purpose: on NudeNet 640m a 0.5 cutoff let through exposed images scored 0.27-0.49
+ * (argus-curator#156).
+ */
+export const DEFAULT_NSFW_THRESHOLD = 0.2;
+
 export function sameMembers(left: readonly string[], right: readonly string[]): boolean {
   if (left.length !== right.length) return false;
   const have = new Set(right);
@@ -69,12 +77,11 @@ export function exposedLabelsForRequest(filter: FilterState, active: boolean): N
 
 /** Rules a scan recorded under any of its policies, official or variant, that are not already in the default policy list. */
 export function recordedGuardRules(summary: ScanSummary | null, known: readonly string[]): string[] {
-  const knownSet = new Set(known);
   const extra = new Set<string>();
   for (const image of summary?.results ?? []) {
     for (const rule of policyVerdicts(image).flatMap((verdict) => verdict.result.rules)) {
-      const letter = rule.trim().slice(0, 1).toUpperCase();
-      if (!knownSet.has(letter) && !knownSet.has(rule)) extra.add(rule);
+      // The curator's match, so "Drugs" is not taken for rule D the way "D. Drugs" is.
+      if (!known.some((name) => ruleMatches(rule, name))) extra.add(rule);
     }
   }
   return [...extra].sort();
@@ -103,7 +110,11 @@ export function guardRuleCounts(results: readonly ImageResult[], rules: readonly
 
 /** The name a rule letter has under the policy *summary* was judged by. */
 export function guardRuleLabel(id: string, summary: ScanSummary | null): string {
-  const policy = summary?.guard_config?.policy;
+  return ruleLabelUnder(id, summary?.guard_config?.policy ?? null);
+}
+
+/** The name a rule letter has under the named policy. */
+export function ruleLabelUnder(id: string, policy: string | null): string {
   if (id === "A" && policy === "adult") return ADULT_RULE_A;
   if (policy === "adult-cinematic" && id in ADULT_CINEMATIC_RULES) return ADULT_CINEMATIC_RULES[id];
   return GUARD_RULES.find((rule) => rule.id === id)?.label ?? id;

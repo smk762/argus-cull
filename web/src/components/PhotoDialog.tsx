@@ -1,20 +1,30 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
-import { imageUrl, thumbUrl } from "@/lib/api";
+import { frameFor } from "@/lib/api";
 import { ageMissing, awaitingChecks, bodyAges, DEFAULT_BLUR, isMinorExposed, measuredAges, revealHeld, shouldBlur, shownAge, usesSetAge, youngestAge, type BlurPolicy } from "@/lib/chunks";
 import { effectiveTags, EMPTY_COHORTS, type Caption, type CohortConfig, type CohortRule } from "@/lib/cohorts";
 import { confLine, nsfwSource, nudeNetLine, qualityLine, sceneLine } from "@/lib/detailLines";
 import { cascadePath, displayGuardExplanation, splitGuardExplanation } from "@/lib/guardText";
-import { EXPECT_LABELS, EXPECTS, type ImageLabel } from "@/lib/labels";
+import { EXPECT_LABELS, EXPECTS, labelFields, type ImageLabel, type LabelPatch } from "@/lib/labels";
+import { DOCS } from "@/lib/docsLinks";
 import { contentRating, nudeNetLabel } from "@/lib/moderation";
 import { effectiveUnsafe, policyVerdicts, shieldLabel, shieldState, shieldTitle } from "@/lib/policies";
+import { veilFor, watermarkBoxes } from "@/lib/veil";
 import { formatYears } from "@/lib/years";
 import { NUDENET_LABELS, slugLabel, type EraxResult, type FaceAttributes, type GuardResult, type ImageResult, type NsfwResult } from "@/lib/types";
 
+import { DocLink } from "./DocLink";
 import { closeModal, Modal } from "./Modal";
 import { Shield } from "./Shield";
+import { cellsAcross, VeilFrame } from "./VeilFrame";
+
+/** The detail view's box for a veiled frame: the frame's own shape, as wide as fits under 70dvh. */
+function frameBox(width: number, height: number): CSSProperties {
+  if (!(width > 0 && height > 0)) return { aspectRatio: "1 / 1", width: "min(100%, 70dvh)" };
+  return { aspectRatio: `${width} / ${height}`, width: `min(100%, calc(70dvh * ${(width / height).toFixed(4)}))` };
+}
 
 const SCORE_PARTS: [string, string][] = [
   ["sharpness", "Sharpness"],
@@ -312,23 +322,16 @@ function PolicyReports({ image, override }: { image: ImageResult; override: stri
           );
         })}
       </div>
+      <FoldDocs title="SingGuard" docs={[{ href: DOCS.policyCheck, text: "Policy check" }, { href: DOCS.moderation, text: "Moderation and its limits" }]} />
     </section>
   );
 }
 
-/** The saved fields of a label, so a change to one keeps the others, tags included. */
-function labelFields(label: ImageLabel | null): Omit<ImageLabel, "updated_at"> {
-  return {
-    expect: label?.expect ?? null,
-    proxy: label?.proxy ?? false,
-    override: label?.override ?? null,
-    note: label?.note ?? "",
-    ...(label?.tags ? { tags: label.tags } : {}),
-  };
-}
-
 /** A collapsible section that starts open when it holds a value. The summary names what is set. */
-function Fold({ title, summary, open, children }: { title: string; summary: string | null; open: boolean; children: ReactNode }) {
+/** A doc link a fold ends with: what the numbers in it mean, in the curator docs. */
+type FoldDoc = { href: string; text: string };
+
+function Fold({ title, summary, open, docs = [], children }: { title: string; summary: string | null; open: boolean; docs?: FoldDoc[]; children: ReactNode }) {
   return (
     <details open={open} className="border-t border-base-700 pt-3">
       <summary className="cursor-pointer text-caption text-text-muted">
@@ -336,7 +339,21 @@ function Fold({ title, summary, open, children }: { title: string; summary: stri
         {summary ? <span className="text-text-secondary"> · {summary}</span> : null}
       </summary>
       {children}
+      <FoldDocs title={title} docs={docs} />
     </details>
+  );
+}
+
+function FoldDocs({ title, docs }: { title: string; docs: FoldDoc[] }) {
+  if (docs.length === 0) return null;
+  return (
+    <p className="mt-1 flex flex-wrap gap-x-3 text-caption">
+      {docs.map((doc) => (
+        <DocLink key={doc.href} href={doc.href} label={`${title}: ${doc.text}`}>
+          {doc.text}
+        </DocLink>
+      ))}
+    </p>
   );
 }
 
@@ -352,10 +369,11 @@ function LabelControl({
   policies: string[];
   saving: boolean;
   error: string | null;
-  onChange: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+  /** A change to some fields. The page merges it over the last change it sent, not this render's label, so a note saved on blur survives a click straight after. */
+  onChange: (patch: LabelPatch | null) => void;
 }) {
   const current = labelFields(label);
-  const update = (patch: Partial<typeof current>) => onChange({ ...current, ...patch });
+  const update = (patch: LabelPatch) => onChange(patch);
   const canProxy = current.expect === "hard" || current.expect === "ambiguous";
   const set = Boolean(current.expect || current.override || (current.note && current.note.trim()));
   const summary = [
@@ -553,6 +571,7 @@ function PhotoPanel({
   scanning = false,
   blur = DEFAULT_BLUR,
   onDelete,
+  deleteOff = null,
   onPrevious,
   onNext,
   position,
@@ -576,6 +595,8 @@ function PhotoPanel({
   blur?: BlurPolicy;
   onClose: () => void;
   onDelete: () => Promise<void>;
+  /** The static demo: Delete shows, disabled, with this reason. */
+  deleteOff?: string | null;
   onPrevious: (() => void) | null;
   onNext: (() => void) | null;
   position: string | null;
@@ -584,7 +605,7 @@ function PhotoPanel({
   policies?: string[];
   labelSaving?: boolean;
   labelError?: string | null;
-  onLabel?: (next: Omit<ImageLabel, "updated_at"> | null) => void;
+  onLabel?: (patch: LabelPatch | null) => void;
   /** Cohort rules, the tags they derive for this image, and the caption sidecar they read. */
   cohorts?: CohortConfig;
   autoTags?: readonly string[];
@@ -619,7 +640,11 @@ function PhotoPanel({
   const holdReveal = revealHeld(image, pending);
   const override = label?.override ?? null;
   const obscured = shouldBlur(image, pending, blur, override);
-  const blurred = blocked || (obscured && !shown);
+  // An unblur lasts only while the frame may be unblurred: a frame that turns held (a rescan's unscored copy) blurs again.
+  const blurred = blocked || holdReveal || (obscured && !shown);
+  const veil = blurred ? veilFor(image, pending, blur, override) : null;
+  const source = frameFor(scanId, image.rel_path, veil, "detail");
+  const boxes = veil ? watermarkBoxes(image) : [];
 
   async function remove() {
     if (!confirmDelete) {
@@ -638,11 +663,12 @@ function PhotoPanel({
 
   return (
     <>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <h2 id="photo-title" className="font-display text-subheading break-all">
+      {/* Phones: the name on its own line, the buttons wrapping under it. */}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
+        <h2 id="photo-title" className="min-w-0 basis-full font-display text-subheading break-all sm:basis-auto">
           {image.rel_path}
         </h2>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
           <button type="button" className="rounded-md border border-base-600 px-3 py-1 text-small disabled:opacity-40" disabled={!onPrevious} onClick={() => onPrevious?.()}>
             Previous
           </button>
@@ -654,7 +680,8 @@ function PhotoPanel({
             <button
               type="button"
               className="rounded-md border border-warning px-3 py-1 text-small text-warning disabled:opacity-40"
-              disabled={deleting}
+              disabled={deleting || deleteOff != null}
+              title={deleteOff ?? undefined}
               onClick={() => void remove()}
             >
               {deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete"}
@@ -669,29 +696,37 @@ function PhotoPanel({
           </button>
         </div>
       </div>
-      <div className="relative overflow-hidden rounded-lg bg-base-900">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={blocked ? thumbUrl(scanId, image.rel_path) : imageUrl(scanId, image.rel_path)}
-          alt={blurred ? "" : image.rel_path}
-          className={`max-h-[70dvh] w-full object-contain ${blurred ? "scale-105 blur-3xl" : ""}`}
-        />
-        {blurred && !blocked && !holdReveal ? (
-          <button
-            type="button"
-            className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small"
-            onClick={() => setShown(true)}
-          >
-            Unblur
-          </button>
-        ) : null}
-        {holdReveal && !blocked ? (
-          <p className="absolute inset-0 m-auto h-fit w-fit rounded-md bg-base-800 px-4 py-2 text-small">Scanning…</p>
-        ) : null}
-        {blocked ? (
-          <p className="absolute inset-x-4 bottom-4 rounded-md bg-base-800 px-3 py-2 text-caption text-text-secondary">
-            MiVOLO reads a face as under 18 and NudeNet reported an exposed score of at least 0.2. This photo stays blurred and will not be kept.
-          </p>
+      <div className="overflow-hidden rounded-lg bg-base-900">
+        {/* Veiled: the mosaic only. The full view is fetched once the frame shows, or the viewer unblurs one that may be. */}
+        {source.kind === "image" ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={source.url} alt={image.rel_path} className="max-h-[70dvh] w-full object-contain" />
+        ) : (
+          <VeilFrame
+            source={source}
+            fit="fill"
+            across={cellsAcross(source.cells, image.width, image.height, "fill")}
+            className="mx-auto"
+            style={frameBox(image.width, image.height)}
+            boxes={boxes}
+            boxLabel={boxes.length > 0 ? `${boxes.length === 1 ? "Where the watermark detector fired" : `Where the watermark detector fired, ${boxes.length} boxes`}` : undefined}
+          />
+        )}
+        {veil ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-base-700 bg-base-800 px-3 py-2">
+            <div className="min-w-0 flex-1 basis-60">
+              <p className="font-semibold text-text-primary">{veil.headline}</p>
+              <p className="text-caption leading-relaxed text-text-secondary">
+                {veil.detail}
+                {boxes.length > 0 ? ` The outlined ${boxes.length === 1 ? "box is" : "boxes are"} where the watermark detector fired.` : ""}
+              </p>
+            </div>
+            {veil.unblur ? (
+              <button type="button" className="rounded-md border border-base-600 px-4 py-1.5 text-small" onClick={() => setShown(true)}>
+                Unblur
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <div className="mt-4 space-y-4 text-small">
@@ -703,21 +738,26 @@ function PhotoPanel({
         ) : null}
         <AppearanceTable image={image} />
         {/* The numbers the summary strip already gives are folded: the strip says how much, these say why. */}
-        <Fold title="Quality" summary={qualityLine(image)} open={false}>
+        <Fold title="Quality" summary={qualityLine(image)} open={false} docs={[{ href: DOCS.quality, text: "How scoring works" }]}>
           <QualityTable image={image} />
         </Fold>
         {image.nsfw ? (
-          <Fold title="NudeNet" summary={nudeNetLine(image.nsfw, contentRating(image), nsfwSource(image))} open={false}>
+          <Fold
+            title="NudeNet"
+            summary={nudeNetLine(image.nsfw, contentRating(image), nsfwSource(image))}
+            open={false}
+            docs={[{ href: DOCS.nudity, text: "Nudity detection" }, ...(image.erax ? [{ href: DOCS.erax, text: "EraX" }] : []), { href: DOCS.moderation, text: "Moderation and its limits" }]}
+          >
             <NudeNetTable nsfw={image.nsfw} rating={contentRating(image)} source={nsfwSource(image)} erax={image.erax ?? null} />
           </Fold>
         ) : null}
         {image.scene ? (
-          <Fold title="Places365" summary={sceneLine(image.scene.categories, image.scene.environment)} open={false}>
+          <Fold title="Places365" summary={sceneLine(image.scene.categories, image.scene.environment)} open={false} docs={[{ href: DOCS.scenes, text: "Scene tags" }]}>
             <ConfTable rows={image.scene.categories.map((category) => ({ label: category.label, conf: category.conf }))} caption={`Environment: ${image.scene.environment}`} />
           </Fold>
         ) : null}
         {worn.length > 0 ? (
-          <Fold title="Fashionpedia" summary={confLine(worn)} open={false}>
+          <Fold title="Fashionpedia" summary={confLine(worn)} open={false} docs={[{ href: DOCS.wardrobe, text: "Garments" }]}>
             <ConfTable rows={worn} />
           </Fold>
         ) : null}
@@ -732,11 +772,7 @@ function PhotoPanel({
             label={label}
             caption={caption}
             saving={labelSaving}
-            onChange={(tags) => {
-              const fields = labelFields(label);
-              delete fields.tags;
-              onLabel(tags ? { ...fields, tags } : fields);
-            }}
+            onChange={(tags) => onLabel({ tags })}
           />
         ) : null}
         {onLabel ? <LabelControl label={label} policies={policies} saving={labelSaving} error={labelError} onChange={onLabel} /> : null}

@@ -56,7 +56,10 @@ class NoVerdict(ValueError):
 
 
 def _first_line_verdict(raw: str) -> bool | None:
-    first = raw.splitlines()[0].strip().lower()
+    lines = raw.strip().splitlines()
+    if not lines:
+        return None
+    first = lines[0].strip().lower()
     if first.startswith("unsafe"):
         return False
     if first.startswith("safe"):
@@ -100,12 +103,23 @@ def _titles(policy: str | None) -> list[str]:
     return [heading for heading in headings if heading.casefold() != "safe"]
 
 
+# Minimum length of a shortened title ("B. Real" for "B. Real-World Crimes & Public Safety").
+_MIN_SHORT_TITLE = 4
+# What may follow a full title when the answer runs on past it ("B. Crimes, since ...").
+_RUN_ON_RE = re.compile(r"\s*[,;:(\-\u2013\u2014.]")
+
+
 def _rule_title(answer: str, policy: str | None) -> str | None:
     """The rule to record, or None when *answer* is not a title of *policy*.
 
-    A shortened heading matches (``B. Real-World Crimes`` for the full title),
-    and the caller's wording is kept for that. An exact match uses the heading,
-    as does an answer that runs on past it, so prose is never recorded as a rule.
+    A shortened heading matches (``B. Real-World Crimes`` for the full title)
+    when it is cut at a word boundary and at least ``_MIN_SHORT_TITLE``
+    characters long, and the caller's wording is kept for that. An exact match
+    uses the heading, as does an answer that runs on past it after punctuation
+    (``..., since``), so prose is never recorded as a rule. A fragment ("B",
+    "No"), a cut mid-word, or an answer that fits more than one heading names
+    no rule: it is unreadable, not whichever heading came first. The same rule
+    as agent-composer's ``guard_policy._lookup_rule``.
     """
     wanted = answer.casefold()
     if not wanted:
@@ -114,13 +128,16 @@ def _rule_title(answer: str, policy: str | None) -> str | None:
     for title in titles:
         if title.casefold() == wanted:
             return title
+    candidates: list[str] = []
     for title in titles:
         name = title.casefold()
-        if name.startswith(wanted):
-            return answer
-        if wanted.startswith(name):
-            return title
-    return None
+        shortened = len(wanted) >= _MIN_SHORT_TITLE and name.startswith(wanted) and not name[len(wanted)].isalnum()
+        runs_on = wanted.startswith(name) and _RUN_ON_RE.match(wanted, len(name)) is not None
+        if shortened:
+            candidates.append(answer)
+        elif runs_on:
+            candidates.append(title)
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def parse_generation(text: str, policy: str | None = None) -> tuple[bool, str, str, bool | None]:

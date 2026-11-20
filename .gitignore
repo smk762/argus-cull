@@ -9,3 +9,8 @@ out/
 /labels/
 compose.override.yaml
 .venv-curator/
+
+# Static demo (make pages): Cloudflare Pages CLI state and the export.
+.wrangler/
+web/.wrangler/
+web/out/

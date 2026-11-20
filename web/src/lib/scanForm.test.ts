@@ -115,10 +115,10 @@ describe("shown age", () => {
 describe("scan template", () => {
   it("reads the form back out of a finished scan", () => {
     const template = templateFromSummary(SUMMARY, "/data/images", DETECTORS);
-    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 });
+    expect(template).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 });
     // A scan that ran garments runs them again; one with no recorded policy takes the picker's default.
     const plain = { ...SUMMARY, garments_config: { enabled: true, min_conf: 0.3 }, guard_config: { enabled: false }, faces_config: { enabled: true, fairface: true, mivolo: true } };
-    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 });
+    expect(templateFromSummary(plain, "/data/images/", DETECTORS)).toEqual({ folder: "adult/one set", policy: { policy: "adult", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 });
     // The curator writes a policy name even when SingGuard was off; that is not a choice to repeat.
     const off: ScanSummary = { ...SUMMARY, guard_config: { enabled: false, policy: "default" } };
     expect(templateFromSummary(off, "/data/images", DETECTORS).policy).toEqual({ policy: "adult", variants: [] });
@@ -144,8 +144,8 @@ describe("scan template", () => {
 
   it("names what a template runs", () => {
     expect(templateSummary(templateFromSummary(SUMMARY, "/data/images", DETECTORS), DETECTORS)).toBe("adult + adult-v2 · set age");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 }, DETECTORS)).toBe("default · garments");
-    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 }, DETECTORS)).toBe("default · garments");
+    expect(templateSummary({ folder: "", policy: { policy: "default", variants: [] }, withGarments: true, setAge: false, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 }, { ...DETECTORS, garments: false, singguard_policies: [] })).toBe("");
   });
 });
 
@@ -260,6 +260,26 @@ describe("run stats", () => {
     expect(young.age.frames_minor_exposed).toBe(1);
   });
 
+  it("counts an under-18 set age on a faceless frame as aged and under 18", () => {
+    const set = { ...SET_AGE, years: 16.4 };
+    const minor = runStats(
+      { ...SUMMARY, set_age: set, results: [image("a.jpg", { set_age: set, nsfw: { detections: [], labels: { FEMALE_BREAST_EXPOSED: 0.4 }, exposed_score: 0.4 } })] },
+      null,
+      new Map(),
+      new Map(),
+      NO_TAGS,
+      [],
+    );
+    expect(minor.age).toMatchObject({
+      frames_with_set_age: 1,
+      frames_without_age: 0,
+      frames_under_18: 1,
+      frames_minor_exposed: 1,
+      frames_under_18_not_exposed: 0,
+      youngest_from: { face: 0, body: 0, set: 1 },
+    });
+  });
+
   it("bands NudeNet and rates each policy", () => {
     expect(stats.nudenet).toMatchObject({ scored: 5, mean_exposed: 0.34, bands: { low: 2, mid: 1, high: 2, unscored: 0 } });
     expect(stats.nudenet.source).toEqual({ nudenet: 5, erax_filled: 0, erax_only: 0, unscored: 0 });
@@ -344,10 +364,18 @@ describe("run stats", () => {
     expect(lingerie.bands.mid).toEqual({ tagged_checked: 1, tagged_unsafe: 1, rest_checked: 0, rest_unsafe: 0 });
   });
 
+  it("refuses a run whose folder climbs out of the source root", () => {
+    for (const folder of ["/data/images/../../etc", "/data/images/./../secret", "/data/images//..//other"]) {
+      expect(() => templateFromRunStats({ ...JSON.parse(JSON.stringify(stats)), folder }, "/data/images", DETECTORS), folder).toThrow(/not under this curator's source root/);
+    }
+    // A path that only looks odd but stays inside is read as where it lands.
+    expect(templateFromRunStats({ ...JSON.parse(JSON.stringify(stats)), folder: "/data/images/a/./b/../c//" }, "/data/images", DETECTORS).template.folder).toBe("a/c");
+  });
+
   it("fills the scan form back from its own file", () => {
     const file = JSON.parse(JSON.stringify(stats));
     expect(templateFromRunStats(file, "/data/images", DETECTORS)).toEqual({
-      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 15 },
+      template: { folder: "adult/one set", policy: { policy: "adult", variants: ["adult-v2"] }, withGarments: false, setAge: true, readBodies: false, drops: [], cropWatermarks: false, cropMaxCut: 17 },
       notes: [],
     });
     // A curator without adult-v2 drops it and says so.

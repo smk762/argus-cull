@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getGuardPolicies, getHealth, getLabels, getScan, getScans, deleteCachedScan, purgeScans, putLabel, scanFolder, ScanStopped, selectScan } from "@/lib/api";
-import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, shouldBlur, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
+import { cancelScan, deleteImages, exportScan, getCaptions, getCohorts, getDetectors, getDisplay, getGuardPolicies, getHealth, getImageDetail, getLabels, getScan, getScans, deleteCachedScan, purgeScans, putLabel, resetDemoLabels, scanFolder, ScanStopped, selectScan } from "@/lib/api";
+import { LIGHTBOX_DEMO_URL, LIGHTBOX_REPO_URL, OFF, REPO_URL, staticDemo } from "@/lib/demo";
+import { loadTape } from "@/lib/staticApi";
+import type { Tape } from "@/lib/tape";
+import { ASCENDING_SORTS, DEFAULT_BLUR, facesRan, filterByAge, filterByFaces, filterByKeep, folderLabel, isMinorExposed, mergeChunk, sortImages, type BlurPolicy, type FaceView, type GridSort, type KeepView, type SortDirection } from "@/lib/chunks";
 import { autoTags, cohortStats, effectiveTags, EMPTY_COHORTS, filterByTag, type Caption, type CohortConfig } from "@/lib/cohorts";
 import { downloadText } from "@/lib/download";
-import { labelsJsonl, type ImageLabel } from "@/lib/labels";
+import { fetchMissingCaptions } from "@/lib/captionBatches";
+import { scanToRefetch } from "@/lib/scanWatch";
+import { LabelSaver, labelsForFolder, labelsJsonl, type ImageLabel, type LabelPatch } from "@/lib/labels";
+import { DOCS } from "@/lib/docsLinks";
 import { madeWith } from "@/lib/madeWith";
 import { defaultExportDest, exportedAbsPathList, keptPathList, selectionJsonl } from "@/lib/paths";
-import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
+import { filterByShield, pathsByShield, policiesRun, policyFlagCounts, policyStats, withOfficialNamed, withoutPolicies, type ShieldPick, type ShieldView } from "@/lib/policies";
 import { runStats, runStatsFilename } from "@/lib/runStats";
 import { templateFromSummary, templateFromView, viewWithTemplate, type ScanTemplate } from "@/lib/scanTemplate";
 import { availability, guardBody, selectBody } from "@/lib/select";
@@ -30,9 +36,15 @@ import {
 import { mergeProgress } from "@/lib/progress";
 import { withoutScan } from "@/lib/purge";
 import { withFaceName, withFilter } from "@/lib/urlState";
+import { veilFor, type Veil } from "@/lib/veil";
 import { currentSearch, replaceView, serverSearch, subscribeUrl, viewFromSearch } from "@/lib/urlStore";
 
+import { DemoBadge } from "./DemoBadge";
+import { DemoProvenance } from "./DemoProvenance";
+import { DocLink } from "./DocLink";
 import { ExportDialog } from "./ExportDialog";
+import { ExternalLink } from "./ExternalLink";
+import { ThemeToggle } from "./ThemeToggle";
 import { SubsetDialog } from "./SubsetDialog";
 import packageJson from "../../package.json";
 
@@ -47,7 +59,9 @@ import { SetAgeOutcome } from "./ScanChecks";
 import { ScanDialog } from "./ScanDialog";
 import { ScansTable } from "./ScansTable";
 
-const LIGHTBOX_URL = "https://github.com/smk762/argus-lightbox";
+/** The static demo build (make pages): data from the recorded tape, no curator, no API routes. */
+const STATIC = staticDemo();
+const LIGHTBOX_URL = STATIC ? LIGHTBOX_DEMO_URL : LIGHTBOX_REPO_URL;
 
 function subscribeHydration(): () => void {
   return () => {};
@@ -59,17 +73,21 @@ function sameJson(left: unknown, right: unknown): boolean {
 
 const CULL_VERSION = packageJson.version;
 const NO_POLICIES_OFF: string[] = [];
+const DEMO_INTRO = "A content-safety screen for training images, on argus-curator: every frame stays blurred until its NudeNet, MiVOLO age and SingGuard policy results are in, and a frame the policy would not keep stays veiled.";
 
 export function CullApp() {
   const hydrated = useSyncExternalStore(subscribeHydration, () => true, () => false);
   const search = useSyncExternalStore(subscribeUrl, currentSearch, serverSearch);
   const view = useMemo(() => viewFromSearch(search), [search]);
+  const [tape, setTape] = useState<Tape | null>(null);
+  const [tapeError, setTapeError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [detectors, setDetectors] = useState<Detectors | null>(null);
   const [guardPolicies, setGuardPolicies] = useState<GuardPolicyInfo[] | null>(null);
-  const [labels, setLabels] = useState<Map<string, ImageLabel>>(() => new Map());
+  const [loadedLabels, setLabels] = useState<Map<string, ImageLabel>>(() => new Map());
   const [labelsFolder, setLabelsFolder] = useState<string | null>(null);
+  const [labelSaver] = useState(() => new LabelSaver(putLabel));
   const [labelSaving, setLabelSaving] = useState(false);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -82,11 +100,17 @@ export function CullApp() {
   const [scanForm, setScanForm] = useState<{ template: ScanTemplate; from: string | null } | null>(null);
   const [rerunning, setRerunning] = useState<string | null>(null);
   // The scan as the curator returned it. Most of the page reads `summary`, which leaves out policies switched off in the sidebar.
-  const [rawSummary, setSummary] = useState<ScanSummary | null>(null);
+  const [curatorSummary, setSummary] = useState<ScanSummary | null>(null);
+  // An unnamed official verdict takes the config's policy name, so verdicts and the policy list agree.
+  const rawSummary = useMemo(() => (curatorSummary ? withOfficialNamed(curatorSummary) : null), [curatorSummary]);
   const [policyOff, setPolicyOff] = useState<{ scanId: string; off: string[] } | null>(null);
   // Switched-off policies belong to one scan; opening another starts with every policy on.
   const offPolicies = policyOff && policyOff.scanId === rawSummary?.scan_id ? policyOff.off : NO_POLICIES_OFF;
   const summary = useMemo(() => (rawSummary ? withoutPolicies(rawSummary, offPolicies) : null), [rawSummary, offPolicies]);
+  // Labels follow the scanned folder, not the scan, so they survive a rescan under other policies.
+  const scanFolderPath = summary?.folder ?? null;
+  // Until this folder's labels load (or if they fail to), none apply: never the last folder's overrides.
+  const labels = labelsForFolder(loadedLabels, labelsFolder, scanFolderPath);
   const allPolicies = useMemo(() => policiesRun(rawSummary), [rawSummary]);
   const policyFlags = useMemo(() => policyFlagCounts(rawSummary?.results ?? []), [rawSummary]);
   const [selection, setSelection] = useState<SelectResult | null>(null);
@@ -111,11 +135,25 @@ export function CullApp() {
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
 
   useEffect(() => {
+    if (!STATIC) return;
     let cancel = false;
-    fetch("/api/display")
-      .then((response) => response.json())
+    loadTape()
+      .then(({ tape: loaded }) => {
+        if (!cancel) setTape(loaded);
+      })
+      .catch((err: unknown) => {
+        if (!cancel) setTapeError(err instanceof Error ? err.message : "Could not read the data tape.");
+      });
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    getDisplay()
       .then((body: BlurPolicy) => {
-        if (!cancel && typeof body.exposedScore === "number") setBlur(body);
+        if (!cancel) setBlur(body);
       })
       .catch(() => {
         // The defaults still lift the blur at 0.25 and re-apply it on a policy issue.
@@ -148,40 +186,18 @@ export function CullApp() {
   const resultPaths = summary?.results ?? [];
   useEffect(() => {
     if (!wantsCaptions || captionError) return;
-    const missing = resultPaths.map((image) => image.abs_path).filter((abs) => !captionsAsked.current.has(abs));
-    if (missing.length === 0) return;
-    for (const abs of missing) captionsAsked.current.add(abs);
-    let cancel = false;
-    const batches: string[][] = [];
-    for (let start = 0; start < missing.length; start += 400) batches.push(missing.slice(start, start + 400));
-    const giveBack = (batch: string[]) => {
-      for (const abs of batch) captionsAsked.current.delete(abs);
-    };
-    (async () => {
-      for (const [index, batch] of batches.entries()) {
-        try {
-          const found = await getCaptions(batch);
-          if (cancel) {
-            giveBack(batch);
-            batches.slice(index + 1).forEach(giveBack);
-            return;
-          }
-          setCaptions((current) => {
-            const next = new Map(current);
-            for (const [abs, caption] of Object.entries(found)) next.set(abs, caption);
-            return next;
-          });
-        } catch (err: unknown) {
-          giveBack(batch);
-          batches.slice(index + 1).forEach(giveBack);
-          if (!cancel) setCaptionError(err instanceof Error ? err.message : "Could not read captions.");
-          return;
-        }
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
+    // No cancel on re-run: a batch in flight when more results stream in is still applied (see fetchMissingCaptions).
+    fetchMissingCaptions(
+      resultPaths.map((image) => image.abs_path),
+      captionsAsked.current,
+      getCaptions,
+      (found) =>
+        setCaptions((current) => {
+          const next = new Map(current);
+          for (const [abs, caption] of Object.entries(found)) next.set(abs, caption);
+          return next;
+        }),
+    ).catch((err: unknown) => setCaptionError(err instanceof Error ? err.message : "Could not read captions."));
     // resultPaths is a new array each render; the length and scan are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantsCaptions, captionError, summary?.scan_id, resultPaths.length]);
@@ -216,7 +232,8 @@ export function CullApp() {
       }
     }
     void loadStatus();
-    const timer = window.setInterval(() => void loadStatus(), 8000);
+    // The tape does not change while the page is open.
+    const timer = STATIC ? undefined : window.setInterval(() => void loadStatus(), 8000);
     return () => {
       cancel = true;
       window.clearInterval(timer);
@@ -271,7 +288,7 @@ export function CullApp() {
         });
     };
     load();
-    const timer = window.setInterval(load, 2000);
+    const timer = STATIC ? undefined : window.setInterval(load, 2000);
     return () => {
       cancel = true;
       window.clearInterval(timer);
@@ -295,9 +312,47 @@ export function CullApp() {
     };
   }, [hydrated, scanning, view.scan, summary?.scan_id]);
 
-  const activeScanId = scanList?.active?.scan_id ?? null;
+  // Demo: the detail view's score breakdown and boxes live in detail/<id>.json; put them back when a photo opens.
+  const openPath = view.photo;
+  // Paths whose detail was put back since the last replay: a detail with no score_breakdown would otherwise refetch on every summary change.
+  const detailFilled = useRef(new Set<string>());
   useEffect(() => {
-    if (!activeScanId || scanning || view.scan !== activeScanId) return;
+    if (scanning) detailFilled.current.clear();
+    if (!STATIC || !openPath || scanning) return;
+    const image = rawSummary?.results.find((item) => item.rel_path === openPath);
+    if (!image || image.score_breakdown || detailFilled.current.has(openPath)) return;
+    let cancel = false;
+    getImageDetail(image).then((full) => {
+      if (cancel || full === image) return;
+      detailFilled.current.add(full.rel_path);
+      setSummary((current) => (current ? { ...current, results: current.results.map((item) => (item.rel_path === full.rel_path ? full : item)) } : current));
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [openPath, rawSummary, scanning]);
+
+  const activeScanId = scanList?.active?.scan_id ?? null;
+  // The running scan this tab is polling, so the poll's end can fetch the finished summary.
+  const watchedScan = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeScanId || scanning || view.scan !== activeScanId) {
+      const finished = scanToRefetch(watchedScan.current, activeScanId, view.scan, scanning);
+      watchedScan.current = null;
+      if (!finished) return;
+      let cancel = false;
+      getScan(finished)
+        .then((body) => {
+          if (!cancel) setSummary(body);
+        })
+        .catch(() => {
+          // The load effect and the next visit still read it; a missed refresh only leaves the partial summary.
+        });
+      return () => {
+        cancel = true;
+      };
+    }
+    watchedScan.current = activeScanId;
     let cancel = false;
     const refresh = () => {
       getScan(activeScanId)
@@ -348,7 +403,7 @@ export function CullApp() {
   const [ageTo, setAgeTo] = useState<number | null>(null);
   const [faceView, setFaceView] = useState<FaceView>("all");
   const [shieldView, setShieldView] = useState<ShieldView>("all");
-  const [keepView, setKeepView] = useState<KeepView>("all");
+  const keepView: KeepView = view.show;
   const [subsetOpen, setSubsetOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -401,8 +456,6 @@ export function CullApp() {
   const cohortsInView = useMemo(() => cohortStats(cohortBase, tags, cohorts, policyNames), [cohortBase, tags, cohorts, policyNames]);
   const labelledInView = useMemo(() => viewed.filter((image) => labels.get(image.rel_path)?.expect != null).length, [viewed, labels]);
 
-  // Labels follow the scanned folder, not the scan, so they survive a rescan under other policies.
-  const scanFolderPath = summary?.folder ?? null;
   useEffect(() => {
     if (!scanFolderPath) return;
     if (scanFolderPath === labelsFolder) return;
@@ -422,12 +475,12 @@ export function CullApp() {
     };
   }, [scanFolderPath, labelsFolder]);
 
-  async function saveLabel(relPath: string, next: Omit<ImageLabel, "updated_at"> | null) {
+  async function saveLabel(relPath: string, patch: LabelPatch | null) {
     if (!scanFolderPath) return;
     setLabelSaving(true);
     setLabelError(null);
     try {
-      const file = await putLabel(scanFolderPath, relPath, next);
+      const file = await labelSaver.save(scanFolderPath, relPath, patch, labels.get(relPath) ?? null);
       setLabels(new Map(Object.entries(file.labels)));
       setLabelsFolder(scanFolderPath);
     } catch (err: unknown) {
@@ -435,6 +488,13 @@ export function CullApp() {
     } finally {
       setLabelSaving(false);
     }
+  }
+
+  async function resetLabels() {
+    if (!scanFolderPath) return;
+    const file = await resetDemoLabels(scanFolderPath);
+    setLabels(new Map(Object.entries(file.labels)));
+    setLabelsFolder(scanFolderPath);
   }
 
   function downloadLabels() {
@@ -523,6 +583,20 @@ export function CullApp() {
   }, [sourceReady, scanning, scanList?.active, prefilterOffered]);
 
   const root = health?.source_root ?? null;
+
+  /** Demo: replay the recorded scan the way a live one streams in, so each frame's blur waits for its own scores. */
+  const replay = useCallback(async () => {
+    if (!tape || !detectors) return;
+    const recorded = await getScan(tape.scans.scans[0].scan_id);
+    void onScan(templateFromSummary(recorded, health?.source_root ?? null, detectors));
+  }, [tape, detectors, health?.source_root, onScan]);
+  const replayed = useRef(false);
+  useEffect(() => {
+    // A first visit replays the scan; a link that names it (or a reload after the replay) opens it scored.
+    if (!STATIC || replayed.current || !hydrated || !tape || !detectors || !sourceReady || view.scan) return;
+    replayed.current = true;
+    void replay();
+  }, [hydrated, tape, detectors, sourceReady, view.scan, replay]);
 
   /** Open the form empty, filled from the URL: a shared link shows what it would scan. */
   function openScanForm() {
@@ -737,12 +811,14 @@ export function CullApp() {
     if (scanList?.active && scanList.active.scan_id === summary?.scan_id) return scanList.active.pending_checks;
     return [];
   }, [scanning, pendingChecks, scanList?.active, summary?.scan_id]);
-  const sensitive = useMemo(() => {
-    const flagged = new Set<string>();
+  /** Why each veiled frame is veiled, for the People cards; the grid and detail view work it out per frame. */
+  const veils = useMemo(() => {
+    const veiled = new Map<string, Veil>();
     for (const image of summary?.results ?? []) {
-      if (shouldBlur(image, pending, displayBlur, labels.get(image.rel_path)?.override ?? null)) flagged.add(image.rel_path);
+      const veil = veilFor(image, pending, displayBlur, labels.get(image.rel_path)?.override ?? null);
+      if (veil) veiled.set(image.rel_path, veil);
     }
-    return flagged;
+    return veiled;
   }, [summary, pending, displayBlur, labels]);
   const peopleEnabled = gates.faces || (summary?.face_clusters.length ?? 0) > 0;
 
@@ -784,13 +860,43 @@ export function CullApp() {
     }
   }
 
+  // Demo: hold the page until the tape is read, so the sidebar does not grow under the reader as it loads.
+  if (STATIC && (!tape || !scanList || !detectors)) {
+    return (
+      <div className="cull-shell min-h-(--cull-h) p-4">
+        <h1 className="font-display text-heading">Argus Cull</h1>
+        <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+        <p className="my-4 max-w-prose text-small text-text-secondary">{DEMO_INTRO}</p>
+        <DemoProvenance tape={tape} error={tapeError} />
+        <main id="main" />
+      </div>
+    );
+  }
+
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[19rem_1fr]">
-      <aside className="space-y-5 overflow-y-auto border-base-700 p-4 lg:max-h-dvh lg:border-r">
-        <div>
-          <p className="font-display text-heading">Argus Cull</p>
-          <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+    <div className="cull-shell grid min-h-(--cull-h) lg:grid-cols-[19rem_1fr]">
+      <aside className="space-y-5 overflow-y-auto border-base-700 p-4 lg:max-h-(--cull-h) lg:border-r">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display text-heading">Argus Cull</h1>
+            <p className="text-caption text-text-secondary">Which files would make the training set.</p>
+            {STATIC ? (
+              // The demo's provenance, replay and scans sit at the foot of the sidebar; this jumps there.
+              <a href="#about-demo" className="mt-1.5 inline-flex items-center gap-1.5 text-caption text-text-secondary underline-offset-2 hover:text-text-primary hover:underline">
+                <DemoBadge state={tape?.provenance.kind === "sample" ? "sample" : "recorded"} />
+                synthetic demo · about
+              </a>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <DocLink href={DOCS.home} label="argus-curator docs" className="text-small">
+              Docs
+            </DocLink>
+            <ThemeToggle />
+          </div>
         </div>
+        {STATIC ? null : (
+          <>
         <p className="text-caption" role="status">
           {healthError ? <span className="text-error">{healthError}. Scan stays off until the curator answers.</span> : null}
           {health?.status === "ok" ? (
@@ -802,13 +908,14 @@ export function CullApp() {
         </p>
         <button
           type="button"
-          className="w-full rounded-md bg-interactive px-3 py-2 text-small font-medium disabled:opacity-40"
+          className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
           disabled={!sourceReady}
           title={scanBusy ? "A scan is running. The form opens; Scan waits for it to finish." : "Choose a folder, policy and checks"}
           onClick={openScanForm}
         >
           {scanning ? "Scanning…" : scanList?.active ? "Scan in progress" : "New scan"}
         </button>
+        {/* The live app only: the demo is one recorded scan, so it has no list of scans. */}
         <ScansTable
           scans={scanList}
           root={root}
@@ -823,6 +930,8 @@ export function CullApp() {
           forgetting={forgetting}
           onForget={(scanId) => void onForget(scanId)}
         />
+          </>
+        )}
         <SetAgeOutcome summary={summary} />
         <Filters
           filter={view.filter}
@@ -833,13 +942,11 @@ export function CullApp() {
           onChange={(patch) => replaceView(withFilter(view, patch))}
           unblurNsfw={unblurNsfw}
           onUnblurNsfw={setUnblurNsfw}
-          // The same switch as Show → Kept on the grid: on hides every image the keep set leaves out.
-          hideRejected={keepView === "kept"}
-          hideRejectedReady={reasons != null}
-          onHideRejected={(next) => {
-            setKeepView(next ? "kept" : "all");
-            if (view.page !== 1) replaceView({ ...view, page: 1 });
-          }}
+          // All, Kept or Left out: what the grid shows by the keep set, in the URL as `show`.
+          keepView={keepView}
+          keptCount={keepCounts?.kept ?? null}
+          leftOutCount={keepCounts?.leftOut ?? null}
+          onKeepView={(next) => replaceView({ ...view, show: next, page: 1 })}
           policies={allPolicies}
           policyFlags={policyFlags}
           policiesOff={offPolicies}
@@ -848,8 +955,26 @@ export function CullApp() {
           }}
           live={liveScan ? { phases: liveProgress == null ? [] : Array.isArray(liveProgress) ? liveProgress : [liveProgress], pending } : null}
         />
+        {STATIC ? (
+          // The demo's preamble, at the foot so the filters lead: where the tape came from and the replay.
+          <section id="about-demo" aria-label="About this demo" tabIndex={-1} className="space-y-4 border-t border-base-700 pt-4">
+            <p className="text-small text-text-secondary">{DEMO_INTRO}</p>
+            <DemoProvenance tape={tape} error={tapeError} onResetLabels={summary ? () => void resetLabels() : null} />
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="w-full rounded-md bg-interactive text-on-accent px-3 py-2 text-small font-medium disabled:opacity-40"
+                disabled={!tape || !detectors || scanning}
+                onClick={() => void replay()}
+              >
+                {scanning ? "Replaying…" : "Replay recorded scan"}
+              </button>
+              <p className="text-caption text-text-muted">Streams the recorded results in batches, the way a live scan arrives: frames stay blurred until their scores land.</p>
+            </div>
+          </section>
+        ) : null}
       </aside>
-      <main className="space-y-4 overflow-y-auto p-4 lg:max-h-dvh">
+      <main id="main" tabIndex={-1} className="space-y-4 overflow-y-auto p-4 lg:max-h-(--cull-h)">
         <header className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-small text-text-secondary">
@@ -862,16 +987,28 @@ export function CullApp() {
                 : summary
                   ? `${summary.total} images`
                   : "No scan yet"}
+            {STATIC ? (
+              // The replay lives at the foot of the sidebar too; this keeps it in reach beside the grid.
+              <button
+                type="button"
+                className="ml-2 rounded-md border border-base-600 px-2 py-0.5 text-caption text-text-secondary hover:border-accent-primary hover:text-text-primary disabled:opacity-40"
+                disabled={!tape || !detectors || scanning}
+                onClick={() => void replay()}
+              >
+                {scanning ? "Replaying…" : "Replay scan"}
+              </button>
+            ) : null}
           </p>
           {summary && summary.total > 0 ? (
             (() => {
               const made = madeWith(summary, health?.version);
               return (
-                <Tooltip text={made.versionNote}>
-                  <p className="text-caption text-text-muted" tabIndex={0}>
-                    {made.line}
-                  </p>
-                </Tooltip>
+                <p className="flex flex-wrap items-center gap-x-2 text-caption text-text-muted">
+                  <Tooltip text={made.note}>
+                    <span tabIndex={0}>{made.line}</span>
+                  </Tooltip>
+                  <DocLink href={DOCS.home} label="argus-curator docs" />
+                </p>
               );
             })()
           ) : null}
@@ -915,12 +1052,18 @@ export function CullApp() {
                 Run stats
               </button>
             </Tooltip>
-            <Tooltip text={selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
+            <DocLink href={DOCS.runStats} label="The run stats format" className="self-center">
+              Run stats format
+            </DocLink>
+            <Tooltip text={STATIC ? OFF.export : selection ? "Copy, symlink, or (when the curator allows it) move the keep set into a folder under the export root, with a manifest." : "Available once the keep set is calculated, after the scan."}>
               <button
                 type="button"
-                className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40"
-                disabled={!selection}
+                className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
+                // The demo keeps Export focusable, so its tooltip says why on focus as well as hover.
+                disabled={!selection && !STATIC}
+                aria-disabled={STATIC || undefined}
                 onClick={() => {
+                  if (STATIC) return;
                   setExportResult(null);
                   setExportError(null);
                   setExportProgress(null);
@@ -967,7 +1110,7 @@ export function CullApp() {
             scanId={summary.scan_id}
             active={view.cluster}
             names={view.faceNames}
-            sensitive={sensitive}
+            veils={veils}
             onOpen={(cluster) => replaceView(withFilter({ ...view, view: "people", cluster }, { faceClusters: [cluster] }))}
             onClear={() => replaceView(withFilter({ ...view, cluster: null }, { faceClusters: [] }))}
             onName={(cluster, name) => replaceView(withFaceName(view, cluster, name))}
@@ -999,12 +1142,6 @@ export function CullApp() {
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
             keepView={keepView}
-            keptCount={keepCounts?.kept ?? null}
-            leftOutCount={keepCounts?.leftOut ?? null}
-            onKeepView={(next) => {
-              setKeepView(next);
-              if (view.page !== 1) replaceView({ ...view, page: 1 });
-            }}
             onPage={(nextPage) => replaceView({ ...view, page: nextPage })}
             onOpen={openPhoto}
             selected={selected}
@@ -1019,6 +1156,7 @@ export function CullApp() {
             labels={labels}
             policies={gridPolicies}
             deleteAny={deleteAny}
+            deleteOff={STATIC ? OFF.delete : null}
           />
         ) : null}
         {summary && view.view === "people" && view.cluster ? (
@@ -1047,12 +1185,6 @@ export function CullApp() {
             tagOptions={tagOptions}
             onTag={(next) => changeGallery({ tag: next })}
             keepView={keepView}
-            keptCount={keepCounts?.kept ?? null}
-            leftOutCount={keepCounts?.leftOut ?? null}
-            onKeepView={(next) => {
-              setKeepView(next);
-              if (view.page !== 1) replaceView({ ...view, page: 1 });
-            }}
             onPage={(nextPage) => replaceView({ ...view, page: nextPage })}
             onOpen={openPhoto}
             selected={selected}
@@ -1067,14 +1199,25 @@ export function CullApp() {
             labels={labels}
             policies={gridPolicies}
             deleteAny={deleteAny}
+            deleteOff={STATIC ? OFF.delete : null}
           />
         ) : null}
         <p className="text-caption text-text-muted">
           Captions and compare live in{" "}
-          <a className="text-accent-tertiary hover:underline" href={LIGHTBOX_URL}>
-            lightbox
-          </a>
+          <ExternalLink className="text-accent-tertiary underline underline-offset-2" href={LIGHTBOX_URL}>
+            Lightbox
+          </ExternalLink>
           . This demo does not train, geotag, or write names back into the photo folder.
+          {STATIC ? (
+            <>
+              {" "}
+              Run it yourself against a curator:{" "}
+              <ExternalLink className="text-accent-tertiary underline underline-offset-2" href={REPO_URL}>
+                {REPO_URL.replace(/^https:\/\//, "")}
+              </ExternalLink>
+              .
+            </>
+          ) : null}
         </p>
       </main>
       {photo && summary ? (
@@ -1098,6 +1241,7 @@ export function CullApp() {
           cohorts={cohorts}
           autoTags={auto.get(photo.rel_path) ?? []}
           caption={captions.get(photo.abs_path) ?? null}
+          deleteOff={STATIC ? OFF.delete : null}
           onDelete={async () => {
             if (!summary || !photo) return;
             const scanId = summary.scan_id;

@@ -29,7 +29,7 @@ def face(shift: int, profile: bool) -> Image.Image:
     draw.ellipse((200 + shift, 120, 560 + shift, 640), fill=(214, 176, 148))
     if profile:
         draw.rectangle((200 + shift, 120, 360 + shift, 640), fill=(24, 28, 40))
-        draw.ellipse((390, 280, 460, 350), fill=(20, 20, 30))
+        draw.ellipse((390 + shift, 280, 460 + shift, 350), fill=(20, 20, 30))
     else:
         draw.ellipse((280 + shift, 270, 350 + shift, 340), fill=(20, 20, 30))
         draw.ellipse((430 + shift, 270, 500 + shift, 340), fill=(20, 20, 30))
@@ -48,6 +48,12 @@ def main() -> None:
     draw.rectangle((70, 40, 280, 200), fill=(150, 190, 220))
     draw.rectangle((0, 520, SIZE, SIZE), fill=(96, 72, 48))
     draw.rectangle((500, 280, 680, 520), fill=(36, 90, 48))
+    # Window bars and floorboards: edges inside the frame, so it measures sharp
+    # now that curator reads sharpness over the interior, not the border.
+    draw.line((175, 40, 175, 200), fill=(28, 32, 48), width=8)
+    draw.line((70, 120, 280, 120), fill=(28, 32, 48), width=8)
+    for x in range(0, SIZE, 64):
+        draw.line((x, 520, x, SIZE), fill=(60, 44, 28), width=4)
     save(room, "scenes/room.png")
 
     sky = canvas((118, 176, 224))

@@ -1,0 +1,20 @@
+{
+  "torch": false,
+  "cuda": false,
+  "clip": false,
+  "insightface": true,
+  "onnxruntime": true,
+  "fairface": false,
+  "mivolo": true,
+  "places365": true,
+  "garments": true,
+  "bodies": false,
+  "nudenet": true,
+  "erax": false,
+  "watermark": false,
+  "singguard": true,
+  "singguard_policies": [
+    "adult",
+    "strict"
+  ]
+}

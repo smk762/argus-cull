@@ -11,8 +11,6 @@ mode.
 
 from __future__ import annotations
 
-import base64
-import io
 import logging
 import os
 import threading
@@ -21,19 +19,21 @@ from contextlib import asynccontextmanager
 
 import torch
 from fastapi import FastAPI, HTTPException
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 from pydantic import BaseModel, Field
 from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
+from inputs import decode_image, model_revision
 from parse import NoVerdict, to_response
 
 log = logging.getLogger("singguard")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 _MODEL_NAME = os.environ.get("SINGGUARD_MODEL", "inclusionAI/Sing-Guard-4b")
-# A commit sha or tag. trust_remote_code runs code from the Hub, so pinning
-# this fixes what gets executed as well as which weights load.
-_MODEL_REVISION = os.environ.get("SINGGUARD_REVISION", "").strip() or None
+# A full commit sha. trust_remote_code runs code from the Hub, so the pin fixes
+# what gets executed as well as which weights load. Unset uses the pin in
+# inputs.py for the default model; any other model refuses to start without one.
+_MODEL_REVISION = model_revision(_MODEL_NAME, os.environ.get("SINGGUARD_REVISION"))
 
 
 def _int_env(name: str, default: int) -> int:
@@ -86,7 +86,7 @@ class CheckRequest(BaseModel):
 
 def load_model() -> None:
     global _model, _processor
-    log.info("loading %s%s", _MODEL_NAME, f"@{_MODEL_REVISION}" if _MODEL_REVISION else "")
+    log.info("loading %s@%s", _MODEL_NAME, _MODEL_REVISION)
     started = time.perf_counter()
     kwargs: dict = {"device_map": "auto", "trust_remote_code": True, "revision": _MODEL_REVISION}
     if os.environ.get("SINGGUARD_LOAD_IN_4BIT") == "1":
@@ -116,12 +116,9 @@ def health() -> dict[str, str | None]:
 
 def _image(encoded: str) -> Image.Image:
     try:
-        raw = base64.b64decode(encoded, validate=True)
-        image = Image.open(io.BytesIO(raw))
-        image.load()
-    except (ValueError, UnidentifiedImageError, OSError) as exc:
-        raise HTTPException(status_code=400, detail="image_base64 is not an image") from exc
-    return image
+        return decode_image(encoded)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _generate(image: Image.Image, text: str, policy: str | None, thinking: str) -> str:

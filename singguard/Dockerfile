@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu124 \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY parse.py app.py ./
+COPY inputs.py parse.py app.py ./
 ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/data/hf \
     SINGGUARD_MODEL=inclusionAI/Sing-Guard-4b \

@@ -1,0 +1,59 @@
+// The vendored Dragonhound shared layer (vendor/dh/). The files themselves are pinned by
+// `node vendor/dh/sync-shared.mjs --check .` in CI; this pins what the app builds from them.
+import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+
+import { DemoStrip } from "@/components/DemoStrip";
+import { isFamilyUrl } from "@/lib/links";
+
+import { strip, stripHtml } from "../../vendor/dh/dh-strip.mjs";
+
+const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+const squash = (html: string) =>
+  html
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/>\s+</g, "><")
+    .replace(/<(path)([^>]*)\/>/g, "<$1$2></$1>")
+    .trim();
+// dh-shared 1.2.4: the static strip carries every label suffix (data-dh-label picks one); the JSX renders the default only.
+const defaultSuffixOnly = (html: string) =>
+  html
+    .replace(/<span class="dh-strip-more" data-dh-label="[a-z]+" hidden>[^<]*<\/span>/g, "")
+    .replace(/<span class="dh-strip-more" data-dh-label="[a-z]+">/, '<span class="dh-strip-more">');
+// The JSX strip also carries data-dh-site on the <nav> (dh-strip.css marks the current link from it).
+const rendered = (current?: string) => renderToStaticMarkup(createElement(DemoStrip, current ? { current } : {})).replace(/<nav ([^>]*) data-dh-site="[a-z]+">/, "<nav $1>");
+
+describe("dh-strip", () => {
+  it("renders the shared source's markup", () => {
+    expect(rendered()).toBe(squash(stripHtml({ current: "cull", label: strip.defaultLabel })));
+    expect(rendered("lightbox")).toBe(squash(stripHtml({ current: "lightbox", label: strip.defaultLabel })));
+  });
+
+  it("matches the vendored static strip", () => {
+    // The static file carries no aria-current (dh-theme.js adds it from data-dh-site); the JSX sets it itself.
+    expect(rendered().replace(' aria-current="page"', "")).toBe(defaultSuffixOnly(squash(read("vendor/dh/dh-strip.html"))));
+  });
+
+  it("says this is cull on the nav and marks the Cull link current", () => {
+    const html = renderToStaticMarkup(createElement(DemoStrip));
+    expect(html).toContain('<nav class="dh-strip" aria-label="Dragonhound Labs demos" data-dh-site="cull">');
+    expect(strip.links.map((link) => link.site)).toContain("cull");
+    expect(html.match(/<a [^>]*aria-current="page"[^>]*>([^<]*)<\/a>/g)).toEqual([
+      '<a href="https://cull.dragonhound.dev/" data-dh-site="cull" aria-current="page">Cull</a>',
+    ]);
+  });
+
+  it("links the family in the same tab", () => {
+    for (const link of [strip.home, ...strip.links]) expect(isFamilyUrl(link.href)).toBe(true);
+    expect(isFamilyUrl("https://github.com/smk762/argus-cull")).toBe(false);
+    expect(renderToStaticMarkup(createElement(DemoStrip))).not.toContain("target=");
+  });
+});
+
+describe("dh-theme", () => {
+  it("serves the vendored script unchanged", () => {
+    expect(read("public/dh-theme.js")).toBe(read("vendor/dh/dh-theme.js"));
+  });
+});

@@ -2,7 +2,7 @@ export const CURATOR_URL = process.env.NEXT_PUBLIC_CURATOR_URL || "http://localh
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
 
-/** Curator origin for the page the browser actually opened.
+/** Curator base URL (origin plus any path prefix) for the page the browser actually opened.
 
 The port and scheme come from CURATOR_URL. When that URL names a loopback host
 (the default), the host follows the page, so http://203.0.113.39:3000 calls
@@ -17,9 +17,10 @@ export function curatorUrl(pageHost?: string, configured: string = CURATOR_URL):
   } catch {
     return configured;
   }
-  if (!LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
+  // href, not origin: a curator mounted under a path prefix keeps it.
+  if (!LOOPBACK_HOSTS.has(url.hostname)) return url.href.replace(/\/$/, "");
   url.hostname = host;
-  return url.origin;
+  return url.href.replace(/\/$/, "");
 }
 
 export const PAGE_SIZE = 48;
@@ -225,6 +226,8 @@ export interface CheckConfig {
 export interface GuardConfig extends CheckConfig {
   policy?: GuardPolicy;
   variants?: GuardPolicy[];
+  /** The thinking mode the scan asked for (argus-curator#152). Not recorded by curator yet; read when present. */
+  thinking?: string | null;
 }
 
 export interface NsfwDetection {
@@ -251,6 +254,8 @@ export interface GuardResult {
   explanation?: string | null;
   model?: string | null;
   policy?: string;
+  /** The mode that judged this verdict (argus-cortex 0.5). Cascade reports `fast` for a frame it did not escalate. */
+  thinking?: string | null;
 }
 
 /**
@@ -326,8 +331,11 @@ export interface WatermarkDetection {
   bbox: number[];
 }
 
-/** The curator's default `max_cut`, in percent, and the whole percents it accepts (above 0, below 50). */
-export const DEFAULT_CROP_MAX_CUT = 15;
+/**
+ * The form's `max_cut`, in percent, and the whole percents the curator accepts (above 0, below 50).
+ * 17, not the curator's own 15: the frames 15 rejected as overlays needed cuts of up to 16.8%.
+ */
+export const DEFAULT_CROP_MAX_CUT = 17;
 export const MIN_CROP_MAX_CUT = 1;
 export const MAX_CROP_MAX_CUT = 49;
 
@@ -342,7 +350,7 @@ export function cropMaxCutFromFraction(value: unknown): number {
   return typeof value === "number" ? cropMaxCutPercent(value * 100) : DEFAULT_CROP_MAX_CUT;
 }
 
-/** What a scan crops before every check. Cull sends `enabled`, `detect` and, off its default, `max_cut`. */
+/** What a scan crops before every check. Cull sends `enabled`, `detect` and `max_cut`. */
 export interface CropConfig {
   enabled: boolean;
   detect?: boolean;
@@ -587,6 +595,8 @@ export interface ViewState {
   page: number;
   photo: string | null;
   view: "grid" | "people";
+  /** Which images the grid shows by the keep set (lib/chunks KeepView): all, only kept, or only left out. */
+  show: "all" | "kept" | "left-out";
   cluster: string | null;
   /** The official SingGuard policy the next scan asks for. Null takes the curator's `adult` when offered, else its first. */
   guardPolicy: GuardPolicy | null;
@@ -700,6 +710,7 @@ export const DEFAULT_VIEW: ViewState = {
   page: 1,
   photo: null,
   view: "grid",
+  show: "all",
   cluster: null,
   guardPolicy: null,
   guardVariants: [],

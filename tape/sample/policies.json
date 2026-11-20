@@ -1,0 +1,19 @@
+{
+  "singguard": true,
+  "policies": [
+    {
+      "name": "adult",
+      "recorded": "adult",
+      "source": "builtin",
+      "text": "Sample wording for the layout. A recorded tape carries the policy text the curator served.",
+      "error": null
+    },
+    {
+      "name": "strict",
+      "recorded": "strict",
+      "source": "builtin",
+      "text": "Sample wording for the layout. A recorded tape carries the policy text the curator served.",
+      "error": null
+    }
+  ]
+}

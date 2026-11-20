@@ -113,6 +113,15 @@ describe("url state", () => {
     expect(once.filter.guardRules).toEqual(["A"]);
   });
 
+  it("keeps the Display view (All, Kept, Left out) in the URL as show", () => {
+    expect(serializeView(DEFAULT_VIEW)).toBe("");
+    expect(serializeView({ ...DEFAULT_VIEW, show: "kept" })).toBe("?show=kept");
+    expect(parseView(new URLSearchParams("show=left-out")).show).toBe("left-out");
+    expect(parseView(new URLSearchParams("show=kept")).show).toBe("kept");
+    expect(parseView(new URLSearchParams("show=nonsense")).show).toBe("all");
+    expect(parseView(new URLSearchParams("")).show).toBe("all");
+  });
+
   it("keeps cluster names in the URL", () => {
     const view = { ...DEFAULT_VIEW, faceNames: { face_1: "Ada", face_3: "Ada", face_2: "  " } };
     expect(serializeView(view)).toBe("?name=face_1%3AAda&name=face_3%3AAda");
@@ -208,7 +217,7 @@ describe("select body", () => {
 
   it("asks for watermark crops only when a detector is configured, and keeps the choice in the URL", () => {
     const checks = { withGarments: false, setAge: false, readBodies: false, cropWatermarks: true };
-    expect(scanBody("s", { ...DETECTORS, watermark: true }, null, checks).crops).toEqual({ enabled: true, detect: true });
+    expect(scanBody("s", { ...DETECTORS, watermark: true }, null, checks).crops).toEqual({ enabled: true, detect: true, max_cut: 0.17 });
     // No detector: the curator would refuse the scan with a 400, so the block is not sent.
     expect(scanBody("s", { ...DETECTORS, watermark: false }, null, checks).crops).toBeUndefined();
     expect(scanBody("s", { ...DETECTORS, watermark: true }, null, { ...checks, cropWatermarks: false }).crops).toBeUndefined();
@@ -218,20 +227,21 @@ describe("select body", () => {
     expect(parseView(new URLSearchParams("")).cropWatermarks).toBe(false);
   });
 
-  it("sends the edge cut limit only off the curator's default, and keeps it in the URL", () => {
+  it("always sends the edge cut limit, and keeps it in the URL only off the form's default", () => {
     const checks = { withGarments: false, setAge: false, readBodies: false, cropWatermarks: true };
     const detectors = { ...DETECTORS, watermark: true };
-    expect(scanBody("s", detectors, null, { ...checks, cropMaxCut: 15 }).crops).toEqual({ enabled: true, detect: true });
+    expect(scanBody("s", detectors, null, { ...checks, cropMaxCut: 17 }).crops).toEqual({ enabled: true, detect: true, max_cut: 0.17 });
+    expect(scanBody("s", detectors, null, checks).crops).toEqual({ enabled: true, detect: true, max_cut: 0.17 });
     expect(scanBody("s", detectors, null, { ...checks, cropMaxCut: 25 }).crops).toEqual({ enabled: true, detect: true, max_cut: 0.25 });
     // The curator refuses 0.5 and above, so a hand-edited value stays inside its range.
     expect(scanBody("s", detectors, null, { ...checks, cropMaxCut: 80 }).crops?.max_cut).toBe(0.49);
     const view = { ...DEFAULT_VIEW, cropWatermarks: true, cropMaxCut: 25 };
     expect(serializeView(view)).toContain("cropcut=25");
     expect(parseView(new URLSearchParams(serializeView(view).slice(1))).cropMaxCut).toBe(25);
-    expect(serializeView({ ...view, cropMaxCut: 15 })).not.toContain("cropcut");
+    expect(serializeView({ ...view, cropMaxCut: 17 })).not.toContain("cropcut");
     expect(serializeView({ ...view, cropWatermarks: false })).not.toContain("cropcut");
-    expect(parseView(new URLSearchParams("cropcut=junk")).cropMaxCut).toBe(15);
-    expect(parseView(new URLSearchParams("")).cropMaxCut).toBe(15);
+    expect(parseView(new URLSearchParams("cropcut=junk")).cropMaxCut).toBe(17);
+    expect(parseView(new URLSearchParams("")).cropMaxCut).toBe(17);
   });
 
   it("requests a detector only when its weights are loaded", () => {
@@ -435,6 +445,12 @@ describe("moderation", () => {
     scan.results[0].guard = { safe: false, rules: ["A. Sexual Content Risk", "house style"] };
     expect(recordedGuardRules(scan, ["A", "B"])).toEqual(["house style"]);
   });
+
+  it("lists a custom rule that only starts with a default rule's letter", () => {
+    const scan = summary({ guard: true });
+    scan.results[0].guard = { safe: false, rules: ["D. Drug Use", "Drugs", "Self-harm", "a."] };
+    expect(recordedGuardRules(scan, ["A", "D", "S"])).toEqual(["Drugs", "Self-harm"]);
+  });
 });
 
 describe("curator url", () => {
@@ -448,6 +464,9 @@ describe("curator url", () => {
     expect(curatorUrl("203.0.113.39", "http://nas.local:8101")).toBe("http://nas.local:8101");
     expect(curatorUrl("203.0.113.39", "https://curator.example/")).toBe("https://curator.example");
     expect(curatorUrl("203.0.113.39", "http://127.0.0.1:8101")).toBe("http://203.0.113.39:8101");
+    // A curator mounted under a path keeps it, swapped host or not.
+    expect(curatorUrl("203.0.113.39", "https://curator.example/api/curator/")).toBe("https://curator.example/api/curator");
+    expect(curatorUrl("203.0.113.39", "http://localhost:8101/curator")).toBe("http://203.0.113.39:8101/curator");
     expect(curatorUrl("203.0.113.39", "not a url")).toBe("not a url");
   });
 });
@@ -471,6 +490,10 @@ describe("progress", () => {
     // The prefilter step comes after identities, so the late checks are still queued.
     expect(checkStage(["guard"], [{ phase: "prefilter", done: 4, total: 4 }], [])).toBe("queued");
     expect(checkStage(["faces", "identities"], [{ phase: "identities", done: 0, total: 0 }], [])).toBe("running");
+    // NudeNet runs with faces: once it is done and the scan has moved on, it waits for the end, it is not queued.
+    for (const phase of ["faces", "identities", "prefilter", "scenes", "garments"]) {
+      expect(checkStage(["nsfw"], [{ phase, done: 1, total: 4 }], ["faces"].filter((name) => name === phase)), phase).toBe("waiting");
+    }
   });
 
   it("reports a fraction only once the phase has a total", () => {
@@ -842,6 +865,16 @@ describe("set age", () => {
     const adult = { ...body, set_age: { ...set, years: 24 } } as unknown as ImageResult;
     expect(isMinorExposed(adult)).toBe(false);
     expect(filterByAge([body, adult], 18, null).map((image) => image.set_age?.years)).toEqual([24]);
+  });
+
+  it("does not lift the hold while face detection is still running", () => {
+    // An adult set age on an exposed frame whose own face reading has not landed yet.
+    const waiting = { face_count: 0, faces: [], primary_face_attributes: null, set_age: { ...set, years: 24 }, nsfw: exposed } as unknown as ImageResult;
+    expect(revealHeld(waiting, ["faces"])).toBe(true);
+    expect(awaitingChecks(waiting, ["faces"])).toBe(true);
+    expect(shouldBlur(waiting, ["faces"], { exposedScore: 0.9, policyBlur: false, unblurNsfw: true })).toBe(true);
+    // Once faces have run and found no one, the set age stands in and an adult one adds no hold.
+    expect(revealHeld(waiting, [])).toBe(false);
   });
 });
 

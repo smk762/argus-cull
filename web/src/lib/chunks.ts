@@ -163,10 +163,13 @@ export function minorAwaitingNude(image: AgeChecked, pending: readonly string[])
 /**
  * The ages are still coming for a frame with no age yet. Only the curator
  * that lists `faces` in `pending_checks` says so; an older one runs faces
- * before NudeNet, so by the time NudeNet reports the ages are known.
+ * before NudeNet, so by the time NudeNet reports the ages are known. The
+ * set's age does not count as an age here: it stands in only for a frame
+ * face detection found no one in, and while faces run that is not known, so
+ * an adult set age must not lift the hold before the frame's own reading lands.
  */
 function ageStillComing(image: AgeChecked, pending: readonly string[]): boolean {
-  return pending.includes("faces") && mivoloAges(image).length === 0;
+  return pending.includes("faces") && measuredAges(image).length === 0 && bodyAges(image).length === 0;
 }
 
 /**

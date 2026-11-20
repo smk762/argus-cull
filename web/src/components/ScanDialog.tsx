@@ -154,8 +154,9 @@ export function ScanDialog({
         {noImages ? <p className="text-caption text-warning">This folder has no images and no subfolders.</p> : null}
         {busyLabel ? <p className="text-caption text-text-muted">{busyLabel}</p> : null}
         <div className="flex flex-wrap items-center gap-2">
-          <button type="submit" className="rounded-md bg-interactive px-3 py-1.5 text-small font-medium disabled:opacity-40" disabled={!canScan}>
-            Scan {listing?.path || "source root"}
+          <button type="submit" className="rounded-md bg-interactive text-on-accent px-3 py-1.5 text-small font-medium disabled:opacity-40" disabled={!canScan}>
+            {/* The folder Scan sends, not the listing on screen, which lags a change and stays put when listing fails. */}
+            Scan {draft.folder || "source root"}
           </button>
           <button type="button" className="rounded-md border border-base-600 px-3 py-1.5 text-small" onClick={closeModal}>
             Cancel
