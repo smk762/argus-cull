@@ -4,11 +4,11 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-19
+
 ### Security
 
 - Clears all 44 open Dependabot alerts: Next.js 16.2.4 → 16.4.6 (with `eslint-config-next`), which brings sharp 0.35.5 and its own PostCSS 8.5.23; Vitest 4.1.11 → 4.1.12 (`@vitest/mocker`); typescript-eslint 8.72.0 → 8.73.0 (minimatch 11). `npm audit` reports none. `next-env.d.ts` gains the `root-params` types import that Next 16.4 generates.
-
-## [0.5.0] - 2026-11-19
 
 ### Changed
 
