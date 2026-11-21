@@ -1,19 +1,19 @@
 [
   {
     "label": "Set",
-    "text": "Synthetic: 53 photoreal frames generated for this demo. No real photos."
+    "text": "67 frames: 53 synthetic photoreal frames generated for this demo, and 14 real CC0 sports photos from PD12M under photos/ (shared with argus-studio's /curate demo)."
   },
   {
     "label": "People",
-    "text": "Five fictional adults, written as 27 to 30; MiVOLO reads every face as 25 or older. None depicts or imitates a real person."
+    "text": "Five fictional adults, written as 27 to 30, none depicting or imitating a real person; the photos show real athletes in public competition, named nowhere. Every face, background included, reads 18 or older (MiVOLO: photos from 20.8, synthetic frames from 24.9)."
   },
   {
     "label": "Content",
-    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, two silk boudoir frames, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal with bricks of white powder and cash, a smuggler beside a wall of powder bricks, a blindfolded hostage), with no blood, injury or drug use, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, two silk boudoir frames, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal with bricks of white powder and cash, a smuggler beside a wall of powder bricks, a blindfolded hostage), with no blood, injury or drug use, show the guard's crime and weapons rule. The photos are handball, volleyball, cross-country skiing and athletics; NudeNet's suggestive rating (sports kit) was not a reason to leave one out. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
   },
   {
     "label": "Faces",
-    "text": "Face clustering distance 0.8, tuned for this synthetic set: each person has one main cluster and no two people merge. A few dark, half-lit crime-film stills form small clusters of their own. Curator's default is 0.5."
+    "text": "Face clustering distance 0.8, tuned for the synthetic set: each fictional person has one main cluster and no two people merge. A few dark, half-lit crime-film stills form small clusters of their own, and a crowd in one photo merges into one. Curator's default is 0.5."
   },
   {
     "label": "Checkpoint",

@@ -32,7 +32,7 @@ Read this before touching `shouldBlur`, `veilFor`, the static demo, the tape or 
 | The curator commit, its docs and the recorded fixture scan disagree | CI job `fixture` (`sync_check.py`, `record_fixture.py --check`) and `npm run docs:check`. Move them together with `make sync-curator` |
 | `fixture/` holds anything but the shapes `scripts/make_fixture.py` draws | CI job `fixture`, step "fixture/ is what make_fixture.py draws" |
 | Code in this repo imports `nudenet` or `ultralytics` (AGPL-3.0). The detectors are argus-retina's published images, reached over HTTP, never built or vendored here | CI `suite-rules` (argus-ci `agpl-import`, empty baseline), and CI job `licence`, which fails on any `nosemgrep: agpl-import` exemption |
-| The demo tape holds a minor, or anything but the set `PROVENANCE.md` describes | `web/src/lib/tape.test.ts` "is the adult set PROVENANCE.md describes…" checks the ages and the count. That the images are synthetic, with no real people or photos, is **UNENFORCED**: a human reviews every re-recorded tape against `web/public/data-tape/PROVENANCE.md` |
+| The demo tape holds a minor (any measured face under 18, background included), a real photo that is not CC0 or Public Domain Mark or is missing from `PROVENANCE.md`, or anything but the set `PROVENANCE.md` describes | `web/src/lib/tape.test.ts` "is the adult set PROVENANCE.md describes…" checks the ages, the count, and that every frame under `photos/` is listed with its licence. That every frame outside `photos/` is synthetic, with no real person, is **UNENFORCED**: a human reviews every re-recorded tape against `web/public/data-tape/PROVENANCE.md`. NudeNet's `suggestive` rating is not a reason to leave a frame out |
 
 ## Web guidance
 

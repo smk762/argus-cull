@@ -100,7 +100,7 @@ describe("veilFor on the recorded scan", () => {
 
   it("names the policy and rule that flagged", () => {
     const image = frame("A_noir_detective.jpg");
-    expect(policyLine(image)).toMatch(/^Adult and 3 more policies flagged rule B/);
+    expect(policyLine(image)).toMatch(/^Adult and 2 more policies flagged rule B/);
     expect(policyLine(image, "adult-granular")).toMatch(/^The adult-granular policy flagged rule B/);
   });
 });

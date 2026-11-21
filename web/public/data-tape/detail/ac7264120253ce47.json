@@ -1,1 +1,1 @@
-{"score_breakdown":{"sharpness":0.1003,"resolution":0.2437,"artifact":0.1144,"target_bonus":0.11,"face_penalty":1.0},"nsfw":{"detections":[{"label":"FACE_FEMALE","score":0.8634,"bbox":[518.0,101.0,127.0,120.0]}]}}
+{"score_breakdown":{"sharpness":0.0959,"resolution":0.2437,"artifact":0.0999,"target_bonus":0.11,"face_penalty":1.0},"nsfw":{"detections":[{"label":"FACE_FEMALE","score":0.8672,"bbox":[517.0,100.0,128.0,122.0]},{"label":"FEMALE_BREAST_COVERED","score":0.2706,"bbox":[440.0,343.0,132.0,121.0]}]}}
