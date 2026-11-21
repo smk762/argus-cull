@@ -884,7 +884,7 @@ export function CullApp() {
               // The demo's provenance, replay and scans sit at the foot of the sidebar; this jumps there.
               <a href="#about-demo" className="mt-1.5 inline-flex items-center gap-1.5 text-caption text-text-secondary underline-offset-2 hover:text-text-primary hover:underline">
                 <DemoBadge state={tape?.provenance.kind === "sample" ? "sample" : "recorded"} />
-                synthetic demo · about
+                demo set · about
               </a>
             ) : null}
           </div>

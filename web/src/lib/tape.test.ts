@@ -60,17 +60,23 @@ describe("the committed tape", () => {
     expect(tape.select.result.rows.map((row) => row.rel_path).sort()).toEqual(scan.results.map((image) => image.rel_path).sort());
   });
 
-  // PROVENANCE.md says what the set is. That the images are synthetic is a human review rule; that every
-  // face reads as an adult, and that the set is the size the document says, are checked here.
-  it("is the adult set PROVENANCE.md describes: every face 25 or older, nothing under-18 exposed", () => {
+  // PROVENANCE.md says what the set is. The tape may mix synthetic frames with real CC0 or Public Domain Mark
+  // photographs, which live under photos/. Checked here: the set is the size the document says, every photo is
+  // listed in it with its licence, and every measured face, background included, reads 18 or older (fail safe:
+  // one under-18 read anywhere fails the tape). That the frames outside photos/ are synthetic is a human review rule.
+  it("is the adult set PROVENANCE.md describes: every face 18 or older, every photo listed with its licence", () => {
     const provenance = readFileSync(new URL("PROVENANCE.md", TAPE), "utf8");
-    const stated = /The (\d+) images in this demo are \*\*synthetic\*\*/.exec(provenance);
+    const stated = /The (\d+) images in this demo/.exec(provenance);
     expect(stated, "PROVENANCE.md no longer states the image count").not.toBeNull();
     expect(scan.results).toHaveLength(Number(stated![1]));
     for (const image of scan.results) {
-      for (const age of measuredAges(image)) expect(age, image.rel_path).toBeGreaterThanOrEqual(25);
+      for (const age of measuredAges(image)) expect(age, image.rel_path).toBeGreaterThanOrEqual(18);
       expect(youngestAge(image) ?? 18, image.rel_path).toBeGreaterThanOrEqual(18);
       expect(isMinorExposed(image), image.rel_path).toBe(false);
+      if (!image.rel_path.startsWith("photos/")) continue;
+      const row = provenance.split("\n").find((line) => line.startsWith(`| \`${image.rel_path}\` |`));
+      expect(row, `${image.rel_path} is not listed in PROVENANCE.md`).toBeDefined();
+      expect(row, image.rel_path).toMatch(/\b(CC0|Public Domain Mark)\b/);
     }
   });
 

@@ -1,31 +1,31 @@
 {
  "format": "argus-cull-tape",
  "version": 1,
- "generated_at": "2026-11-14T21:50:13Z",
+ "generated_at": "2026-11-21T08:01:10Z",
  "provenance": {
   "kind": "recorded",
-  "source": "saved-scan",
+  "source": "curator",
   "curator": {
-   "version": "0.15.1",
-   "commit": "8ed779db7cc7d0e8bafa505be32bc6a201d4e70c"
+   "version": "0.18.0",
+   "commit": "b94d89b0c7078602ced43b2bfe6592e299dfe93a"
   },
-  "note": "Synthetic photoreal adults (fictional), generated for this demo; see About this tape.",
+  "note": "Synthetic photoreal adults (fictional), generated for this demo, and real CC0 sports photos from PD12M; see About this tape.",
   "about": [
    {
     "label": "Set",
-    "text": "Synthetic: 53 photoreal frames generated for this demo. No real photos."
+    "text": "67 frames: 53 synthetic photoreal frames generated for this demo, and 14 real CC0 sports photos from PD12M under photos/ (shared with argus-studio's /curate demo)."
    },
    {
     "label": "People",
-    "text": "Five fictional adults, written as 27 to 30; MiVOLO reads every face as 25 or older. None depicts or imitates a real person."
+    "text": "Five fictional adults, written as 27 to 30, none depicting or imitating a real person; the photos show real athletes in public competition, named nowhere. Every face, background included, reads 18 or older (MiVOLO: photos from 20.8, synthetic frames from 24.9)."
    },
    {
     "label": "Content",
-    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, two silk boudoir frames, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal with bricks of white powder and cash, a smuggler beside a wall of powder bricks, a blindfolded hostage), with no blood, injury or drug use, show the guard's crime and weapons rule. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
+    "text": "Bland to swimsuit-catalogue level (bikinis, a satin lingerie set, two silk boudoir frames, sports tops, shirtless men, an open denim jacket, satin evening dresses); no nudity, no nipples, nothing see-through. Eleven crime-film stills (prop handguns pointed away from the camera, a drug deal with bricks of white powder and cash, a smuggler beside a wall of powder bricks, a blindfolded hostage), with no blood, injury or drug use, show the guard's crime and weapons rule. The photos are handball, volleyball, cross-country skiing and athletics; NudeNet's suggestive rating (sports kit) was not a reason to leave one out. Reject frames are made to fail blur, resolution, aspect ratio, duplicate and watermark checks."
    },
    {
     "label": "Faces",
-    "text": "Face clustering distance 0.8, tuned for this synthetic set: each person has one main cluster and no two people merge. A few dark, half-lit crime-film stills form small clusters of their own. Curator's default is 0.5."
+    "text": "Face clustering distance 0.8, tuned for the synthetic set: each fictional person has one main cluster and no two people merge. A few dark, half-lit crime-film stills form small clusters of their own, and a crowd in one photo merges into one. Curator's default is 0.5."
    },
    {
     "label": "Checkpoint",
@@ -88,7 +88,9 @@
     "adult-granular",
     "adult-cautious",
     "adult-cinematic"
-   ]
+   ],
+   "thinking": "cascade",
+   "fell_back": false
   },
   "prefilter_config": {
    "drop_nsfw": false,
@@ -113,22 +115,25 @@
   }
  },
  "stats": {
-  "total": 53,
-  "passed": 50,
-  "rejected": 3,
-  "duplicates": 1,
+  "total": 67,
+  "passed": 61,
+  "rejected": 6,
+  "duplicates": 2,
   "reject_reasons": {
    "aspect ratio 5.00 > 3.0": 1,
-   "blurry (sharpness=3.9 < 100.0)": 1,
+   "blurry (sharpness=5.9 < 100.0)": 1,
+   "blurry (sharpness=8.3 < 100.0)": 1,
+   "crop:overlay (1 watermark(s) no edge cut of 15% removes)": 1,
+   "resolution too low (120px short side)": 1,
    "resolution too low (160px short side)": 1
   },
-  "kept": 48,
-  "faces": 50,
-  "nudenet_checked": 50,
+  "kept": 54,
+  "faces": 61,
+  "nudenet_checked": 61,
   "flagged_by_policy": {
-   "adult": 10,
-   "adult-cautious": 10,
-   "adult-cinematic": 2,
+   "adult": 7,
+   "adult-cautious": 11,
+   "adult-cinematic": 1,
    "adult-granular": 10,
    "default": 10
   }
@@ -136,22 +141,24 @@
  "health": {
   "status": "ok",
   "service": "argus-curator",
-  "version": "0.15.1",
+  "version": "0.18.0",
   "manifest_version": "2.3",
   "source_root": "/data/images",
-  "export_root": "/data/out",
+  "export_root": null,
   "allow_move": false,
+  "minor_exposed": "frame",
   "scan_control": true,
   "scan_delete": true,
   "set_age": true,
   "guard_policy_text": true,
   "prefilter": true,
   "crops": true,
+  "guard_thinking": true,
   "watermark_detect": true,
   "export_sidecars": true,
   "delete_any": false,
   "faces": true,
-  "gpu_coordinator": "lease"
+  "gpu_coordinator": "broker"
  },
  "detectors": {
   "torch": false,
@@ -174,7 +181,14 @@
    "adult-granular",
    "adult-cautious",
    "adult-cinematic"
-  ]
+  ],
+  "singguard_thinking_modes": [
+   "fast",
+   "fast-slow",
+   "slow",
+   "cascade"
+  ],
+  "singguard_thinking_default": "cascade"
  },
  "guard_policies": {
   "singguard": true,
@@ -224,10 +238,10 @@
   "active": null,
   "scans": [
    {
-    "scan_id": "fffd61fa63604c2b94943d105595151c",
+    "scan_id": "48ca2ffa388d424ebb7af6b0628f6b54",
     "folder": "/data/images/final",
-    "total": 53,
-    "updated_at": "2026-11-14T21:50:13Z"
+    "total": 67,
+    "updated_at": "2026-11-21T08:01:10Z"
    }
   ]
  },
@@ -256,9 +270,9 @@
    "guard_rules": null
   },
   "result": {
-   "scan_id": "fffd61fa63604c2b94943d105595151c",
-   "total": 53,
-   "kept": 48,
+   "scan_id": "48ca2ffa388d424ebb7af6b0628f6b54",
+   "total": 67,
+   "kept": 54,
    "rows": [
     {
      "rel_path": "personA/A_beach_bikini.jpg",
@@ -273,7 +287,7 @@
     {
      "rel_path": "personA/A_cafe.jpg",
      "abs_path": "/data/images/final/personA/A_cafe.jpg",
-     "keep_reason": ""
+     "keep_reason": "similar-to:rejects/A_cafe_neardup.jpg"
     },
     {
      "rel_path": "personA/A_gym_sportsbra.jpg",
@@ -453,7 +467,7 @@
     {
      "rel_path": "personE/E_beach_bikini.jpg",
      "abs_path": "/data/images/final/personE/E_beach_bikini.jpg",
-     "keep_reason": ""
+     "keep_reason": "below-score"
     },
     {
      "rel_path": "personE/E_boudoir_robe.jpg",
@@ -496,9 +510,79 @@
      "keep_reason": ""
     },
     {
+     "rel_path": "photos/handball_a/01.jpg",
+     "abs_path": "/data/images/final/photos/handball_a/01.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "photos/handball_a/02.jpg",
+     "abs_path": "/data/images/final/photos/handball_a/02.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "photos/handball_a/03.jpg",
+     "abs_path": "/data/images/final/photos/handball_a/03.jpg",
+     "keep_reason": "below-score"
+    },
+    {
+     "rel_path": "photos/handball_b/01.jpg",
+     "abs_path": "/data/images/final/photos/handball_b/01.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "photos/handball_b/02.jpg",
+     "abs_path": "/data/images/final/photos/handball_b/02.jpg",
+     "keep_reason": "below-score"
+    },
+    {
+     "rel_path": "photos/rejects/blurry.jpg",
+     "abs_path": "/data/images/final/photos/rejects/blurry.jpg",
+     "keep_reason": "blurry (sharpness=5.9 < 100.0)"
+    },
+    {
+     "rel_path": "photos/rejects/lowres.jpg",
+     "abs_path": "/data/images/final/photos/rejects/lowres.jpg",
+     "keep_reason": "resolution too low (120px short side)"
+    },
+    {
+     "rel_path": "photos/rejects/wide_banner.jpg",
+     "abs_path": "/data/images/final/photos/rejects/wide_banner.jpg",
+     "keep_reason": "crop:overlay (1 watermark(s) no edge cut of 15% removes)"
+    },
+    {
+     "rel_path": "photos/relay/group_shot.jpg",
+     "abs_path": "/data/images/final/photos/relay/group_shot.jpg",
+     "keep_reason": "below-score"
+    },
+    {
+     "rel_path": "photos/skier/01.jpg",
+     "abs_path": "/data/images/final/photos/skier/01.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "photos/skier/02.jpg",
+     "abs_path": "/data/images/final/photos/skier/02.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "photos/skier/02_copy.jpg",
+     "abs_path": "/data/images/final/photos/skier/02_copy.jpg",
+     "keep_reason": "similar-to:photos/skier/02.jpg"
+    },
+    {
+     "rel_path": "photos/volleyball/01.jpg",
+     "abs_path": "/data/images/final/photos/volleyball/01.jpg",
+     "keep_reason": ""
+    },
+    {
+     "rel_path": "photos/volleyball/02.jpg",
+     "abs_path": "/data/images/final/photos/volleyball/02.jpg",
+     "keep_reason": ""
+    },
+    {
      "rel_path": "rejects/A_cafe_neardup.jpg",
      "abs_path": "/data/images/final/rejects/A_cafe_neardup.jpg",
-     "keep_reason": "similar-to:personA/A_cafe.jpg"
+     "keep_reason": ""
     },
     {
      "rel_path": "rejects/BE_group_cafe.jpg",
@@ -508,7 +592,7 @@
     {
      "rel_path": "rejects/B_office_blurred.jpg",
      "abs_path": "/data/images/final/rejects/B_office_blurred.jpg",
-     "keep_reason": "blurry (sharpness=3.9 < 100.0)"
+     "keep_reason": "blurry (sharpness=8.3 < 100.0)"
     },
     {
      "rel_path": "rejects/C_kitchen_lowres.jpg",
@@ -576,6 +660,20 @@
   "personE/E_office.jpg": "a303407f89451b10",
   "personE/E_park.jpg": "61da1dc8cacaa5dc",
   "personE/E_run_cropTop.jpg": "df63f5840dd90058",
+  "photos/handball_a/01.jpg": "c5a45006895cf637",
+  "photos/handball_a/02.jpg": "788a904f54e35a90",
+  "photos/handball_a/03.jpg": "df1e2595f8e7e073",
+  "photos/handball_b/01.jpg": "e538824e1fba1ae7",
+  "photos/handball_b/02.jpg": "1458c12e6a5388ad",
+  "photos/rejects/blurry.jpg": "932decc072663a1c",
+  "photos/rejects/lowres.jpg": "8cb3f25534b0ca42",
+  "photos/rejects/wide_banner.jpg": "f1889748f34b7cc9",
+  "photos/relay/group_shot.jpg": "0da34a0d710b87b8",
+  "photos/skier/01.jpg": "ba5ced9338a783e6",
+  "photos/skier/02.jpg": "79aaf9e157ca6099",
+  "photos/skier/02_copy.jpg": "3ddab81248ad8644",
+  "photos/volleyball/01.jpg": "fa4cf1f76d915b65",
+  "photos/volleyball/02.jpg": "47b93e2caaefac23",
   "rejects/A_cafe_neardup.jpg": "79241ee836e6bc02",
   "rejects/BE_group_cafe.jpg": "c752b37b5c0bd16a",
   "rejects/B_office_blurred.jpg": "77522a6f03fbeb90",

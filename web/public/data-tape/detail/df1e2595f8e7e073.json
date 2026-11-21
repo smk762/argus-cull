@@ -1,0 +1,1 @@
+{"score_breakdown":{"sharpness":0.3275,"resolution":0.3,"artifact":0.0986,"target_bonus":0.03,"face_penalty":0.4},"nsfw":{"detections":[{"label":"FEET_COVERED","score":0.7567,"bbox":[1130.0,1733.0,227.0,250.0]},{"label":"FACE_MALE","score":0.6018,"bbox":[492.0,205.0,188.0,208.0]}]}}
