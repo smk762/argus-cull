@@ -1265,7 +1265,7 @@ export function CullApp() {
           onScan={(template) => void onScan(template)}
         />
       ) : null}
-      {subsetOpen && subset ? <SubsetDialog report={subset} onClose={() => setSubsetOpen(false)} /> : null}
+      {subsetOpen && subset ? <SubsetDialog report={subset} onClose={() => setSubsetOpen(false)} onOpenFrame={openPhoto} /> : null}
       {policyOpen ? (
         <PolicyDialog
           stats={stats}

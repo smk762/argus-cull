@@ -4,7 +4,7 @@ import type { SubsetReport } from "@/lib/subset";
 
 import { closeModal, Modal } from "./Modal";
 
-export function SubsetDialog({ report, onClose }: { report: SubsetReport; onClose: () => void }) {
+export function SubsetDialog({ report, onClose, onOpenFrame }: { report: SubsetReport; onClose: () => void; onOpenFrame: (relPath: string) => void }) {
   return (
     <Modal labelledBy="subset-title" className="max-w-xl p-4" onClose={onClose}>
       <div className="mb-3 flex items-start justify-between gap-3">
@@ -33,6 +33,23 @@ export function SubsetDialog({ report, onClose }: { report: SubsetReport; onClos
           <li key={note}>{note}</li>
         ))}
       </ul>
+      {report.frames.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {report.frames.map((frame) => (
+            <button
+              key={frame.relPath}
+              type="button"
+              className="rounded-md border border-base-600 px-3 py-1 text-small"
+              onClick={(event) => {
+                closeModal(event);
+                onOpenFrame(frame.relPath);
+              }}
+            >
+              {frame.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </Modal>
   );
 }

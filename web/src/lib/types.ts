@@ -407,6 +407,50 @@ export interface ImageResult {
   /** How the person check went. Null when it was not asked for; an empty `people` means "none found" only when it is `ok`. */
   people_check?: PeopleCheck | null;
   people_error?: string | null;
+  /** Curator dev (#221), body pose on argus-puppet. How the check went; null or absent: not checked. */
+  pose_check?: PoseCheck | null;
+  /** The primary person's body-pose labels; null without a person or a reading. Each may be "unknown". */
+  pose_labels?: BodyPoseLabels | null;
+  /** The scan-level body-pose cluster, 0 the largest; null when unusable, not posed or the scan was not clustered. */
+  pose_cluster?: number | null;
+}
+
+/** How the body-pose check went: `unusable` is a person with too few confident joints to cluster. */
+export type PoseCheck = "ok" | "unusable" | "no_person" | "failed";
+
+/** argus-puppet's geometry-rule labels. `unknown` is a real reading: the joints a rule needs were not confident. */
+export interface BodyPoseLabels {
+  stance: "standing" | "jumping" | "crouching" | "seated" | "lying" | "unknown";
+  arms: "up" | "out" | "down" | "mixed" | "unknown";
+  /** The subject's facing as the camera sees it. */
+  facing: "front" | "back" | "left" | "right" | "unknown";
+}
+
+/** One scan-level body-pose cluster (average linkage over the whole scan). */
+export interface PoseCluster {
+  id: number;
+  size: number;
+  /** size / PoseSummary.usable. */
+  share: number;
+  /** The frame whose pose is most central to the cluster; null once that row was dropped. */
+  medoid_rel_path: string | null;
+}
+
+/** What the body-pose stage found over the whole scan. Null on the summary when the stage did not run. */
+export interface PoseSummary {
+  puppet_version: string | null;
+  posed: number;
+  no_person: number;
+  failed: number;
+  /** Why the scan was not clustered, else null. */
+  skipped: string | null;
+  usable: number | null;
+  comparable_share: number | null;
+  diversity: number | null;
+  largest_cluster_share: number | null;
+  clusters: PoseCluster[];
+  /** Rows were dropped since: sizes and shares are recounted, diversity is as measured. */
+  stale: boolean;
 }
 
 export type PeopleCheck = "ok" | "detection_failed" | "body_ages_failed";
@@ -500,6 +544,9 @@ export interface ScanSummary {
   /** Curator 0.11: whether the EraX fill-in ran on this scan. */
   erax_config?: { enabled: boolean | null };
   guard_config?: GuardConfig;
+  /** Curator dev (#221): whether the body-pose stage ran. Absent on older scans. */
+  pose_config?: CheckConfig;
+  pose?: PoseSummary | null;
   total: number;
   passed: number;
   rejected: number;
