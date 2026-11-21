@@ -4,6 +4,10 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ## [Unreleased]
 
+### Added
+
+- *Evaluate keep set* reads body pose from the curator's argus-puppet stage (argus-curator#221, on curator `dev`): a *Body poses* stat, and a note when one scan-level pose cluster holds 40% or more of the kept frames that have one (at least 10), naming its usual stance, arms and facing, with a button to open its most central frame; at 75% the note says the keep set has collapsed onto it. It applies to every target category. When a quarter or more of the keep set has no measured pose, a note says how many and why. Nothing shows on a scan without the stage. The cut-offs are uncalibrated on real sets (smk762/argus-puppet#1, phase 3).
+
 ## [0.5.0] - 2026-11-19
 
 ### Security
