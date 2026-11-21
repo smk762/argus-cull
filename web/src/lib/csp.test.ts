@@ -64,13 +64,14 @@ describe("csp post-build", () => {
     expect(headers()).toContain("Strict-Transport-Security: max-age=31536000");
   });
 
-  it("names no origin but this site's, and refuses a tape on another one", () => {
+  it("names no origin but this site's and the analytics script's, and refuses a tape on another one", () => {
     const p = policy([]);
     expect(p).toContain("connect-src 'self';");
     expect(p).toContain("img-src 'self';");
-    expect(p).toMatch(/script-src 'self';/);
+    expect(p).toMatch(/script-src 'self' https:\/\/static\.cloudflareinsights\.com;/);
     expect(p).toContain("object-src 'none'");
-    expect(p).not.toMatch(/https?:/);
+    // The one other origin: the Cloudflare Web Analytics script the zone adds at the edge.
+    expect(p.replaceAll("https://static.cloudflareinsights.com", "")).not.toMatch(/https?:/);
     expect(sameOriginTape(undefined)).toBe("/data-tape");
     expect(sameOriginTape("/tapes/demo")).toBe("/tapes/demo");
     expect(() => sameOriginTape("https://data.example.com/tape")).toThrow();
