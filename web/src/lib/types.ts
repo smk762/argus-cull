@@ -509,10 +509,16 @@ export interface GarmentConfig {
   min_conf: number;
 }
 
+/**
+ * The scan's target profile as the curator sends it. argus-cortex owns the taxonomy
+ * (`argus_cortex.taxonomy`, `taxonomy-schema.json`); cull does not restate its literals,
+ * so a category cortex adds (as it did `concept`) passes through, and code that
+ * reads one compares it with the names it knows.
+ */
 export interface TargetProfile {
   target_style?: string;
   target_backend?: string | null;
-  target_category?: "identity" | "wardrobe" | "pose_composition" | "setting";
+  target_category?: string;
 }
 
 /** What a scan prefilters out before the slow checks. A dropped image stays as a reject named `prefilter:<kind>`. */
