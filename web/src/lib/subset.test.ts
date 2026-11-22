@@ -119,7 +119,7 @@ describe("keep set body pose", () => {
   });
 
   it("applies to every target category", () => {
-    for (const category of [null, "identity", "pose_composition", "wardrobe", "setting", "style"]) {
+    for (const category of [null, "identity", "pose_composition", "wardrobe", "setting", "concept", "style"]) {
       expect(bodyNote(evaluate(scan([...rows("a", 9, 0), row("b.jpg", 1)], category)).notes)).toBeDefined();
     }
   });
