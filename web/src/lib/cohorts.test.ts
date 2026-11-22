@@ -147,8 +147,18 @@ describe("caption sidecars", () => {
     const found = await readCaption(root, path.join(root, "set", "a.jpg"));
     expect(found).toEqual({ text: "A woman at a desk in a classroom.", keywords: ["backpack"] });
     expect(await readCaption(root, path.join(root, "set", "b.jpg"))).toBeNull();
-    expect(await readCaption(root, path.join(root, "..", "a.jpg"))).toBeNull();
     expect(await readFile(path.join(root, "set", "a.txt"), "utf8")).toContain("classroom");
+  });
+
+  it("refuses a sidecar outside the source root, though one is there to read", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "cull-captions-"));
+    const sibling = await mkdtemp(path.join(tmpdir(), "cull-captions-out-"));
+    await writeFile(path.join(sibling, "a.jpg"), "");
+    await writeFile(path.join(sibling, "a.txt"), "Outside the root.\n");
+    const escaped = path.join(root, "..", path.basename(sibling), "a.jpg");
+    expect(await readCaption(root, escaped)).toBeNull();
+    // The same file read with its own folder as root is found, so the null above is the containment check.
+    expect(await readCaption(sibling, escaped)).toEqual({ text: "Outside the root.", keywords: [] });
   });
 });
 

@@ -114,7 +114,7 @@ export function parseScan(raw: unknown, tape: Tape): ScanSummary {
   if (!Array.isArray(scan.results)) fail("scan.json results must be a list");
   if (scan.scan_id !== tape.scans.scans[0].scan_id) fail("scan.json is not the scan tape.json lists");
   for (const image of scan.results as ImageResult[]) {
-    if (!tape.files[image.rel_path]) fail(`no file for ${image.rel_path}`);
+    if (!fileId(tape, image.rel_path)) fail(`no file for ${image.rel_path}`);
   }
   return raw as ScanSummary;
 }
@@ -150,14 +150,21 @@ export function recordedSelection(tape: Tape, scanId: string, request: SelectReq
   return requestKey(request) === requestKey(tape.select.request) ? tape.select.result : null;
 }
 
+/** The file id recorded for a rel path: own keys only, so "constructor" or "__proto__" is not one. */
+function fileId(tape: Pick<Tape, "files"> | null, relPath: string): string | undefined {
+  if (!tape || !Object.hasOwn(tape.files, relPath)) return undefined;
+  const id: unknown = tape.files[relPath];
+  return typeof id === "string" ? id : undefined;
+}
+
 export function tapeFileUrl(base: string, tape: Pick<Tape, "files"> | null, kind: "thumbs" | "images", relPath: string): string {
-  const id = tape?.files[relPath];
+  const id = fileId(tape, relPath);
   return id ? `${base}/${kind}/${id}.webp` : "";
 }
 
 /** The tape's veil for a frame, or null when the tape has none (the page then draws one from the thumbnail). */
 export function tapeVeilUrl(base: string, tape: Pick<Tape, "files" | "veils"> | null, relPath: string, strength: VeilStrength): string | null {
-  const id = tape?.files[relPath];
+  const id = fileId(tape, relPath);
   if (!id || !tape?.veils?.[strength]) return null;
   return `${base}/veils/${id}-${strength}.webp`;
 }
@@ -247,6 +254,15 @@ export function replaySteps(summary: ScanSummary, batches = 4, stepMs = 320): Re
       delay: stepMs,
       progress: { phase, done, total, pending_checks: pending },
       chunk: { ...base, phase, done, pending_checks: pending, results: results.slice(start, done), face_clusters: done === total ? summary.face_clusters : undefined },
+    });
+  }
+  if (total === 0) {
+    // Neither loop ran: still finish, or the page waits on the pending checks forever.
+    const phase = checks.at(-1) ?? "quality";
+    steps.push({
+      delay: stepMs,
+      progress: { phase, done: 0, total, pending_checks: [] },
+      chunk: { ...base, phase, done: 0, pending_checks: [], results: [], face_clusters: summary.face_clusters },
     });
   }
   return steps;

@@ -40,6 +40,11 @@ describe("the imported docs", () => {
     expect(["Why not FiftyOne / fastdup / Immich?", "HTTP API (:8101)", "Filters", "Filters"].map(slug)).toEqual(["why-not-fiftyone--fastdup--immich", "http-api-8101", "filters", "filters-1"]);
   });
 
+  it("never hand out a numbered id a heading already took", () => {
+    const slug = slugger();
+    expect(["Foo", "Foo", "Foo 1", "Foo 1", "Foo"].map(slug)).toEqual(["foo", "foo-1", "foo-1-1", "foo-1-2", "foo-2"]);
+  });
+
   it("render without a style attribute, raw HTML, a script or a remote image, so the CSP needs nothing new", () => {
     for (const markup of html.values()) {
       expect(markup).not.toMatch(/\sstyle="/);

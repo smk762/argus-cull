@@ -176,7 +176,10 @@ def scrubber(root: str | None, folder: str) -> tuple[str, Callable[[Any], Any]]:
     swaps = {old: new for old, new in ((folder, new_folder), *(((root, SOURCE),) if root else ())) if old and old != new}
     # One pass, longest first, so text a swap wrote is never matched again: with root /data,
     # /data/x -> /data/images/x must not then have its /data swapped a second time.
-    pattern = re.compile("|".join(re.escape(old) for old in sorted(swaps, key=len, reverse=True))) if swaps else None
+    # Whole path components only: with root /data, /database and http://host/data are not it, and
+    # with folder /x/pics the sibling /x/pics2 is not either.
+    alternatives = "|".join(re.escape(old) for old in sorted(swaps, key=len, reverse=True))
+    pattern = re.compile(rf"(?<![\w.~/-])(?:{alternatives})(?![\w.~-])") if swaps else None
 
     def scrub(value: Any) -> Any:
         if isinstance(value, str):
@@ -184,7 +187,7 @@ def scrubber(root: str | None, folder: str) -> tuple[str, Callable[[Any], Any]]:
         if isinstance(value, list):
             return [scrub(item) for item in value]
         if isinstance(value, dict):
-            return {key: scrub(item) for key, item in value.items()}
+            return {scrub(key) if isinstance(key, str) else key: scrub(item) for key, item in value.items()}
         return value
 
     return new_folder, scrub
@@ -277,8 +280,8 @@ def encode(data: bytes, longest: int, quality: int) -> bytes:
 
     with Image.open(io.BytesIO(data)) as image:
         image = ImageOps.exif_transpose(image)
-        if image.mode not in ("RGB", "RGBA"):
-            # A palette or keyed image (GIF, 8-bit PNG, tRNS) carries its transparency in info, not a band.
+        if image.mode != "RGBA":
+            # A palette or keyed image (GIF, 8-bit PNG, RGB or L with tRNS) carries its transparency in info, not a band.
             has_alpha = "A" in image.getbands() or "transparency" in image.info
             image = image.convert("RGBA" if has_alpha else "RGB")
         image.thumbnail((longest, longest))
@@ -326,6 +329,14 @@ def rederive_veils(args: argparse.Namespace) -> None:
     print(f"veils: {len(tape['files'])} images, one veil each {VEIL_CELLS} -> {out / 'veils'}")
 
 
+def inside(images_dir: Path, rel: str) -> Path:
+    """images_dir / rel, refused unless it stays in images_dir: a saved scan's rel_path must not pull other files into the tape."""
+    path = (images_dir / rel).resolve()
+    if Path(rel).is_absolute() or not path.is_relative_to(images_dir):
+        raise SystemExit(f"rel_path {rel!r} leaves --images; refusing to read it into the tape")
+    return path
+
+
 def check_leaks(out: Path) -> None:
     for path in sorted([*out.rglob("*.json"), *out.rglob("*.md")]):
         found = LEAKS.search(path.read_text())
@@ -365,7 +376,7 @@ def record(args: argparse.Namespace) -> None:
         detectors = read_json(args.detectors) or {}
         policies = read_json(args.policies)
         select = read_json(args.select) or select_from_scan(summary)
-        fetch = lambda rel: (images_dir / rel).read_bytes()  # noqa: E731
+        fetch = lambda rel: inside(images_dir, rel).read_bytes()  # noqa: E731
         source = "saved-scan"
         root = args.source_root or health.get("source_root")
         curator_version = args.curator_version or health.get("version")
