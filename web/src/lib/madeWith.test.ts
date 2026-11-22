@@ -48,7 +48,13 @@ describe("thinking mode", () => {
 
   it("names a mode that names itself", () => {
     expect(thinkingMode({ guard_config: guardOn, results: [judged("fast-slow"), judged("fast-slow")] })).toEqual({ text: "fast-slow", caveat: null });
-    expect(thinkingMode({ guard_config: guardOn, results: [judged("slow")] })).toEqual({ text: "slow", caveat: null });
+  });
+
+  it("says all-slow may be a cascade whose fast screen flagged every frame", () => {
+    const result = madeWith({ guard_config: guardOn, results: [judged("slow"), judged("slow")] }, "0.15.1");
+    expect(result.line).toMatch(/ · thinking slow$/);
+    expect(result.note).toContain("A cascade scan whose fast screen flagged every frame reads the same");
+    expect(thinkingMode({ guard_config: { ...guardOn, thinking: "slow" }, results: [judged("slow")] })).toEqual({ text: "slow", caveat: null });
   });
 
   it("prefers the mode the scan asked for, once curator records it (argus-curator#152)", () => {

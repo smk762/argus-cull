@@ -326,6 +326,9 @@ export function CullApp() {
       if (cancel || full === image) return;
       detailFilled.current.add(full.rel_path);
       setSummary((current) => (current ? { ...current, results: current.results.map((item) => (item.rel_path === full.rel_path ? full : item)) } : current));
+    }).catch(() => {
+      // No detail on the tape for this frame: show it without, and do not refetch on every summary change.
+      if (!cancel) detailFilled.current.add(image.rel_path);
     });
     return () => {
       cancel = true;
@@ -409,6 +412,16 @@ export function CullApp() {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [batchError, setBatchError] = useState<string | null>(null);
+  // A selection is a set of rel paths, which repeat across folders and rescans: another scan or
+  // folder starts with nothing selected, so Delete selected never reaches files picked elsewhere.
+  const selectionScope = `${summary?.scan_id ?? ""}\0${summary?.folder ?? ""}`;
+  const [selectedScope, setSelectedScope] = useState(selectionScope);
+  if (selectedScope !== selectionScope) {
+    setSelectedScope(selectionScope);
+    setSelected(new Set());
+    setDeleteConfirm(false);
+    setBatchError(null);
+  }
 
   const visible = useMemo(() => {
     const results = summary?.results ?? [];
@@ -492,9 +505,14 @@ export function CullApp() {
 
   async function resetLabels() {
     if (!scanFolderPath) return;
-    const file = await resetDemoLabels(scanFolderPath);
-    setLabels(new Map(Object.entries(file.labels)));
-    setLabelsFolder(scanFolderPath);
+    setLabelError(null);
+    try {
+      const file = await resetDemoLabels(scanFolderPath);
+      setLabels(new Map(Object.entries(file.labels)));
+      setLabelsFolder(scanFolderPath);
+    } catch (err: unknown) {
+      setLabelError(err instanceof Error ? err.message : "Could not reset the labels.");
+    }
   }
 
   function downloadLabels() {

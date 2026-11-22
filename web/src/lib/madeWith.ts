@@ -53,6 +53,12 @@ export function thinkingMode(summary: Summary): ThinkingRead | null {
       caveat: "Every verdict was judged in fast. A cascade scan whose fast screen flagged nothing reads the same, and the scan does not record which mode it asked for.",
     };
   }
+  if (modes.length === 1 && modes[0] === "slow") {
+    return {
+      text: "slow",
+      caveat: "Every verdict was judged in slow. A cascade scan whose fast screen flagged every frame reads the same, and the scan does not record which mode it asked for.",
+    };
+  }
   return { text: modes.length === 1 ? modes[0] : tally(modes), caveat: null };
 }
 

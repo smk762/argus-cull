@@ -19,6 +19,7 @@ import {
   requestKey,
   resetBrowserLabels,
   tapeFileUrl,
+  tapeVeilUrl,
   unscored,
   withDetail,
   type KeyValueStore,
@@ -125,6 +126,14 @@ describe("parseTape", () => {
     expect(() => parseScan({ ...scan, scan_id: "other" }, tape)).toThrow(/not the scan/);
     expect(() => parseScan({ ...scan, results: [...scan.results, { ...scan.results[0], rel_path: "new.png" }] }, tape)).toThrow(/no file/);
   });
+
+  it("finds no file for a rel_path that names an inherited property", () => {
+    for (const rel of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(() => parseScan({ ...scan, results: [{ ...scan.results[0], rel_path: rel }] }, tape)).toThrow(/no file/);
+      expect(tapeFileUrl("/data-tape", tape, "thumbs", rel)).toBe("");
+      expect(tapeVeilUrl("/data-tape", { ...tape, veils: { medium: 24 } }, rel, "medium")).toBeNull();
+    }
+  });
 });
 
 describe("tape files", () => {
@@ -181,6 +190,15 @@ describe("replaySteps", () => {
     const blurred = summary.results.filter((image) => shouldBlur(image, pending, DEFAULT_BLUR, null));
     expect(blurred.length).toBeGreaterThan(0);
     expect(blurred.length).toBeLessThan(summary.results.length);
+  });
+
+  it("finishes an empty scan: nothing pending at the end", () => {
+    const empty = replaySteps({ ...scan, results: [] });
+    const last = empty.at(-1)!;
+    expect(empty.length).toBeGreaterThan(1);
+    expect(last.progress.pending_checks).toEqual([]);
+    expect(last.progress.phase).not.toBe("starting");
+    expect(last.chunk?.face_clusters).toEqual(scan.face_clusters);
   });
 
   it("strips only what the scan ran", () => {

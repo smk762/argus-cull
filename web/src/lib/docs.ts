@@ -44,9 +44,16 @@ export function slugger() {
       .toLowerCase()
       .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
       .replace(/ /g, "-");
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    return count === 0 ? base : `${base}-${count}`;
+    // As github-slugger: a numbered slug is skipped when a heading already took it ("Foo", "Foo",
+    // "Foo 1" are foo, foo-1, foo-1-1), and every slug handed out is taken, numbered or not.
+    let slug = base;
+    while (seen.has(slug)) {
+      const count = (seen.get(base) ?? 0) + 1;
+      seen.set(base, count);
+      slug = `${base}-${count}`;
+    }
+    seen.set(slug, 0);
+    return slug;
   };
 }
 

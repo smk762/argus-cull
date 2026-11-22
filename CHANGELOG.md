@@ -12,6 +12,14 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 - **SingGuard is argus-retina's (argus-retina#9).** The `local-singguard` profile runs `ghcr.io/smk762/argus-retina-singguard` (`RETINA_TAG`, now 0.2.0 for every retina image) instead of building `singguard/`, which is gone. Point the curator at it with `ARGUS_CURATOR_SINGGUARD_URL=http://singguard:8080` (it was `:9150`). It is 4-bit by default (about 3.5 GB of VRAM; `SINGGUARD_QUANT=bf16`), fetches its weights into the `singguard_weights` volume on first start (the old `singguard_hf` volume can be removed), does text-only checks too, and publishes host port `8134`. `SINGGUARD_MODEL`, `SINGGUARD_REVISION` and `SINGGUARD_LOAD_IN_4BIT` are gone: retina pins the model. GPU leases are off for it by default (`SINGGUARD_GPU_COORDINATOR`), because the curator calls it while holding the scan's host lease.
 
+### Fixed
+
+- Opening another scan or folder clears the selection, so *Delete selected* never reaches files with the same names picked in the previous one.
+- The demo: a frame with no `detail/` file opens without it instead of refetching; a failed *Reset labels* shows its error; replaying an empty scan finishes; a result named `constructor` or `__proto__` no longer finds a tape file.
+- *Scanned by* says an all-slow scan may be a cascade whose fast screen flagged every frame, as it does for all-fast.
+- Doc heading ids match GitHub's when a numbered heading collides with a repeat ("Foo", "Foo", "Foo 1").
+- `record_tape.py` swaps host paths only as whole path components (`/data` no longer rewrites `/database`), scrubs object keys too, keeps an RGB PNG's transparency key, and refuses a saved scan's `rel_path` that leaves `--images`.
+
 ## [0.5.0] - 2026-11-19
 
 ### Security

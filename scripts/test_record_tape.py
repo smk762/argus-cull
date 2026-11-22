@@ -93,6 +93,24 @@ class RecordTest(unittest.TestCase):
             self.assertEqual(json.loads((out / "tape.json").read_text()), {"previous": True})
             self.assertEqual(sorted(path.name for path in root.iterdir()), ["images", "scan.json", "tape"])
 
+    def test_a_rel_path_outside_the_images_folder_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            images = root / "images"
+            images.mkdir()
+            (root / "secret.jpg").write_bytes(b"not for the tape")
+            out = root / "tape"
+            for rel in ("../secret.jpg", str(root / "secret.jpg")):
+                scan = root / "scan.json"
+                scan.write_text(json.dumps({
+                    "scan_id": "s",
+                    "folder": str(images),
+                    "results": [{"rel_path": rel, "abs_path": str(images / rel), "keep_reason": ""}],
+                }))
+                with self.assertRaisesRegex(SystemExit, "leaves --images"):
+                    record_tape.record(_args(out=str(out), images=str(images), scan=str(scan)))
+                self.assertFalse(out.exists())
+
 
 def _png(image: "object", **params: object) -> bytes:
     out = io.BytesIO()
@@ -110,6 +128,19 @@ class ScrubberTest(unittest.TestCase):
         _, scrub = record_tape.scrubber("/home/someone/pics", "/home/someone/pics/set")
         self.assertEqual(scrub("/home/someone/pics/set/a.jpg"), "/data/images/set/a.jpg")
         self.assertEqual(scrub("/data/images/set/a.jpg"), "/data/images/set/a.jpg")
+
+    def test_only_whole_path_components_are_swapped(self) -> None:
+        _, scrub = record_tape.scrubber("/data", "/data/x")
+        self.assertEqual(scrub("/database/y"), "/database/y")
+        self.assertEqual(scrub("http://host/data/y"), "http://host/data/y")
+        self.assertEqual(scrub('see "/data/y"'), 'see "/data/images/y"')
+        _, scrub = record_tape.scrubber(None, "/home/someone/pics")
+        self.assertEqual(scrub("/home/someone/pics2/a.jpg"), "/home/someone/pics2/a.jpg")
+        self.assertEqual(scrub("/home/someone/pics"), "/data/images/pics")
+
+    def test_keys_are_scrubbed_too(self) -> None:
+        _, scrub = record_tape.scrubber(None, "/home/someone/pics")
+        self.assertEqual(scrub({"/home/someone/pics/a.jpg": {"/home/someone/pics/b.jpg": 1}, 2: "x"}), {"/data/images/pics/a.jpg": {"/data/images/pics/b.jpg": 1}, 2: "x"})
 
 
 class PublicHealthTest(unittest.TestCase):
@@ -152,7 +183,15 @@ class EncodeTest(unittest.TestCase):
         from PIL import Image
 
         image = Image.new("RGB", (8, 8), (0, 0, 0))
-        with Image.open(io.BytesIO(record_tape.encode(_png(image.convert("L"), transparency=0), 480, 80))) as out:
+        with Image.open(io.BytesIO(record_tape.encode(_png(image, transparency=(0, 0, 0)), 480, 80))) as out:
+            self.assertEqual(out.mode, "RGBA")
+            self.assertEqual(out.getpixel((4, 4))[3], 0)
+
+    def test_a_grayscale_image_with_a_transparency_key_keeps_it(self) -> None:
+        from PIL import Image
+
+        image = Image.new("L", (8, 8), 0)
+        with Image.open(io.BytesIO(record_tape.encode(_png(image, transparency=0), 480, 80))) as out:
             self.assertEqual(out.mode, "RGBA")
             self.assertEqual(out.getpixel((4, 4))[3], 0)
 
