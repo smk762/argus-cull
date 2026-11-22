@@ -1,7 +1,7 @@
 {
   "curator": {
-    "version": "0.15.1.dev139+g916a7a95c",
-    "commit": "916a7a95c8db249f96006633f6bbb1dacff5737c"
+    "version": "0.21.1.dev26+g770636e8f",
+    "commit": "770636e8fd54aa9c426003051510e1c4cd7586f5"
   },
   "scan": {
     "total": 10,

@@ -11,11 +11,11 @@ services:
     # host needs the NVIDIA container runtime and a driver for CUDA 13; on a host
     # without one, set CURATOR_GPU=0 in .env and drop `gpus` below.
     # docker-compose.local-curator.yaml builds a sibling checkout instead.
-    image: argus-curator:dev-916a7a95c
+    image: argus-curator:dev-770636e8f
     build:
-      context: https://github.com/smk762/argus-curator.git#916a7a95c8db249f96006633f6bbb1dacff5737c
+      context: https://github.com/smk762/argus-curator.git#770636e8fd54aa9c426003051510e1c4cd7586f5
       args:
-        VERSION: 0.15.1.dev139+g916a7a95c
+        VERSION: 0.21.1.dev26+g770636e8f
         GPU: ${CURATOR_GPU:-1}
     gpus: all
     ports:
