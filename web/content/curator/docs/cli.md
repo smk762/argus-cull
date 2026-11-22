@@ -23,6 +23,11 @@ $ argus-curator [OPTIONS] COMMAND [ARGS]...
 * `mivolo-convert`: Fetch, verify and convert MiVOLO v2 to the...
 * `places365-convert`: Fetch, verify and convert a Places365-CNN...
 * `garments-convert`: Fetch, verify and convert the Fashionpedia...
+* `embeddings-convert`: Fetch, verify and convert the CLIP image...
+* `dnsmos-fetch`: Fetch the DNSMOS P.835 model a speech...
+* `speaker-fetch`: Fetch the speaker-embedding model a speech...
+* `lid-convert`: Fetch, verify and convert the language-ID...
+* `vad-fetch`: Fetch the Silero VAD model a speech scan&#x27;s...
 * `schema`: Emit the wire-contract JSON Schema...
 
 ## `argus-curator scan`
@@ -48,6 +53,11 @@ $ argus-curator scan [OPTIONS] {source}
 * `--keep-similar`: Keep non-representative near-duplicates
 * `--no-cluster`: Disable near-duplicate grouping
 * `--cluster-distance <int>`: pHash Hamming distance for near-duplicates  [default: 10]
+* `--semantic-dupes`: Also group near-duplicates by CLIP embedding similarity (needs --embeddings)
+* `--semantic-dupes-cosine <float>`: With --semantic-dupes, the cosine similarity that makes a duplicate  [default: 0.95]
+* `--profile-fit`: Score each image&#x27;s zero-shot CLIP fit to the target profile (needs --embeddings)
+* `--junk-check`: Score each image&#x27;s zero-shot CLIP junk probability: screenshot, collage, text, meme (needs --embeddings)
+* `--junk-threshold <float>`: The junk probability that names a junk kind (and that --drop-junk drops at)  [default: 0.8]
 * `--max-keep <int>`: Cap keepers to a diverse N
 * `--diversity-weight <float>`: 0=pure score, 1=pure spread  [default: 0.4]
 * `--min-short-side <int>`: Minimum short-side pixels (512 at least)  [default: 512]
@@ -55,9 +65,39 @@ $ argus-curator scan [OPTIONS] {source}
 * `--blur-threshold <float>`: Minimum Laplacian variance  [default: 100.0]
 * `--max-workers <int>`: Parallel worker threads  [default: 4]
 * `--target-style <str>`: photo or anime  [default: photo]
-* `--target-backend <str>`: Diffusion backend family  [default: sdxl]
+* `--target-backend <str>`: Diffusion backend family (default sdxl), or a TTS family for speech
 * `--checkpoint <str>`: Target checkpoint
-* `--target-category <str>`: identity|wardrobe|pose_composition|setting|concept  [default: identity]
+* `--target-category <str>`: identity|wardrobe|pose_composition|setting|concept (default identity); for speech voice|accent|language|speaking_style (default voice)
+* `--modality <str>`: image, or speech to scan the folder&#x27;s WAV/FLAC clips and transcripts instead  [default: image]
+* `--transcripts <str>`: Speech: auto (default), sidecar, ljspeech or common_voice
+* `--mos`: Speech: score each passing clip with DNSMOS (see dnsmos-fetch)
+* `--dnsmos-model <path>`: Speech: DNSMOS ONNX model (ARGUS_CURATOR_DNSMOS_MODEL)
+* `--speakers`: Speech: embed and cluster each passing clip&#x27;s speaker (see speaker-fetch)
+* `--speaker-model <path>`: Speech: speaker-embedding ONNX model (ARGUS_CURATOR_SPEAKER_MODEL)
+* `--language-id`: Speech: check each passing clip&#x27;s corpus language label with a language-ID model (see lid-convert)
+* `--lid-model <path>`: Speech: language-ID ONNX model (ARGUS_CURATOR_LID_MODEL)
+* `--vad <str>`: Speech: energy (default) or silero, the VAD for speech ratio and SNR (see vad-fetch)
+* `--vad-model <path>`: Speech: Silero VAD ONNX model (ARGUS_CURATOR_VAD_MODEL)
+* `--speech-config <path>`: Speech: a JSON SpeechConfig with the thresholds (the flags above override it)
+* `--speaker-id <str>`: Speech export: keep only these speakers (comma-separated speaker_id)
+* `--accent <str>`: Speech export: keep only these accents (comma-separated corpus labels, exact)
+* `--language <str>`: Speech export: keep only these languages (comma-separated corpus labels, exact)
+* `--exclude-speaker-mismatch`: Speech export: drop clips whose corpus speaker label the clustering disputes (needs --speakers)
+* `--exclude-language-mismatch`: Speech export: drop clips whose corpus language label the language-ID model disputes (needs --language-id)
+* `--min-hours-per-speaker <float>`: Speech export: drop a speaker with fewer hours of kept audio
+* `--max-hours-per-speaker <float>`: Speech export: cap each speaker&#x27;s hours, best clips first
+* `--max-hours-per-accent <float>`: Speech export: cap each accent&#x27;s hours, taking its speakers in turn
+* `--balance-accents`: Speech export: cap every accent at the smallest accent&#x27;s hours
+* `--corpus <str>`: Speech export: the licensed corpus every clip comes from (with --license)
+* `--license <str>`: Speech export: the corpus&#x27;s licence, e.g. CC0-1.0 (with --corpus)
+* `--voice-consent <str>`: Speech export: a real person&#x27;s voice consent record (argus-cortex ConsentRecord JSON), relative to the scanned folder or absolute, instead of --corpus (with --consent-delivery; needs --speakers)
+* `--consent-delivery <str>`: Speech export: the voice delivery --voice-consent must cover, e.g. neutral
+* `--voice-consent-max-distance <float>`: Speech export: keep a clip under --voice-consent only within this cosine distance of the record&#x27;s reference recordings&#x27; voice (default 0.25, strict; docs/speech.md)
+* `--held-out <int>`: Speech export: hold out about this many clips, by whole speakers (or a fraction)
+* `--held-out-fraction <float>`: Speech export: hold out about this fraction of the clips, by whole speakers
+* `--split-method <str>`: Speech export: spread (held-out speakers evenly through the ranking) or random  [default: spread]
+* `--split-seed <int>`: Speech export: the seed --split-method random shuffles with  [default: 0]
+* `--split-part <str>`: Speech export: which part of the split to export, train or held_out  [default: train]
 * `--faces`: Run InsightFace detection + identity clustering
 * `--faces-model <str>`: InsightFace model name  [default: buffalo_l]
 * `--min-det-score <float>`: Minimum face detection score  [default: 0.5]
@@ -74,9 +114,14 @@ $ argus-curator scan [OPTIONS] {source}
 * `--places365-model <path>`: Converted Places365 ONNX model (ARGUS_CURATOR_PLACES365_MODEL)
 * `--garments`: Detect garments (type, colour, cut-off) with Fashionpedia
 * `--garments-model <path>`: Converted garment-detector ONNX model (ARGUS_CURATOR_GARMENTS_MODEL)
+* `--embeddings`: Compute CLIP image embeddings (memory only) for --diversify-semantic
+* `--embeddings-model <path>`: Converted CLIP image-tower ONNX model (ARGUS_CURATOR_EMBEDDINGS_MODEL)
 * `--face-clusters <str>`: Comma-separated cluster ids to export
-* `--face-reference <list[str]>`: An image in the scan (relative path) whose face is the identity reference; repeatable. Each face then gets a reference_distance (implies --faces)
+* `--face-reference <list[str]>`: An image whose face is the identity reference: a path relative to the scanned folder, or any image file outside it; repeatable (several are averaged). Each face then gets a reference_distance (implies --faces)
 * `--face-source`: Export only face-source images (one identity, frontal and level, large, sharp, eyes open, mouth closed, adult; needs --mivolo), ranked best first
+* `--consent <str>`: A real person&#x27;s consent record (argus-cortex ConsentRecord JSON), relative to the scanned folder or absolute: bind the set to its reference images (implies --mivolo --set-age)
+* `--consent-max-distance <float>`: Ceiling on a face&#x27;s distance from the record&#x27;s reference to be bound  [default: 0.4]
+* `--face-source-consent`: Export a consented face set: --face-source over the images bound to --consent&#x27;s record, re-checked at export, adult only; refused when none qualifies (implies --face-source)
 * `--landmarks`: Write the primary face&#x27;s landmarks into the manifest
 * `--pose <str>`: Export only these primary-face poses (comma-separated: frontal,three_quarter,profile)
 * `--race <str>`: Export only these primary-face races (comma-separated: white,black,latino_hispanic,east_asian,southeast_asian,indian,middle_eastern)
@@ -94,6 +139,7 @@ $ argus-curator scan [OPTIONS] {source}
 * `--min-garment-conf <float>`: Minimum probability for a garment to count (filters + outfit diversity)  [default: 0.5]
 * `--uncropped`: With --garment, the garment must not be cut off by the frame edge
 * `--diversify-outfits`: With --max-keep, also spread the selection across outfits
+* `--diversify-semantic`: With --max-keep, also spread the selection semantically (CLIP embeddings; needs --embeddings)
 * `--nsfw / --no-nsfw`: NudeNet nudity check (default: on when a NudeNet URL is configured; --no-nsfw opts out)
 * `--nudenet-url <str>`: NudeNet server origin, e.g. http://nudenet:8080 (ARGUS_CURATOR_NUDENET_URL)
 * `--erax-url <str>`: EraX-NSFW server origin, e.g. http://erax:8080 (ARGUS_CURATOR_ERAX_URL)
@@ -104,6 +150,8 @@ $ argus-curator scan [OPTIONS] {source}
 * `--content-ratings <str>`: Keep only these NudeNet content ratings, comma-separated: safe, suggestive, explicit
 * `--guard / --no-guard`: SingGuard policy check (default: on when a SingGuard URL is configured; --no-guard opts out)
 * `--singguard-url <str>`: SingGuard server origin, e.g. http://guard:9150 (ARGUS_CURATOR_SINGGUARD_URL)
+* `--body-pose / --no-body-pose`: Body pose from argus-puppet (default: on when a puppet URL is configured; --no-body-pose opts out)
+* `--puppet-url <str>`: argus-puppet server origin, e.g. http://puppet:8220 (ARGUS_CURATOR_PUPPET_URL)
 * `--guard-policy <str>`: SingGuard policy: default (the policy file, else SingGuard&#x27;s rules) or adult (allows adult nudity)  [default: default]
 * `--guard-thinking <str>`: SingGuard mode: fast, fast-slow, slow or cascade (default: ARGUS_CURATOR_SINGGUARD_THINKING, else cascade)
 * `--guard-variants <str>`: Also judge every image under these policies, comma-separated (one more SingGuard pass each)
@@ -113,6 +161,7 @@ $ argus-curator scan [OPTIONS] {source}
 * `--drop-nsfw`: Reject images NudeNet reads as exposed (&gt;= 0.2) before scenes, garments and SingGuard
 * `--drop-no-face`: Reject images with no face before scenes, garments and SingGuard (needs --faces)
 * `--drop-no-age`: Reject images with no MiVOLO, body-only or set age before scenes, garments and SingGuard (needs --mivolo)
+* `--drop-junk`: Reject images whose zero-shot junk probability reaches --junk-threshold, before SingGuard (needs --embeddings)
 * `--minor-exposed <str>`: Under-18 rule: frame (default; a young age and any exposure in the frame) or overlap (the exposure must also sit on a young person&#x27;s box). Or ARGUS_CURATOR_MINOR_EXPOSED
 * `--crops`: Crop each image that has a &lt;image&gt;.crop.json sidecar ({left, top, right, bottom}, displayed pixels) in memory before every check, and export it cropped (--copy-to only). Sources are never changed.
 * `--detect-watermarks`: Find watermarks with the detector (--watermark-url) and cut them away at the frame&#x27;s edges; implies --crops. A watermark no edge cut removes rejects the image (crop:overlay).
@@ -250,6 +299,107 @@ $ argus-curator garments-convert [OPTIONS]
 
 * `--checkpoint <path>`: Local dir with config.json + pytorch_model.bin (default: download the pinned one)
 * `-o, --output <path>`: Where to write the ONNX model (default: model cache)
+* `--help`: Show this message and exit.
+
+## `argus-curator embeddings-convert`
+
+Fetch, verify and convert the CLIP image tower for --embeddings.
+
+Weights: huggingface.co/laion/CLIP-ViT-L-14-DataComp.XL-s13B-b90K (MIT;
+DataComp-1B CLIP ViT-L/14), pinned by commit and sha256. Only the image
+tower and its projection are exported (~1.2 GB fp32). With --prompts, the
+text tower embeds the zero-shot prompts into the pinned prompt file the
+package ships (a maintainer step; scans never run the text tower).
+Needs: pip install argus-curator
+
+**Usage**:
+
+```console
+$ argus-curator embeddings-convert [OPTIONS]
+```
+
+**Options**:
+
+* `--checkpoint <path>`: Local dir with config.json + pytorch_model.bin (default: download the pinned one)
+* `-o, --output <path>`: Where to write the ONNX model (default: model cache)
+* `--prompts`: Instead, embed the zero-shot prompts with the text tower and write the pinned prompt file (default: the package&#x27;s data/clip_prompts.json; a maintainer step)
+* `--help`: Show this message and exit.
+
+## `argus-curator dnsmos-fetch`
+
+Fetch the DNSMOS P.835 model a speech scan&#x27;s --mos runs.
+
+microsoft/DNS-Challenge (code MIT, other content CC BY 4.0), pinned by
+commit and sha256; 1.2 MB, runs on onnxruntime (argus-curator).
+
+**Usage**:
+
+```console
+$ argus-curator dnsmos-fetch [OPTIONS]
+```
+
+**Options**:
+
+* `-o, --output <path>`: Where to write the model (default: model cache)
+* `--help`: Show this message and exit.
+
+## `argus-curator speaker-fetch`
+
+Fetch the speaker-embedding model a speech scan&#x27;s --speakers runs.
+
+WeSpeaker&#x27;s ECAPA-TDNN (VoxCeleb2, large-margin fine-tuned; code
+Apache-2.0, model CC BY 4.0), pinned by Hugging Face revision and
+sha256; 25 MB, runs on onnxruntime (argus-curator).
+
+**Usage**:
+
+```console
+$ argus-curator speaker-fetch [OPTIONS]
+```
+
+**Options**:
+
+* `-o, --output <path>`: Where to write the model (default: model cache)
+* `--help`: Show this message and exit.
+
+## `argus-curator lid-convert`
+
+Fetch, verify and convert the language-ID model a speech scan&#x27;s --language-id runs.
+
+SpeechBrain&#x27;s VoxLingua107 ECAPA-TDNN (speechbrain/lang-id-voxlingua107-ecapa,
+Apache-2.0; VoxLingua107 data CC BY 4.0), pinned by Hugging Face revision
+and sha256; 107 languages, ~85 MB fp32. Writes the ONNX model and its
+conversion record (&lt;model&gt;.json) beside it; the scan runs it on onnxruntime
+alone (argus-curator). Needs: pip install argus-curator
+
+**Usage**:
+
+```console
+$ argus-curator lid-convert [OPTIONS]
+```
+
+**Options**:
+
+* `--checkpoint <path>`: Local dir with embedding_model.ckpt, classifier.ckpt and label_encoder.txt (default: download the pinned ones)
+* `-o, --output <path>`: Where to write the ONNX model (default: model cache)
+* `--help`: Show this message and exit.
+
+## `argus-curator vad-fetch`
+
+Fetch the Silero VAD model a speech scan&#x27;s --vad silero runs.
+
+snakers4/silero-vad (MIT), pinned by release commit and sha256; 2.3 MB,
+runs on onnxruntime on CPU (argus-curator).
+
+**Usage**:
+
+```console
+$ argus-curator vad-fetch [OPTIONS]
+```
+
+**Options**:
+
+* `-o, --output <path>`: Where to write the model (default: model cache)
 * `--help`: Show this message and exit.
 
 ## `argus-curator schema`

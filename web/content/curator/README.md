@@ -82,6 +82,7 @@ pip install argus-curator                 # engine only (Pillow, numpy, ImageHas
 pip install "argus-curator[server,cli]"   # FastAPI server + CLI
 pip install "argus-curator[faces]"        # + InsightFace identity clustering (CPU onnxruntime)
 pip install "argus-curator[gpu]"          # + onnxruntime-gpu for GPU face detection
+pip install "argus-curator[speech]"       # + WAV/FLAC decoding and DNSMOS for speech scans
 pip install "argus-curator[all]"          # everything
 ```
 
@@ -91,9 +92,10 @@ System libraries for the face stack (Ubuntu/Debian):
 sudo apt install -y libgl1 libglib2.0-0 libgomp1
 ```
 
-Face attributes, scenes and garments read ONNX models that are converted once
-(`mivolo-convert`, `fairface-convert`, `places365-convert`,
-`garments-convert`); each feature's page says how. The nudity, policy and
+Face attributes, scenes, garments and semantic embeddings read ONNX models
+that are converted once (`mivolo-convert`, `fairface-convert`,
+`places365-convert`, `garments-convert`, `embeddings-convert`); each feature's
+page says how. The nudity, policy and
 watermark checks talk to their own servers over HTTP. A Docker image is
 published for CPU and GPU: see [Docker and the GPU](docs/gpu.md).
 
@@ -178,10 +180,12 @@ narrows that to exposure on the young person's box; see
 - [Face sources](docs/face-sources.md): head pose, face sharpness, eyes and mouth, identity distance, the argus-mask preset
 - [Scene tags](docs/scene-tags.md): Places365 scenes and indoor/outdoor
 - [Garments](docs/garments.md): Fashionpedia garments, colours and cut-off
+- [Body pose](docs/body-pose.md): argus-puppet stance, arms and facing per image, and scan-level pose clusters
 - [Nudity detection](docs/nudity.md): NudeNet, the EraX second pass, content rating
 - [Policy check](docs/policy-check.md): SingGuard verdicts, policies and context
 - [Prefilter](docs/prefilter.md): drop images before the slow checks
 - [Crops](docs/crops.md): watermarks and borders, given or detected
+- [Speech scans](docs/speech.md): voice clips and transcripts: duration, clipping, silence, SNR, speech ratio, speaking rate, DNSMOS, near-duplicates; speaker clustering, hours per speaker and accent, a speaker-disjoint split, and `speech_manifest.jsonl` with corpus, licence or consent on every clip
 
 **Export and handoff**
 
