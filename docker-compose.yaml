@@ -36,9 +36,10 @@ services:
       # Watermark detector for a scan's crops.detect. It runs only when a scan
       # asks for it, so the URL being set costs nothing. Empty refuses detect.
       - ARGUS_CURATOR_WATERMARK_URL=${ARGUS_CURATOR_WATERMARK_URL-http://watermark:8080}
-      # Darkroom's guard: agent-composer's /api/guard/check. Off (empty) until
-      # .env sets it to your composer host, e.g. http://composer.example:9150,
-      # or http://singguard:9150 with the local-singguard profile.
+      # SingGuard: argus-retina's SingGuard server, or agent-composer's
+      # /api/guard/check (a proxy to it, the guard darkroom uses). Off (empty)
+      # until .env sets it, e.g. http://composer.example:9150, or
+      # http://singguard:8080 with the local-singguard profile.
       - ARGUS_CURATOR_SINGGUARD_URL=${ARGUS_CURATOR_SINGGUARD_URL-}
       # cascade: fast on every frame (about a second), slow on the frames
       # fast flags and on a MiVOLO age under 18 with an exposed score of at
@@ -104,13 +105,13 @@ services:
   # the CPU, has its own HEALTHCHECK (healthy once its model has loaded) and
   # publishes no host port. RETINA_TAG in .env picks another release.
   nudenet:
-    image: ghcr.io/smk762/argus-retina-nudenet:${RETINA_TAG:-0.1.0}
+    image: ghcr.io/smk762/argus-retina-nudenet:${RETINA_TAG:-0.2.0}
     restart: unless-stopped
 
   # EraX-NSFW-V1.0 (YOLO11s). Optional: set ARGUS_CURATOR_ERAX_URL empty to
   # stop the curator calling it.
   erax:
-    image: ghcr.io/smk762/argus-retina-erax:${RETINA_TAG:-0.1.0}
+    image: ghcr.io/smk762/argus-retina-erax:${RETINA_TAG:-0.2.0}
     restart: unless-stopped
 
   # Watermark detector for curator's crops.detect: frames with a watermark at
@@ -119,7 +120,7 @@ services:
   # detection while this is down. The image ships no weights (fancyfeast's
   # YOLO11x states no licence), so watermark-weights fetches them first.
   watermark:
-    image: ghcr.io/smk762/argus-retina-watermark:${RETINA_TAG:-0.1.0}
+    image: ghcr.io/smk762/argus-retina-watermark:${RETINA_TAG:-0.2.0}
     volumes:
       - watermark_weights:/models:ro
     restart: unless-stopped
@@ -190,50 +191,45 @@ services:
       # About five minutes, long enough for either model to load.
       retries: 60
 
-  # Optional local Sing-Guard-4b. Off unless `--profile local-singguard`.
-  # Prefer agent-composer (`ARGUS_CURATOR_SINGGUARD_URL`); this copy cannot
-  # do text-only checks and holds a GPU darkroom wants for ComfyUI.
+  # Optional local SingGuard-4b: argus-retina's published image, the same build
+  # agent-composer's guard route and darkroom use. Off unless
+  # `--profile local-singguard`; then set
+  # ARGUS_CURATOR_SINGGUARD_URL=http://singguard:8080. It holds about 3.5 GB of
+  # VRAM (4-bit), so do not run it beside another SingGuard on this GPU. No
+  # weights in the image: the first start fetches 8.9 GB into the volume at a
+  # pinned Hub commit and checks every file's sha256; later starts reuse it.
   singguard:
     profiles: ["local-singguard"]
-    build:
-      context: ./singguard
+    image: ghcr.io/smk762/argus-retina-singguard:${RETINA_TAG:-0.2.0}
     environment:
-      - HF_HOME=/data/hf
-      - SINGGUARD_MODEL=${SINGGUARD_MODEL:-inclusionAI/Sing-Guard-4b}
-      # Hub commit sha (all 40 characters) to pin. The model loads with
-      # trust_remote_code, so this also pins the code that runs. Empty uses the
-      # sha singguard/inputs.py pins for the default model; another model
-      # refuses to start without one.
-      - SINGGUARD_REVISION=${SINGGUARD_REVISION:-}
-      - SINGGUARD_LOAD_IN_4BIT=${SINGGUARD_LOAD_IN_4BIT:-0}
+      # 4bit (about 3.5 GB of VRAM) or bf16 (about 9 GB).
+      - SINGGUARD_QUANT=${SINGGUARD_QUANT:-4bit}
       # Generation budget for the reasoning modes (fast-slow, slow) and for
       # fast. A generation cut off before its <answer> tag is a failed check.
       - SINGGUARD_MAX_NEW_TOKENS=${SINGGUARD_MAX_NEW_TOKENS:-2048}
       - SINGGUARD_MAX_NEW_TOKENS_FAST=${SINGGUARD_MAX_NEW_TOKENS_FAST:-256}
       # fast, fast-slow, slow or cascade: judge every request in this mode
-      # whatever the client asked for. Curator 0.5 can only ask for fast or
-      # fast-slow, so this is how it gets slow or cascade (fast for every
-      # frame, slow for the ones fast flags). Empty honours the request.
+      # whatever the client asked for, for experiments. Empty honours the
+      # request.
       - SINGGUARD_FORCE_THINKING=${SINGGUARD_FORCE_THINKING:-}
-      - NVIDIA_VISIBLE_DEVICES=all
+      # Guards /admin/unload and /admin/wake; set it so only argus-iris can
+      # unload the model.
+      - ARGUS_ADMIN_TOKEN=${ARGUS_ADMIN_TOKEN:-}
+      # GPU leases are off here by default: the curator takes the host lease
+      # for its own models during a scan and calls SingGuard inside it, so a
+      # SingGuard lease on the same lock would wait on the scan. Set
+      # SINGGUARD_GPU_COORDINATOR=broker to have argus-iris place it.
+      - ARGUS_GPU_COORDINATOR=${SINGGUARD_GPU_COORDINATOR:-none}
+      - ARGUS_GPU_BROKER_URL=${ARGUS_GPU_BROKER_URL-}
+      - ARGUS_GPU_BROKER_TOKEN=${ARGUS_GPU_BROKER_TOKEN-}
     volumes:
-      - singguard_hf:/data/hf
+      - singguard_weights:/models/singguard
     ports:
-      - "127.0.0.1:${SINGGUARD_PORT:-9150}:9150"
+      - "127.0.0.1:${SINGGUARD_PORT:-8134}:8080"
     gpus: all
     restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9150/health', timeout=5).read()",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 1800s
+    # The image's HEALTHCHECK reports healthy once the model is loaded (or
+    # unloaded by argus-iris, since the next check loads it again).
 
   web:
     build:
@@ -265,5 +261,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  singguard_hf:
+  singguard_weights:
   watermark_weights:
