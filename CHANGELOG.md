@@ -8,6 +8,10 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 - *Evaluate keep set* reads body pose from the curator's argus-puppet stage (argus-curator#221, on curator `dev`): a *Body poses* stat, and a note when one scan-level pose cluster holds 40% or more of the kept frames that have one (at least 10), naming its usual stance, arms and facing, with a button to open its most central frame; at 75% the note says the keep set has collapsed onto it. It applies to every target category. When a quarter or more of the keep set has no measured pose, a note says how many and why. Nothing shows on a scan without the stage. The cut-offs are uncalibrated on real sets (smk762/argus-puppet#1, phase 3).
 
+### Changed
+
+- **SingGuard is argus-retina's (argus-retina#9).** The `local-singguard` profile runs `ghcr.io/smk762/argus-retina-singguard` (`RETINA_TAG`, now 0.2.0 for every retina image) instead of building `singguard/`, which is gone. Point the curator at it with `ARGUS_CURATOR_SINGGUARD_URL=http://singguard:8080` (it was `:9150`). It is 4-bit by default (about 3.5 GB of VRAM; `SINGGUARD_QUANT=bf16`), fetches its weights into the `singguard_weights` volume on first start (the old `singguard_hf` volume can be removed), does text-only checks too, and publishes host port `8134`. `SINGGUARD_MODEL`, `SINGGUARD_REVISION` and `SINGGUARD_LOAD_IN_4BIT` are gone: retina pins the model. GPU leases are off for it by default (`SINGGUARD_GPU_COORDINATOR`), because the curator calls it while holding the scan's host lease.
+
 ## [0.5.0] - 2026-11-19
 
 ### Security

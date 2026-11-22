@@ -3,8 +3,8 @@ name: Release
 # On a v* tag: check the tag matches web/package.json, run the CI checks,
 # push the web image to ghcr.io/<owner>/argus-cull, then create a GitHub Release
 # from the tag's CHANGELOG.md section. Nothing goes to PyPI: this repo has no
-# Python package. The sidecars (nudenet, erax, watermark, singguard) stay local
-# compose builds.
+# Python package. The detectors (NudeNet, EraX, watermark, SingGuard) are
+# argus-retina's published images.
 
 on:
   push:
