@@ -6,7 +6,8 @@ Reads ``sync/argus-curator.json`` and fails when:
 - ``sync/fixture-scan.json`` was recorded with a different curator version or commit,
 - the recorded version does not come from the recorded commit (setuptools-scm's
   ``+g<sha>`` suffix, when the version has one),
-- ``docker-compose.yaml`` builds a different curator commit or version.
+- ``docker-compose.yaml`` builds a different curator commit or version,
+- an Argus service container in ``docker-compose.yaml`` lacks the suite's discovery labels.
 
 No network and no curator install: this is what ``make check`` runs. Whether
 curator's ``dev`` has moved on is the scheduled drift job's question, not this one.
@@ -20,6 +21,7 @@ import re
 import sys
 from pathlib import Path
 
+import compose_labels
 import compose_pin
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +57,7 @@ def main() -> None:
         )
 
     problems += compose_pin.problems(commit, version)
+    problems += compose_labels.problems()
 
     if problems:
         sys.exit("sync check failed:\n- " + "\n- ".join(problems))

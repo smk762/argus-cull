@@ -20,7 +20,19 @@ services:
     gpus: all
     ports:
       - "${CURATOR_PORT:-8101}:8101"
+    # How the suite finds this service (argus-cortex's discovery labels): argus-iris's
+    # node agents read them and list it in the suite directory as peer "curator". The
+    # same names and ports as curator's and retina's own compose files; check_compose_labels
+    # in scripts/sync_check.py holds every Argus service here to them.
+    labels:
+      argus.peer: curator
+      argus.service: argus-curator
+      argus.health: /health
+      argus.port: "8101"
     environment:
+      # The peer label above, reported back in GET /health by a curator that has
+      # argus-cortex 0.16's health contract; an older one ignores it.
+      - ARGUS_PEER=curator
       - CURATOR_SOURCE_PATH=/data/images
       - CURATOR_EXPORT_PATH=/data/out
       - CURATOR_CACHE_DIR=/root/.cache/argus_curator/scans
@@ -104,14 +116,30 @@ services:
   # over HTTP: NudeNet 640m, EraX-NSFW and the watermark detector. Each runs on
   # the CPU, has its own HEALTHCHECK (healthy once its model has loaded) and
   # publishes no host port. RETINA_TAG in .env picks another release.
+  # Each carries retina's discovery labels (argus.peer and the rest). The suite
+  # directory builds a URL from a published port, and these publish none.
   nudenet:
     image: ghcr.io/smk762/argus-retina-nudenet:${RETINA_TAG:-0.2.0}
+    labels:
+      argus.peer: nudenet
+      argus.service: argus-retina
+      argus.health: /health
+      argus.port: "8080"
+    environment:
+      - ARGUS_PEER=nudenet
     restart: unless-stopped
 
   # EraX-NSFW-V1.0 (YOLO11s). Optional: set ARGUS_CURATOR_ERAX_URL empty to
   # stop the curator calling it.
   erax:
     image: ghcr.io/smk762/argus-retina-erax:${RETINA_TAG:-0.2.0}
+    labels:
+      argus.peer: erax
+      argus.service: argus-retina
+      argus.health: /health
+      argus.port: "8080"
+    environment:
+      - ARGUS_PEER=erax
     restart: unless-stopped
 
   # Watermark detector for curator's crops.detect: frames with a watermark at
@@ -121,6 +149,13 @@ services:
   # YOLO11x states no licence), so watermark-weights fetches them first.
   watermark:
     image: ghcr.io/smk762/argus-retina-watermark:${RETINA_TAG:-0.2.0}
+    labels:
+      argus.peer: watermark
+      argus.service: argus-retina
+      argus.health: /health
+      argus.port: "8080"
+    environment:
+      - ARGUS_PEER=watermark
     volumes:
       - watermark_weights:/models:ro
     restart: unless-stopped
@@ -201,7 +236,13 @@ services:
   singguard:
     profiles: ["local-singguard"]
     image: ghcr.io/smk762/argus-retina-singguard:${RETINA_TAG:-0.2.0}
+    labels:
+      argus.peer: singguard
+      argus.service: argus-retina
+      argus.health: /health
+      argus.port: "8080"
     environment:
+      - ARGUS_PEER=singguard
       # 4bit (about 3.5 GB of VRAM) or bf16 (about 9 GB).
       - SINGGUARD_QUANT=${SINGGUARD_QUANT:-4bit}
       # Generation budget for the reasoning modes (fast-slow, slow) and for
