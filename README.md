@@ -125,6 +125,8 @@ NudeNet and SingGuard stay hidden until `/detectors` reports them. A threshold o
 
 `make pages` builds the page as a pure static export (`web/out/`) for a static host such as Cloudflare Pages. It reads a recorded **data tape** instead of the curator and the page's API routes, so it needs no GPU, no curator and no server.
 
+`.github/workflows/pages.yml` deploys it to Cloudflare Pages from every `dev` commit that passes CI.
+
 **The tape** is written by `scripts/record_tape.py` (needs Pillow) into `web/public/data-tape/`:
 
 ```bash
