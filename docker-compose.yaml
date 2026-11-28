@@ -173,7 +173,7 @@ services:
   #   WATERMARK_WEIGHTS_URL=https://huggingface.co/mnemic/watermarks_yolov8/resolve/8e764d6b715afab10f27908f111a906486affafb/watermarks_s_yolov8_v1.pt
   #   WATERMARK_WEIGHTS_SHA256=234f6ab07701dcc45127758b2e111e6c288f2fdcf6c96438ec508297b4264a49
   # and WATERMARK_IMGSZ=640 under watermark's environment in compose.override.yaml.
-  watermark-weights:
+  watermark-weights:  # nosemgrep: service-peer-label  one-shot: fetches the pinned watermark weights into a volume, then exits
     image: python:3.12-slim
     environment:
       - URL=${WATERMARK_WEIGHTS_URL:-https://huggingface.co/spaces/fancyfeast/joycaption-watermark-detection/resolve/9bb8f6a9054346e747adc7270b2cfa93849ae514/yolo11x-train28-best.pt}
@@ -201,7 +201,7 @@ services:
 
   # Healthy while either NSFW detector has its model loaded. Compose depends_on
   # cannot say "one of", so curator waits on this instead.
-  nsfw-ready:
+  nsfw-ready:  # nosemgrep: service-peer-label  readiness gate: sleeps, healthy once nudenet or erax has loaded; serves nothing
     image: python:3.12-slim
     command: ["sleep", "infinity"]
     init: true
@@ -272,7 +272,7 @@ services:
     # The image's HEALTHCHECK reports healthy once the model is loaded (or
     # unloaded by argus-iris, since the next check loads it again).
 
-  web:
+  web:  # nosemgrep: service-peer-label  UI only: the Next.js cull app, no ServiceHealth /health for the directory to list
     build:
       context: .
       dockerfile: Dockerfile
