@@ -8,7 +8,8 @@
  * - the `#` title goes (the page shows it in its own header);
  * - every heading gets GitHub's id, counted over the whole file, so a deep link means what it means on GitHub;
  * - links to another imported doc stay on this site, links into curator's repo go to GitHub at the recorded
- *   commit, and `../<sibling>/...` goes to that sibling's `dev`;
+ *   commit, and `../<sibling>/...` goes to that sibling's `dev`; a root-relative `/x` is curator's repo root, as
+ *   on GitHub, for links and images alike;
  * - remote images (badges), inline or by reference, are dropped with their definitions, since `img-src` would
  *   block them, and so are relative ones outside the vendored copy; the rest load from that copy.
  * Raw HTML is skipped by the renderer.
@@ -65,11 +66,19 @@ export interface DocHeading {
 
 const isRemote = (url: string) => /^[a-z][a-z0-9+.-]*:|^\/\//i.test(url);
 
+/**
+ * A link or image target as a path in curator's repo. As on GitHub, a leading `/` is the repo's root (never
+ * this site's), so it can't climb out of the repo; anything else is relative to the page's own directory.
+ */
+function repoPath(path: string, page: DocPage): string {
+  return path.startsWith("/") ? posix.normalize(path).slice(1) : posix.normalize(posix.join(posix.dirname(page.file), path));
+}
+
 /** Every relative target resolved: on this site when it is an imported doc, else GitHub at the recorded commit. */
 function resolveUrl(url: string, page: DocPage, record: CuratorPin): string {
-  if (isRemote(url) || url.startsWith("/") || url.startsWith("#")) return url;
+  if (isRemote(url) || url.startsWith("#")) return url;
   const [path, anchor] = url.split("#", 2);
-  const target = posix.normalize(posix.join(posix.dirname(page.file), path));
+  const target = repoPath(path, page);
   if (target.startsWith("../")) {
     // A sibling repo in the suite's checkout layout: `../argus-lens/README.md`.
     const [repo, ...rest] = target.slice(3).split("/");
@@ -83,8 +92,8 @@ function resolveUrl(url: string, page: DocPage, record: CuratorPin): string {
 /** Where a relative image loads from: the vendored copy. Null for one the page cannot serve (remote, or outside the copy). */
 function imageSrc(url: string, page: DocPage): string | null {
   if (isRemote(url)) return null;
-  const target = posix.normalize(posix.join(posix.dirname(page.file), url));
-  return target === ".." || target.startsWith("../") ? null : `/docs/curator/${target}`;
+  const target = repoPath(url, page);
+  return target === "" || target === ".." || target.startsWith("../") ? null : `/docs/curator/${target}`;
 }
 
 function remove(node: Nodes, parent: Nodes | null) {

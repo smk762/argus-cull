@@ -34,6 +34,24 @@ class ComposeLabels(unittest.TestCase):
             self.assertTrue(any("argus-curator needs the label argus.port: 8101" in p for p in found))
             self.assertTrue(any("nudenet needs ARGUS_PEER=nudenet" in p for p in found))
 
+    def test_a_column_0_comment_does_not_end_the_services_block(self) -> None:
+        text = (
+            "services:\n"
+            "  web:\n"
+            "    image: nginx:1\n"
+            "# --- detectors ---\n"
+            "\n"
+            "  erax:\n"
+            "    image: ghcr.io/smk762/argus-retina-erax:0.3.0\n"
+            "volumes:\n"
+            "  data:\n"
+        )
+        self.assertEqual(set(compose_labels.services(text)), {"web", "erax"})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "c.yaml"
+            path.write_text(text)
+            self.assertTrue(any("erax needs the label argus.peer: erax" in p for p in compose_labels.problems(path)))
+
     def test_other_containers_are_not_argus_services(self) -> None:
         self.assertIsNone(compose_labels.expected("python:3.12-slim"))
         self.assertEqual(compose_labels.expected("ghcr.io/smk762/argus-retina-ocr:0.3.0")["argus.peer"], "ocr")

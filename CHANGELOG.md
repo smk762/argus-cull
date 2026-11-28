@@ -16,6 +16,9 @@ Each release has a `## [x.y.z]` section here. The release workflow uses that sec
 
 ### Fixed
 
+- The imported curator docs read a root-relative link or image (`/docs/x.md`, `/assets/x.png`) as curator's repo root, as GitHub does: a link goes to the imported page or to GitHub at the recorded commit instead of this site's root, and an image loads from the vendored copy's root instead of below the page's own directory.
+- `scripts/record_tape.py` puts back a tape an interrupted swap left only as `<tape>.old` before building, instead of deleting the only good copy.
+- `scripts/compose_labels.py` no longer stops reading `services:` at a column-0 comment, which hid every service after it from `sync_check.py`.
 - Opening another scan or folder clears the selection, so *Delete selected* never reaches files with the same names picked in the previous one.
 - The demo: a frame with no `detail/` file opens without it instead of refetching; a failed *Reset labels* shows its error; replaying an empty scan finishes; a result named `constructor` or `__proto__` no longer finds a tape file.
 - *Scanned by* says an all-slow scan may be a cascade whose fast screen flagged every frame, as it does for all-fast.
