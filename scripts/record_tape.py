@@ -409,6 +409,11 @@ def record(args: argparse.Namespace) -> None:
     # Build beside the old tape and swap it in only once it is whole: a fetch that fails partway
     # (the curator down, an image gone) leaves the previous tape as it was.
     final = out
+    old = final.with_name(final.name + ".old")
+    if old.exists() and not final.exists():
+        # A run that died between the two renames below left the only good tape as .old:
+        # put it back before anything can discard it.
+        os.replace(old, final)
     out = final.with_name(final.name + ".tmp")
     if out.exists():
         shutil.rmtree(out)
@@ -417,7 +422,6 @@ def record(args: argparse.Namespace) -> None:
     except BaseException:
         shutil.rmtree(out, ignore_errors=True)
         raise
-    old = final.with_name(final.name + ".old")
     if old.exists():
         shutil.rmtree(old)
     if final.exists():

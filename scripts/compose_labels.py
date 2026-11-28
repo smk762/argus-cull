@@ -56,7 +56,8 @@ def services(text: str) -> dict[str, str]:
     if not top:
         return {}
     body = text[top.end() :]
-    end = re.search(r"^\S", body, re.M)
+    # The next top-level key ends it; a column-0 comment between services does not.
+    end = re.search(r"^[^\s#]", body, re.M)
     body = body[: end.start()] if end else body
     marks = list(SERVICE.finditer(body))
     return {m.group(1): body[m.end() : nxt.start() if nxt else len(body)] for m, nxt in zip(marks, [*marks[1:], None])}

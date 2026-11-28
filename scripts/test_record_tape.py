@@ -93,6 +93,26 @@ class RecordTest(unittest.TestCase):
             self.assertEqual(json.loads((out / "tape.json").read_text()), {"previous": True})
             self.assertEqual(sorted(path.name for path in root.iterdir()), ["images", "scan.json", "tape"])
 
+    def test_a_tape_left_as_old_by_an_interrupted_swap_is_restored_not_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "tape"
+            # A run died after renaming tape -> tape.old and before tape.tmp -> tape.
+            (root / "tape.old").mkdir()
+            (root / "tape.old" / "tape.json").write_text('{"previous": true}\n')
+            images = root / "images"
+            images.mkdir()
+            scan = root / "scan.json"
+            scan.write_text(json.dumps({
+                "scan_id": "s",
+                "folder": str(images),
+                "results": [{"rel_path": "gone.jpg", "abs_path": str(images / "gone.jpg"), "keep_reason": ""}],
+            }))
+            with self.assertRaises(FileNotFoundError):
+                record_tape.record(_args(out=str(out), images=str(images), scan=str(scan)))
+            self.assertEqual(json.loads((out / "tape.json").read_text()), {"previous": True})
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["images", "scan.json", "tape"])
+
     def test_a_rel_path_outside_the_images_folder_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

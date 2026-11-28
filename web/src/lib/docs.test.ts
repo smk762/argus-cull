@@ -5,10 +5,10 @@ import { unified } from "unified";
 import { describe, expect, it } from "vitest";
 
 import { curatorDoc } from "./docs";
-import { DOC_PAGES } from "./docsLinks";
+import { CURATOR, DOC_PAGES, docPage, type DocPage } from "./docsLinks";
 
-async function transform(markdown: string): Promise<Root> {
-  const processor = unified().use(remarkParse).use(remarkGfm).use(curatorDoc(DOC_PAGES[0]).plugin);
+async function transform(markdown: string, page: DocPage = DOC_PAGES[0]): Promise<Root> {
+  const processor = unified().use(remarkParse).use(remarkGfm).use(curatorDoc(page).plugin);
   return (await processor.run(processor.parse(markdown))) as Root;
 }
 
@@ -40,5 +40,31 @@ describe("images in the imported docs", () => {
     expect(types).not.toContain("image");
     expect(types).not.toContain("imageReference");
     expect(JSON.stringify(tree)).not.toContain("/docs/curator/..");
+  });
+});
+
+describe("root-relative targets, which GitHub reads as curator's repo root", () => {
+  const sub = docPage("docs/scoring.md");
+  const urls = async (markdown: string) =>
+    nodes(await transform(markdown, sub))
+      .filter((node) => node.type === "link" || node.type === "image" || node.type === "definition")
+      .map((node) => (node as { url: string }).url);
+
+  it("loads a root-relative image from the copy's root, not the page's directory", async () => {
+    expect(await urls("![Flow](/docs/img/flow.png)\n\n![Ref][r]\n\n[r]: /docs/img/flow.png\n")).toEqual([
+      "/docs/curator/docs/img/flow.png",
+      "/docs/curator/docs/img/flow.png",
+    ]);
+  });
+
+  it("sends a root-relative link to the imported page or GitHub, never this site's root", async () => {
+    const [toDoc, toRepo, climbing] = await urls("[a](/docs/cli.md#usage) [b](/src/x.py) [c](/../argus-lens/x.md)\n");
+    expect(toDoc).toBe("/docs/cli#usage");
+    expect(toRepo).toBe(`https://github.com/${CURATOR.repo}/blob/${CURATOR.commit}/src/x.py`);
+    expect(climbing).toBe(`https://github.com/${CURATOR.repo}/blob/${CURATOR.commit}/argus-lens/x.md`);
+  });
+
+  it("matches the relative spelling of the same target", async () => {
+    expect(await urls("[a](/docs/nudity.md) ![i](/docs/i.png)\n")).toEqual(await urls("[a](nudity.md) ![i](i.png)\n"));
   });
 });
