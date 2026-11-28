@@ -18,6 +18,8 @@ class ComposeLabels(unittest.TestCase):
         blocks = compose_labels.services(compose_labels.COMPOSE.read_text())
         labelled = {name for name, block in blocks.items() if "argus.peer:" in block}
         self.assertEqual(labelled, {"argus-curator", "nudenet", "erax", "watermark", "singguard"})
+        # A service whose key line carries a comment (a nosemgrep marking) is still its own block.
+        self.assertTrue({"watermark-weights", "nsfw-ready", "web"} <= blocks.keys())
 
     def test_a_missing_or_wrong_label_is_a_problem(self) -> None:
         text = compose_labels.COMPOSE.read_text()

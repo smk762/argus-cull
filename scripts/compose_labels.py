@@ -24,7 +24,8 @@ from pathlib import Path
 
 COMPOSE = Path(__file__).resolve().parents[1] / "docker-compose.yaml"
 
-SERVICE = re.compile(r"^  ([A-Za-z0-9_.-]+):[ \t]*$", re.M)
+# A trailing comment is allowed: `web:  # nosemgrep: service-peer-label <reason>` marks a container as not a peer.
+SERVICE = re.compile(r"^  ([A-Za-z0-9_.-]+):[ \t]*(?:#.*)?$", re.M)
 IMAGE = re.compile(r"^    image: (\S+)", re.M)
 ARGUS_IMAGE = re.compile(r"^(?:ghcr\.io/smk762/)?(argus-[a-z]+)(?:-([a-z0-9]+))?[:@]")
 LABELS = re.compile(r"^    labels:\n((?:      \S.*\n)+)", re.M)
